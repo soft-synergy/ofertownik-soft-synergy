@@ -547,7 +547,7 @@
                 </p>
             </div>
             <div class="flex flex-col sm:flex-row gap-3 justify-center">
-                <a href="mailto:{{companyEmail}}?subject=Spotkanie online - {{offerNumber}}" class="bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold py-3 px-8 rounded-lg hover:from-blue-500 hover:to-purple-500 transition-all transform hover:-translate-y-1 shadow-lg hover:shadow-blue-500/40">
+                <a href="https://cal.com/soft-synergy/30min" target="_blank" rel="noopener" class="bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold py-3 px-8 rounded-lg hover:from-blue-500 hover:to-purple-500 transition-all transform hover:-translate-y-1 shadow-lg hover:shadow-blue-500/40">
                     Umów spotkanie online
                 </a>
                 <button onclick="closeExitPopup()" class="bg-white/10 text-white font-semibold py-3 px-8 rounded-lg hover:bg-white/20 transition-colors">
@@ -558,27 +558,27 @@
     </div>
 
     <script>
-        // Cookie Consent Functions (global)
-        function acceptCookies() {
+        // Cookie Consent Functions (global - must be defined before DOMContentLoaded)
+        window.acceptCookies = function() {
             localStorage.setItem('cookieConsent', 'accepted');
             const banner = document.getElementById('cookieBanner');
             if (banner) {
                 banner.classList.remove('show');
             }
-        }
+        };
 
-        function declineCookies() {
+        window.declineCookies = function() {
             localStorage.setItem('cookieConsent', 'declined');
             const banner = document.getElementById('cookieBanner');
             if (banner) {
                 banner.classList.remove('show');
             }
-        }
+        };
 
-        // Exit Popup Functions (global)
+        // Exit Popup Functions (global - must be defined before DOMContentLoaded)
         let exitIntentShown = false;
 
-        function showExitPopup() {
+        window.showExitPopup = function() {
             const exitConsent = localStorage.getItem('exitIntentShown');
             if (!exitIntentShown && !exitConsent) {
                 const popup = document.getElementById('exitPopup');
@@ -586,16 +586,16 @@
                     popup.classList.add('show');
                 }
             }
-        }
+        };
 
-        function closeExitPopup() {
+        window.closeExitPopup = function() {
             const popup = document.getElementById('exitPopup');
             if (popup) {
                 popup.classList.remove('show');
             }
             exitIntentShown = true;
             localStorage.setItem('exitIntentShown', 'true');
-        }
+        };
 
         document.addEventListener('DOMContentLoaded', () => {
             console.log('Strona została załadowana');
@@ -829,7 +829,7 @@
         // Detect exit intent (mouse leaving top of page)
         document.addEventListener('mouseout', (e) => {
             if (!e.toElement && !e.relatedTarget && e.clientY < 10 && !exitIntentShown && !exitConsent) {
-                showExitPopup();
+                window.showExitPopup();
             }
         });
 
@@ -844,7 +844,7 @@
                 const touchY = e.touches[0].clientY;
                 // If user swipes up from very bottom, show popup
                 if (touchStartY > window.innerHeight - 50 && touchY < touchStartY - 100) {
-                    showExitPopup();
+                    window.showExitPopup();
                 }
             }
         });
@@ -852,7 +852,7 @@
         // Close popup on ESC key
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
-                closeExitPopup();
+                window.closeExitPopup();
             }
         });
 
@@ -861,7 +861,7 @@
         if (exitPopup) {
             exitPopup.addEventListener('click', (e) => {
                 if (e.target.id === 'exitPopup') {
-                    closeExitPopup();
+                    window.closeExitPopup();
                 }
             });
         }
