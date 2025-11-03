@@ -111,6 +111,48 @@
         .exit-popup.show .exit-popup-content {
             transform: scale(1);
         }
+        .portfolio-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 3000;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(8px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            padding: 1rem;
+        }
+        .portfolio-modal.show {
+            display: flex;
+            opacity: 1;
+        }
+        .portfolio-modal-content {
+            background: rgba(30, 41, 59, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 1rem;
+            padding: 2rem;
+            max-width: 800px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+            position: relative;
+        }
+        .portfolio-modal.show .portfolio-modal-content {
+            transform: scale(1);
+        }
+        .read-more-btn {
+            display: inline-block;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body class="antialiased">
@@ -311,13 +353,20 @@
                 <div class="portfolio-carousel-container relative overflow-hidden">
                     <div class="portfolio-carousel flex gap-8 transition-transform duration-700 ease-in-out" style="transform: translateX(0);">
                         {{#each portfolio}}
-                        <div class="portfolio-carousel-item flex-shrink-0 w-full md:w-1/2 lg:w-1/3">
+                        <div class="portfolio-carousel-item flex-shrink-0 w-full md:w-1/2 lg:w-1/3" data-portfolio-index="{{@index}}" data-portfolio-title="{{this.title}}" data-portfolio-image="https:///oferty.soft-synergy.com{{this.image}}" data-portfolio-description="{{this.description}}">
                             <div class="card-3d group">
                                 <div class="glass-card overflow-hidden transition-all duration-500 group-hover:shadow-2xl group-hover:shadow-blue-500/20">
                                     <img src="https:///oferty.soft-synergy.com{{this.image}}" alt="{{this.title}}" class="w-full h-56 object-cover transition-transform duration-500 group-hover:scale-105" onerror="this.src='https:///via.placeholder.com/400x300?text=No+Image'" crossorigin="anonymous">
                                     <div class="p-6">
                                         <h3 class="text-xl font-bold mb-1">{{this.title}}</h3>
-                                        <p class="text-slate-400 text-sm print-text-gray">{{this.description}}</p>
+                                        <p class="text-slate-400 text-sm print-text-gray">
+                                            {{#if (gt (wordCount this.description) 43)}}
+                                                {{truncateWords this.description 43}}...
+                                                <button class="text-blue-400 hover:text-blue-300 font-medium mt-2 read-more-btn" data-portfolio-id="{{@index}}">Czytaj więcej</button>
+                                            {{else}}
+                                                {{this.description}}
+                                            {{/if}}
+                                        </p>
                                     </div>
                                 </div>
                             </div>
@@ -334,12 +383,19 @@
                 <!-- Grid for 1-2 items -->
                 <div class="grid md:grid-cols-2 gap-8" style="perspective: 1000px;">
                     {{#each portfolio}}
-                    <div class="card-3d group">
+                    <div class="card-3d group" data-portfolio-index="{{@index}}" data-portfolio-title="{{this.title}}" data-portfolio-image="https:///oferty.soft-synergy.com{{this.image}}" data-portfolio-description="{{this.description}}">
                         <div class="glass-card overflow-hidden transition-all duration-500 group-hover:shadow-2xl group-hover:shadow-blue-500/20">
                             <img src="https:///oferty.soft-synergy.com{{this.image}}" alt="{{this.title}}" class="w-full h-56 object-cover transition-transform duration-500 group-hover:scale-105" onerror="this.src='https:///via.placeholder.com/400x300?text=No+Image'" crossorigin="anonymous">
                             <div class="p-6">
                                 <h3 class="text-xl font-bold mb-1">{{this.title}}</h3>
-                                <p class="text-slate-400 text-sm print-text-gray">{{this.description}}</p>
+                                <p class="text-slate-400 text-sm print-text-gray">
+                                    {{#if (gt (wordCount this.description) 43)}}
+                                        {{truncateWords this.description 43}}...
+                                        <button class="text-blue-400 hover:text-blue-300 font-medium mt-2 read-more-btn" data-portfolio-id="{{@index}}">Czytaj więcej</button>
+                                    {{else}}
+                                        {{this.description}}
+                                    {{/if}}
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -534,6 +590,20 @@
         </div>
     </div>
 
+    <!-- Portfolio Modal -->
+    <div class="portfolio-modal no-print" id="portfolioModal">
+        <div class="portfolio-modal-content">
+            <button id="closePortfolioModal" class="absolute top-4 right-4 text-white/60 hover:text-white transition-colors">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+            <div id="portfolioModalContent">
+                <!-- Content will be dynamically inserted -->
+            </div>
+        </div>
+    </div>
+
     <!-- Exit Intent Popup -->
     <div class="exit-popup no-print" id="exitPopup">
         <div class="exit-popup-content text-center">
@@ -595,6 +665,41 @@
             }
             exitIntentShown = true;
             localStorage.setItem('exitIntentShown', 'true');
+        };
+
+        // Portfolio Modal Functions (global)
+        window.openPortfolioModal = function(index) {
+            const modal = document.getElementById('portfolioModal');
+            const modalContent = document.getElementById('portfolioModalContent');
+            if (!modal || !modalContent) return;
+
+            const portfolioItems = document.querySelectorAll('[data-portfolio-index]');
+            const portfolioItem = Array.from(portfolioItems).find(item => item.dataset.portfolioIndex == index);
+            
+            if (portfolioItem) {
+                const title = portfolioItem.dataset.portfolioTitle;
+                const imgSrc = portfolioItem.dataset.portfolioImage;
+                const fullDescription = portfolioItem.dataset.portfolioDescription;
+                
+                modalContent.innerHTML = `
+                    <div class="space-y-6">
+                        <h2 class="text-3xl font-bold text-white mb-4">${title}</h2>
+                        ${imgSrc ? `<img src="${imgSrc}" alt="${title}" class="w-full h-64 md:h-96 object-cover rounded-lg shadow-xl">` : ''}
+                        <div class="text-slate-300 leading-relaxed">
+                            <p class="text-lg whitespace-pre-wrap">${fullDescription}</p>
+                        </div>
+                    </div>
+                `;
+            }
+
+            modal.classList.add('show');
+        };
+
+        window.closePortfolioModal = function() {
+            const modal = document.getElementById('portfolioModal');
+            if (modal) {
+                modal.classList.remove('show');
+            }
         };
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -869,6 +974,7 @@
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 window.closeExitPopup();
+                window.closePortfolioModal();
             }
         });
 
@@ -881,6 +987,32 @@
                 }
             });
         }
+
+        // Add click handlers for "Read More" buttons
+        document.querySelectorAll('.read-more-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const portfolioId = btn.dataset.portfolioId;
+                if (portfolioId !== undefined) {
+                    window.openPortfolioModal(portfolioId);
+                }
+            });
+        });
+
+        // Close modal buttons
+        const closePortfolioModalBtn = document.getElementById('closePortfolioModal');
+        if (closePortfolioModalBtn) {
+            closePortfolioModalBtn.addEventListener('click', window.closePortfolioModal);
+        }
+
+        const portfolioModal = document.getElementById('portfolioModal');
+        if (portfolioModal) {
+            portfolioModal.addEventListener('click', (e) => {
+                if (e.target.id === 'portfolioModal') {
+                    window.closePortfolioModal();
+                }
+            });
+        }
+
     </script>
 </body>
 </html> 

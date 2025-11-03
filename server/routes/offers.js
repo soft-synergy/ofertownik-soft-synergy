@@ -237,6 +237,20 @@ handlebars.registerHelper('range', function(start, end) {
   return result;
 });
 
+// Helper function to count words
+handlebars.registerHelper('wordCount', function(str) {
+  if (!str) return 0;
+  return str.trim().split(/\s+/).length;
+});
+
+// Helper function to truncate words
+handlebars.registerHelper('truncateWords', function(str, count) {
+  if (!str) return '';
+  const words = str.trim().split(/\s+/);
+  if (words.length <= count) return str;
+  return words.slice(0, count).join(' ');
+});
+
 // Generate offer HTML
 router.post('/generate/:projectId', auth, async (req, res) => {
   try {
