@@ -558,6 +558,45 @@
     </div>
 
     <script>
+        // Cookie Consent Functions (global)
+        function acceptCookies() {
+            localStorage.setItem('cookieConsent', 'accepted');
+            const banner = document.getElementById('cookieBanner');
+            if (banner) {
+                banner.classList.remove('show');
+            }
+        }
+
+        function declineCookies() {
+            localStorage.setItem('cookieConsent', 'declined');
+            const banner = document.getElementById('cookieBanner');
+            if (banner) {
+                banner.classList.remove('show');
+            }
+        }
+
+        // Exit Popup Functions (global)
+        let exitIntentShown = false;
+
+        function showExitPopup() {
+            const exitConsent = localStorage.getItem('exitIntentShown');
+            if (!exitIntentShown && !exitConsent) {
+                const popup = document.getElementById('exitPopup');
+                if (popup) {
+                    popup.classList.add('show');
+                }
+            }
+        }
+
+        function closeExitPopup() {
+            const popup = document.getElementById('exitPopup');
+            if (popup) {
+                popup.classList.remove('show');
+            }
+            exitIntentShown = true;
+            localStorage.setItem('exitIntentShown', 'true');
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             console.log('Strona została załadowana');
             
@@ -767,43 +806,26 @@
         }
         
 
-        document.getElementById('okej').addEventListener('click', downloadHTML);
-
-        // Cookie Consent
-        function acceptCookies() {
-            localStorage.setItem('cookieConsent', 'accepted');
-            document.getElementById('cookieBanner').classList.remove('show');
-        }
-
-        function declineCookies() {
-            localStorage.setItem('cookieConsent', 'declined');
-            document.getElementById('cookieBanner').classList.remove('show');
+        // Download button event listener (only if button exists)
+        const downloadBtn = document.getElementById('okej');
+        if (downloadBtn) {
+            downloadBtn.addEventListener('click', downloadHTML);
         }
 
         // Check if cookie consent was already given
         const cookieConsent = localStorage.getItem('cookieConsent');
         if (!cookieConsent) {
             setTimeout(() => {
-                document.getElementById('cookieBanner').classList.add('show');
+                const banner = document.getElementById('cookieBanner');
+                if (banner) {
+                    banner.classList.add('show');
+                }
             }, 2000); // Show after 2 seconds
         }
 
-        // Exit Intent Popup
-        let exitIntentShown = false;
+        // Exit Intent Detection
         const exitConsent = localStorage.getItem('exitIntentShown');
-
-        function showExitPopup() {
-            if (!exitIntentShown && !exitConsent) {
-                document.getElementById('exitPopup').classList.add('show');
-            }
-        }
-
-        function closeExitPopup() {
-            document.getElementById('exitPopup').classList.remove('show');
-            exitIntentShown = true;
-            localStorage.setItem('exitIntentShown', 'true');
-        }
-
+        
         // Detect exit intent (mouse leaving top of page)
         document.addEventListener('mouseout', (e) => {
             if (!e.toElement && !e.relatedTarget && e.clientY < 10 && !exitIntentShown && !exitConsent) {
@@ -834,12 +856,15 @@
             }
         });
 
-        // Close popup when clicking outside
-        document.getElementById('exitPopup').addEventListener('click', (e) => {
-            if (e.target.id === 'exitPopup') {
-                closeExitPopup();
-            }
-        });
+        // Close popup when clicking outside (only if popup exists)
+        const exitPopup = document.getElementById('exitPopup');
+        if (exitPopup) {
+            exitPopup.addEventListener('click', (e) => {
+                if (e.target.id === 'exitPopup') {
+                    closeExitPopup();
+                }
+            });
+        }
     </script>
 </body>
 </html> 
