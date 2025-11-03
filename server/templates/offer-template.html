@@ -353,16 +353,15 @@
                 <div class="portfolio-carousel-container relative overflow-hidden">
                     <div class="portfolio-carousel flex gap-8 transition-transform duration-700 ease-in-out" style="transform: translateX(0);">
                         {{#each portfolio}}
-                        <div class="portfolio-carousel-item flex-shrink-0 w-full md:w-1/2 lg:w-1/3" data-portfolio-index="{{@index}}" data-portfolio-title="{{this.title}}" data-portfolio-image="https:///oferty.soft-synergy.com{{this.image}}" data-portfolio-description="{{this.description}}">
+                        <div class="portfolio-carousel-item flex-shrink-0 w-full md:w-1/2 lg:w-1/3 cursor-pointer" data-portfolio-index="{{@index}}" data-portfolio-title="{{this.title}}" data-portfolio-image="https:///oferty.soft-synergy.com{{this.image}}" data-portfolio-description="{{this.description}}">
                             <div class="card-3d group">
                                 <div class="glass-card overflow-hidden transition-all duration-500 group-hover:shadow-2xl group-hover:shadow-blue-500/20">
                                     <img src="https:///oferty.soft-synergy.com{{this.image}}" alt="{{this.title}}" class="w-full h-56 object-cover transition-transform duration-500 group-hover:scale-105" onerror="this.src='https:///via.placeholder.com/400x300?text=No+Image'" crossorigin="anonymous">
                                     <div class="p-6">
                                         <h3 class="text-xl font-bold mb-1">{{this.title}}</h3>
                                         <p class="text-slate-400 text-sm print-text-gray">
-                                            {{#if (gt (wordCount this.description) 43)}}
-                                                {{truncateWords this.description 43}}...
-                                                <button class="text-blue-400 hover:text-blue-300 font-medium mt-2 read-more-btn" data-portfolio-id="{{@index}}">Czytaj więcej</button>
+                                            {{#if (gt (wordCount this.description) 30)}}
+                                                {{truncateWords this.description 30}}...
                                             {{else}}
                                                 {{this.description}}
                                             {{/if}}
@@ -383,15 +382,14 @@
                 <!-- Grid for 1-2 items -->
                 <div class="grid md:grid-cols-2 gap-8" style="perspective: 1000px;">
                     {{#each portfolio}}
-                    <div class="card-3d group" data-portfolio-index="{{@index}}" data-portfolio-title="{{this.title}}" data-portfolio-image="https:///oferty.soft-synergy.com{{this.image}}" data-portfolio-description="{{this.description}}">
+                    <div class="card-3d group cursor-pointer" data-portfolio-index="{{@index}}" data-portfolio-title="{{this.title}}" data-portfolio-image="https:///oferty.soft-synergy.com{{this.image}}" data-portfolio-description="{{this.description}}">
                         <div class="glass-card overflow-hidden transition-all duration-500 group-hover:shadow-2xl group-hover:shadow-blue-500/20">
                             <img src="https:///oferty.soft-synergy.com{{this.image}}" alt="{{this.title}}" class="w-full h-56 object-cover transition-transform duration-500 group-hover:scale-105" onerror="this.src='https:///via.placeholder.com/400x300?text=No+Image'" crossorigin="anonymous">
                             <div class="p-6">
                                 <h3 class="text-xl font-bold mb-1">{{this.title}}</h3>
                                 <p class="text-slate-400 text-sm print-text-gray">
-                                    {{#if (gt (wordCount this.description) 43)}}
-                                        {{truncateWords this.description 43}}...
-                                        <button class="text-blue-400 hover:text-blue-300 font-medium mt-2 read-more-btn" data-portfolio-id="{{@index}}">Czytaj więcej</button>
+                                    {{#if (gt (wordCount this.description) 30)}}
+                                        {{truncateWords this.description 30}}...
                                     {{else}}
                                         {{this.description}}
                                     {{/if}}
@@ -988,12 +986,12 @@
             });
         }
 
-        // Add click handlers for "Read More" buttons
-        document.querySelectorAll('.read-more-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const portfolioId = btn.dataset.portfolioId;
-                if (portfolioId !== undefined) {
-                    window.openPortfolioModal(portfolioId);
+        // Make entire portfolio tiles clickable
+        document.querySelectorAll('[data-portfolio-index]').forEach(el => {
+            el.addEventListener('click', () => {
+                const idx = el.dataset.portfolioIndex;
+                if (idx !== undefined) {
+                    window.openPortfolioModal(idx);
                 }
             });
         });
