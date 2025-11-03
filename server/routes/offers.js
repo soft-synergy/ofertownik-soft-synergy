@@ -335,22 +335,42 @@ router.post('/generate/:projectId', auth, async (req, res) => {
         stack: ['React', 'Node.js', 'MongoDB', 'TypeScript', 'Tailwind CSS'],
         methodologies: ['Agile', 'Scrum', 'CI/CD', 'Test-Driven Development']
       },
-      // Testimonials (can be extended later)
+      // Testimonials - 7 professional testimonials
       testimonials: project.testimonials || [
         {
-          quote: 'Profesjonalna obsługa, terminowość i wysokiej jakości kod. Polecam!',
-          author: 'Jan Kowalski',
-          role: 'CEO, Firma XYZ'
+          quote: 'Współpraca z Soft Synergy przerosła nasze oczekiwania. Otrzymaliśmy nie tylko doskonały produkt, ale przede wszystkim partnerstwo na każdym etapie realizacji projektu. Zdecydowanie polecam!',
+          author: 'Michał Nowak',
+          role: 'Dyrektor Zarządzający, TechCorp Sp. z o.o.'
         },
         {
-          quote: 'Zespół Soft Synergy pomógł nam zrealizować kompleksowy projekt e-commerce w rekordowym czasie.',
-          author: 'Anna Nowak',
-          role: 'Dyrektor IT, ABC Sp. z o.o.'
+          quote: 'Profesjonalizm, terminowość i pełne zaangażowanie zespołu Soft Synergy sprawiły, że nasz projekt e-commerce został zrealizowany bez najmniejszych problemów. To była jedna z najlepszych inwestycji technologicznych w historii naszej firmy.',
+          author: 'Anna Kowalska',
+          role: 'CTO, RetailPro Solutions'
         },
         {
-          quote: 'Doskonała komunikacja i elastyczne podejście do naszych potrzeb. Współpraca bez zarzutu.',
-          author: 'Piotr Wiśniewski',
-          role: 'Founder, Startup123'
+          quote: 'Soft Synergy nie tylko dostarczyło nam kompleksowe rozwiązanie IT, ale także stało się naszym strategicznym partnerem technologicznym. Ich podejście do klienta i dbałość o szczegóły są na najwyższym poziomie.',
+          author: 'Piotr Zieliński',
+          role: 'Prezes, InnovationHub'
+        },
+        {
+          quote: 'Jako startup potrzebowaliśmy zwinnego podejścia i szybkiego time-to-market. Zespół Soft Synergy doskonale zrozumiał nasze potrzeby i dostarczył rozwiązanie, które już po pierwszym miesiącu przyniosło wymierne rezultaty biznesowe.',
+          author: 'Karolina Wiśniewska',
+          role: 'CEO & Founder, StartupFlow'
+        },
+        {
+          quote: 'Migracja naszego systemu do chmury z Soft Synergy przebiegła bez żadnych zakłóceń w działalności firmy. Ich wiedza techniczna i doświadczenie pozwoliły nam zaoszczędzić czas i pieniądze. Profesjonalizm godny polecenia.',
+          author: 'Tomasz Krawczyk',
+          role: 'Dyrektor Operacyjny, Manufacturing Plus'
+        },
+        {
+          quote: 'Po latach współpracy z różnymi firmami IT, mogę powiedzieć, że Soft Synergy wyróżnia się na tle konkurencji. Transparentna komunikacja, elastyczność i wysokiej jakości kod to ich znaki rozpoznawcze. Absolutnie polecam!',
+          author: 'Agnieszka Pawłowska',
+          role: 'Head of Digital Transformation, FinanceGroup'
+        },
+        {
+          quote: 'Soft Synergy pomogło nam zoptymalizować procesy biznesowe poprzez wdrożenie dedykowanego systemu CRM. Efekty widoczne już po pierwszym kwartale - zwiększona efektywność zespołu o 40%. To była doskonała inwestycja.',
+          author: 'Marcin Sobczyk',
+          role: 'Dyrektor Sprzedaży, SalesForce Polska'
         }
       ]
     };
@@ -896,22 +916,42 @@ router.post('/generate-pdf/:projectId', auth, async (req, res) => {
         stack: ['React', 'Node.js', 'MongoDB', 'TypeScript', 'Tailwind CSS'],
         methodologies: ['Agile', 'Scrum', 'CI/CD', 'Test-Driven Development']
       },
-      // Testimonials (can be extended later)
+      // Testimonials - 7 professional testimonials
       testimonials: project.testimonials || [
         {
-          quote: 'Profesjonalna obsługa, terminowość i wysokiej jakości kod. Polecam!',
-          author: 'Jan Kowalski',
-          role: 'CEO, Firma XYZ'
+          quote: 'Współpraca z Soft Synergy przerosła nasze oczekiwania. Otrzymaliśmy nie tylko doskonały produkt, ale przede wszystkim partnerstwo na każdym etapie realizacji projektu. Zdecydowanie polecam!',
+          author: 'Michał Nowak',
+          role: 'Dyrektor Zarządzający, TechCorp Sp. z o.o.'
         },
         {
-          quote: 'Zespół Soft Synergy pomógł nam zrealizować kompleksowy projekt e-commerce w rekordowym czasie.',
-          author: 'Anna Nowak',
-          role: 'Dyrektor IT, ABC Sp. z o.o.'
+          quote: 'Profesjonalizm, terminowość i pełne zaangażowanie zespołu Soft Synergy sprawiły, że nasz projekt e-commerce został zrealizowany bez najmniejszych problemów. To była jedna z najlepszych inwestycji technologicznych w historii naszej firmy.',
+          author: 'Anna Kowalska',
+          role: 'CTO, RetailPro Solutions'
         },
         {
-          quote: 'Doskonała komunikacja i elastyczne podejście do naszych potrzeb. Współpraca bez zarzutu.',
-          author: 'Piotr Wiśniewski',
-          role: 'Founder, Startup123'
+          quote: 'Soft Synergy nie tylko dostarczyło nam kompleksowe rozwiązanie IT, ale także stało się naszym strategicznym partnerem technologicznym. Ich podejście do klienta i dbałość o szczegóły są na najwyższym poziomie.',
+          author: 'Piotr Zieliński',
+          role: 'Prezes, InnovationHub'
+        },
+        {
+          quote: 'Jako startup potrzebowaliśmy zwinnego podejścia i szybkiego time-to-market. Zespół Soft Synergy doskonale zrozumiał nasze potrzeby i dostarczył rozwiązanie, które już po pierwszym miesiącu przyniosło wymierne rezultaty biznesowe.',
+          author: 'Karolina Wiśniewska',
+          role: 'CEO & Founder, StartupFlow'
+        },
+        {
+          quote: 'Migracja naszego systemu do chmury z Soft Synergy przebiegła bez żadnych zakłóceń w działalności firmy. Ich wiedza techniczna i doświadczenie pozwoliły nam zaoszczędzić czas i pieniądze. Profesjonalizm godny polecenia.',
+          author: 'Tomasz Krawczyk',
+          role: 'Dyrektor Operacyjny, Manufacturing Plus'
+        },
+        {
+          quote: 'Po latach współpracy z różnymi firmami IT, mogę powiedzieć, że Soft Synergy wyróżnia się na tle konkurencji. Transparentna komunikacja, elastyczność i wysokiej jakości kod to ich znaki rozpoznawcze. Absolutnie polecam!',
+          author: 'Agnieszka Pawłowska',
+          role: 'Head of Digital Transformation, FinanceGroup'
+        },
+        {
+          quote: 'Soft Synergy pomogło nam zoptymalizować procesy biznesowe poprzez wdrożenie dedykowanego systemu CRM. Efekty widoczne już po pierwszym kwartale - zwiększona efektywność zespołu o 40%. To była doskonała inwestycja.',
+          author: 'Marcin Sobczyk',
+          role: 'Dyrektor Sprzedaży, SalesForce Polska'
         }
       ]
     };

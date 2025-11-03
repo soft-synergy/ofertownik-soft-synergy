@@ -238,6 +238,16 @@ const projectSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  technologies: {
+    stack: [{
+      type: String,
+      trim: true
+    }],
+    methodologies: [{
+      type: String,
+      trim: true
+    }]
+  },
   teamMembers: [{
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     role: { type: String, default: 'member' }

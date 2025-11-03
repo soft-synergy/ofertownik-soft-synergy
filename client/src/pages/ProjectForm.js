@@ -60,7 +60,11 @@ const ProjectForm = () => {
     customReservations: [],
     customPaymentTerms: '10% zaliczki po podpisaniu umowy.\n90% po odbiorze końcowym projektu.',
     consultationNotes: '',
-    language: localStorage.getItem('ofertownik_lang') || 'pl'
+    language: localStorage.getItem('ofertownik_lang') || 'pl',
+    technologies: {
+      stack: [],
+      methodologies: []
+    }
   });
 
   const { data: project, isLoading } = useQuery(
@@ -180,7 +184,13 @@ const ProjectForm = () => {
 
   useEffect(() => {
     if (project) {
-      setFormData(project);
+      setFormData({
+        ...project,
+        technologies: project.technologies || {
+          stack: [],
+          methodologies: []
+        }
+      });
     }
   }, [project]);
 
@@ -305,6 +315,38 @@ const ProjectForm = () => {
     setFormData(prev => ({
       ...prev,
       customReservations: prev.customReservations.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleTechnologyChange = (type, index, value) => {
+    setFormData(prev => ({
+      ...prev,
+      technologies: {
+        ...prev.technologies,
+        [type]: prev.technologies[type].map((tech, i) => 
+          i === index ? value : tech
+        )
+      }
+    }));
+  };
+
+  const addTechnology = (type) => {
+    setFormData(prev => ({
+      ...prev,
+      technologies: {
+        ...prev.technologies,
+        [type]: [...(prev.technologies[type] || []), '']
+      }
+    }));
+  };
+
+  const removeTechnology = (type, index) => {
+    setFormData(prev => ({
+      ...prev,
+      technologies: {
+        ...prev.technologies,
+        [type]: prev.technologies[type].filter((_, i) => i !== index)
+      }
     }));
   };
 
@@ -814,6 +856,92 @@ const ProjectForm = () => {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+        )}
+
+        {/* Technologies - only for final offers */}
+        {formData.offerType === 'final' && (
+        <div className="card">
+          <h2 className="text-lg font-medium text-gray-900 mb-4">Technologie i Metodologie</h2>
+          <p className="text-sm text-gray-500 mb-4">
+            Wypełnij technologie i metodologie używane w projekcie. Będą one wyświetlane w ofercie w sekcji "Technologie i Metodologie".
+          </p>
+          
+          {/* Technology Stack */}
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <label className="form-label">Stack Technologiczny</label>
+              <button
+                type="button"
+                onClick={() => addTechnology('stack')}
+                className="btn-secondary flex items-center text-sm"
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                Dodaj technologię
+              </button>
+            </div>
+            <div className="space-y-2">
+              {(formData.technologies?.stack || []).map((tech, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={tech}
+                    onChange={(e) => handleTechnologyChange('stack', index, e.target.value)}
+                    className="input-field flex-1"
+                    placeholder="np. React, Node.js, MongoDB, TypeScript"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeTechnology('stack', index)}
+                    className="text-red-600 hover:text-red-800 p-2"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+              {(!formData.technologies?.stack || formData.technologies.stack.length === 0) && (
+                <p className="text-sm text-gray-400 italic">Brak technologii. Kliknij "Dodaj technologię" aby dodać.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Methodologies */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <label className="form-label">Metodologie</label>
+              <button
+                type="button"
+                onClick={() => addTechnology('methodologies')}
+                className="btn-secondary flex items-center text-sm"
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                Dodaj metodologię
+              </button>
+            </div>
+            <div className="space-y-2">
+              {(formData.technologies?.methodologies || []).map((methodology, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={methodology}
+                    onChange={(e) => handleTechnologyChange('methodologies', index, e.target.value)}
+                    className="input-field flex-1"
+                    placeholder="np. Agile, Scrum, CI/CD, Test-Driven Development"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeTechnology('methodologies', index)}
+                    className="text-red-600 hover:text-red-800 p-2"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+              {(!formData.technologies?.methodologies || formData.technologies.methodologies.length === 0) && (
+                <p className="text-sm text-gray-400 italic">Brak metodologii. Kliknij "Dodaj metodologię" aby dodać.</p>
+              )}
+            </div>
           </div>
         </div>
         )}
