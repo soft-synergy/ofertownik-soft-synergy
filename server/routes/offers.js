@@ -128,6 +128,11 @@ const i18n = {
     warrantySupportContent: 'Zapewniamy dodatkową 3‑miesięczną gwarancję na wdrożone rozwiązanie. Pozostałe prawa i obowiązki stron wynikają z przepisów prawa polskiego.',
     portfolioTitle: 'Nasze Doświadczenie w Praktyce',
     seeMorePortfolio: 'Zobacz więcej portfolio',
+    technologiesTitle: 'Technologie i Metodologie',
+    techStack: 'Stack Technologiczny',
+    methodologies: 'Metodologie',
+    projectsCompleted: 'Zrealizowanych Projektów',
+    projectsCompletedDesc: 'Od lat dostarczamy wysokiej jakości rozwiązania dla firm z całej Polski',
     nextSteps: 'Kolejne Kroki',
     prelimNextStepsLead: 'Dziękujemy za zainteresowanie naszymi usługami. Oto jak możemy kontynuować współpracę:',
     prelimStep1: 'Potwierdzenie zainteresowania i zgoda na dalsze konsultacje.',
@@ -166,6 +171,11 @@ const i18n = {
     warrantySupportContent: 'We provide an additional 3‑month warranty for the implemented solution. All remaining rights and obligations are governed by Polish law.',
     portfolioTitle: 'Our Experience in Practice',
     seeMorePortfolio: 'See more portfolio',
+    technologiesTitle: 'Technologies and Methodologies',
+    techStack: 'Technology Stack',
+    methodologies: 'Methodologies',
+    projectsCompleted: 'Completed Projects',
+    projectsCompletedDesc: 'For years, we have been delivering high-quality solutions for companies across Poland',
     nextSteps: 'Next Steps',
     prelimNextStepsLead: 'Thank you for your interest. Here is how we can proceed:',
     prelimStep1: 'Confirm interest and agree to further consultations.',
@@ -208,6 +218,25 @@ handlebars.registerHelper('eq', function(a, b) {
   return a === b;
 });
 
+// Helper function to check if greater than
+handlebars.registerHelper('gt', function(a, b) {
+  return a > b;
+});
+
+// Helper function to get length
+handlebars.registerHelper('length', function(array) {
+  return Array.isArray(array) ? array.length : 0;
+});
+
+// Helper function to create range
+handlebars.registerHelper('range', function(start, end) {
+  const result = [];
+  for (let i = start; i <= end; i++) {
+    result.push(i);
+  }
+  return result;
+});
+
 // Generate offer HTML
 router.post('/generate/:projectId', auth, async (req, res) => {
   try {
@@ -218,10 +247,10 @@ router.post('/generate/:projectId', auth, async (req, res) => {
       return res.status(404).json({ message: 'Projekt nie został znaleziony' });
     }
 
-    // Get portfolio items for the offer
+    // Get portfolio items for the offer (increase limit for carousel)
     const portfolio = await Portfolio.find({ isActive: true })
       .sort({ order: 1 })
-      .limit(2);
+      .limit(10);
 
     // Read the HTML template
     const templatePath = path.join(__dirname, '../templates/offer-template.html');
@@ -300,7 +329,30 @@ router.post('/generate/:projectId', auth, async (req, res) => {
       // Company details
       companyEmail: 'jakub.czajka@soft-synergy.com',
       companyPhone: '+48 793 868 886',
-      companyNIP: '123-456-78-90'
+      companyNIP: '123-456-78-90',
+      // Technologies and methodologies (from project or defaults)
+      technologies: project.technologies || {
+        stack: ['React', 'Node.js', 'MongoDB', 'TypeScript', 'Tailwind CSS'],
+        methodologies: ['Agile', 'Scrum', 'CI/CD', 'Test-Driven Development']
+      },
+      // Testimonials (can be extended later)
+      testimonials: project.testimonials || [
+        {
+          quote: 'Profesjonalna obsługa, terminowość i wysokiej jakości kod. Polecam!',
+          author: 'Jan Kowalski',
+          role: 'CEO, Firma XYZ'
+        },
+        {
+          quote: 'Zespół Soft Synergy pomógł nam zrealizować kompleksowy projekt e-commerce w rekordowym czasie.',
+          author: 'Anna Nowak',
+          role: 'Dyrektor IT, ABC Sp. z o.o.'
+        },
+        {
+          quote: 'Doskonała komunikacja i elastyczne podejście do naszych potrzeb. Współpraca bez zarzutu.',
+          author: 'Piotr Wiśniewski',
+          role: 'Founder, Startup123'
+        }
+      ]
     };
 
     // Generate HTML
@@ -643,10 +695,10 @@ router.get('/preview/:projectId', auth, async (req, res) => {
       return res.status(404).json({ message: 'Projekt nie został znaleziony' });
     }
 
-    // Get portfolio items
+    // Get portfolio items (increase limit for carousel)
     const portfolio = await Portfolio.find({ isActive: true })
       .sort({ order: 1 })
-      .limit(2);
+      .limit(10);
 
     // Read template
     const templatePath = path.join(__dirname, '../templates/offer-template.html');
@@ -680,7 +732,28 @@ router.get('/preview/:projectId', auth, async (req, res) => {
       customPaymentTerms: project.customPaymentTerms || '10% zaliczki po podpisaniu umowy.\n90% po odbiorze końcowym projektu.',
       companyEmail: 'jakub.czajka@soft-synergy.com',
       companyPhone: '+48 793 868 886',
-      companyNIP: '123-456-78-90'
+      companyNIP: '123-456-78-90',
+      technologies: project.technologies || {
+        stack: ['React', 'Node.js', 'MongoDB', 'TypeScript', 'Tailwind CSS'],
+        methodologies: ['Agile', 'Scrum', 'CI/CD', 'Test-Driven Development']
+      },
+      testimonials: project.testimonials || [
+        {
+          quote: 'Profesjonalna obsługa, terminowość i wysokiej jakości kod. Polecam!',
+          author: 'Jan Kowalski',
+          role: 'CEO, Firma XYZ'
+        },
+        {
+          quote: 'Zespół Soft Synergy pomógł nam zrealizować kompleksowy projekt e-commerce w rekordowym czasie.',
+          author: 'Anna Nowak',
+          role: 'Dyrektor IT, ABC Sp. z o.o.'
+        },
+        {
+          quote: 'Doskonała komunikacja i elastyczne podejście do naszych potrzeb. Współpraca bez zarzutu.',
+          author: 'Piotr Wiśniewski',
+          role: 'Founder, Startup123'
+        }
+      ]
     };
 
     const html = template(templateData);
@@ -746,7 +819,7 @@ router.post('/generate-pdf/:projectId', auth, async (req, res) => {
     // Get portfolio items for the offer
     const portfolio = await Portfolio.find({ isActive: true })
       .sort({ order: 1 })
-      .limit(2);
+      .limit(10);
 
     // Read the HTML template
     const templatePath = path.join(__dirname, '../templates/offer-template.html');
@@ -817,7 +890,30 @@ router.post('/generate-pdf/:projectId', auth, async (req, res) => {
       // Company details
       companyEmail: 'jakub.czajka@soft-synergy.com',
       companyPhone: '+48 793 868 886',
-      companyNIP: '123-456-78-90'
+      companyNIP: '123-456-78-90',
+      // Technologies and methodologies (from project or defaults)
+      technologies: project.technologies || {
+        stack: ['React', 'Node.js', 'MongoDB', 'TypeScript', 'Tailwind CSS'],
+        methodologies: ['Agile', 'Scrum', 'CI/CD', 'Test-Driven Development']
+      },
+      // Testimonials (can be extended later)
+      testimonials: project.testimonials || [
+        {
+          quote: 'Profesjonalna obsługa, terminowość i wysokiej jakości kod. Polecam!',
+          author: 'Jan Kowalski',
+          role: 'CEO, Firma XYZ'
+        },
+        {
+          quote: 'Zespół Soft Synergy pomógł nam zrealizować kompleksowy projekt e-commerce w rekordowym czasie.',
+          author: 'Anna Nowak',
+          role: 'Dyrektor IT, ABC Sp. z o.o.'
+        },
+        {
+          quote: 'Doskonała komunikacja i elastyczne podejście do naszych potrzeb. Współpraca bez zarzutu.',
+          author: 'Piotr Wiśniewski',
+          role: 'Founder, Startup123'
+        }
+      ]
     };
 
     // Generate HTML

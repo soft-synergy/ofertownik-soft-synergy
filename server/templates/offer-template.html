@@ -51,6 +51,12 @@
         .reveal { opacity: 0; transform: translateY(30px); transition: all 0.8s cubic-bezier(0.165, 0.84, 0.44, 1); }
         .reveal.visible { opacity: 1; transform: translateY(0); }
         .card-3d { transform-style: preserve-3d; transition: transform 0.5s cubic-bezier(0.165, 0.84, 0.44, 1); }
+        .portfolio-carousel-container { position: relative; }
+        .portfolio-carousel { display: flex; will-change: transform; }
+        .portfolio-carousel:hover { animation-play-state: paused; }
+        @media (max-width: 768px) {
+            .portfolio-carousel-item { width: 100% !important; }
+        }
     </style>
 </head>
 <body class="antialiased">
@@ -246,6 +252,32 @@
             {{#if portfolio}}
             <section class="reveal">
                 <h2 class="text-3xl font-bold mb-8 text-center">{{t.portfolioTitle}}</h2>
+                {{#if (gt (length portfolio) 2)}}
+                <!-- Carousel for 3+ items -->
+                <div class="portfolio-carousel-container relative overflow-hidden">
+                    <div class="portfolio-carousel flex gap-8 transition-transform duration-700 ease-in-out" style="transform: translateX(0);">
+                        {{#each portfolio}}
+                        <div class="portfolio-carousel-item flex-shrink-0 w-full md:w-1/2 lg:w-1/3">
+                            <div class="card-3d group">
+                                <div class="glass-card overflow-hidden transition-all duration-500 group-hover:shadow-2xl group-hover:shadow-blue-500/20">
+                                    <img src="https:///oferty.soft-synergy.com{{this.image}}" alt="{{this.title}}" class="w-full h-56 object-cover transition-transform duration-500 group-hover:scale-105" onerror="this.src='https:///via.placeholder.com/400x300?text=No+Image'" crossorigin="anonymous">
+                                    <div class="p-6">
+                                        <h3 class="text-xl font-bold mb-1">{{this.title}}</h3>
+                                        <p class="text-slate-400 text-sm print-text-gray">{{this.description}}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {{/each}}
+                    </div>
+                    <div class="portfolio-carousel-dots flex justify-center gap-2 mt-6 no-print">
+                        {{#each portfolio}}
+                        <button class="carousel-dot w-2 h-2 rounded-full bg-white/30 transition-all {{#if @first}}bg-blue-500 w-8{{/if}}" data-index="{{@index}}"></button>
+                        {{/each}}
+                    </div>
+                </div>
+                {{else}}
+                <!-- Grid for 1-2 items -->
                 <div class="grid md:grid-cols-2 gap-8" style="perspective: 1000px;">
                     {{#each portfolio}}
                     <div class="card-3d group">
@@ -259,6 +291,7 @@
                     </div>
                     {{/each}}
                 </div>
+                {{/if}}
                 <div class="flex justify-center mt-8">
                     <a href="https://soft-synergy.com/portfolio" target="_blank" rel="noopener" class="bg-blue-600 text-white font-bold py-3 px-8 rounded-lg transition-all duration-300 hover:bg-blue-500 hover:shadow-2xl hover:shadow-blue-500/40 transform hover:-translate-y-1">
                         {{t.seeMorePortfolio}}
@@ -266,6 +299,68 @@
                 </div>
             </section>
             {{/if}}
+            
+            <!-- Technologies and Methodologies Section -->
+            {{#if technologies}}
+            <section class="reveal">
+                <h2 class="text-3xl font-bold mb-8 text-center">{{t.technologiesTitle}}</h2>
+                <div class="glass-card p-8">
+                    {{#if technologies.stack}}
+                    <div class="mb-6">
+                        <h3 class="text-xl font-bold mb-4 text-blue-400">{{t.techStack}}</h3>
+                        <div class="flex flex-wrap gap-3">
+                            {{#each technologies.stack}}
+                            <span class="px-4 py-2 bg-blue-500/20 text-blue-300 rounded-full border border-blue-500/30 font-medium">{{this}}</span>
+                            {{/each}}
+                        </div>
+                    </div>
+                    {{/if}}
+                    {{#if technologies.methodologies}}
+                    <div>
+                        <h3 class="text-xl font-bold mb-4 text-purple-400">{{t.methodologies}}</h3>
+                        <div class="flex flex-wrap gap-3">
+                            {{#each technologies.methodologies}}
+                            <span class="px-4 py-2 bg-purple-500/20 text-purple-300 rounded-full border border-purple-500/30 font-medium">{{this}}</span>
+                            {{/each}}
+                        </div>
+                    </div>
+                    {{/if}}
+                </div>
+            </section>
+            {{/if}}
+            
+            <!-- Testimonials and Stats Section -->
+            <section class="reveal">
+                <div class="glass-card p-12 text-center">
+                    <div class="mb-8">
+                        <h2 class="text-5xl font-extrabold bg-gradient-to-r from-blue-500 via-purple-500 to-blue-600 bg-clip-text text-transparent mb-4">
+                            250+
+                        </h2>
+                        <p class="text-2xl font-bold text-white print-text-black mb-2">{{t.projectsCompleted}}</p>
+                        <p class="text-slate-400 print-text-gray">{{t.projectsCompletedDesc}}</p>
+                    </div>
+                    {{#if testimonials}}
+                    <div class="mt-12 grid md:grid-cols-3 gap-6">
+                        {{#each testimonials}}
+                        <div class="glass-card p-6 text-left">
+                            <div class="flex items-center mb-4">
+                                {{#each (range 1 5)}}
+                                <svg class="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path>
+                                </svg>
+                                {{/each}}
+                            </div>
+                            <p class="text-slate-300 print-text-gray mb-4 italic">"{{this.quote}}"</p>
+                            <div>
+                                <p class="font-semibold text-white print-text-black">{{this.author}}</p>
+                                <p class="text-sm text-slate-400 print-text-gray">{{this.role}}</p>
+                            </div>
+                        </div>
+                        {{/each}}
+                    </div>
+                    {{/if}}
+                </div>
+            </section>
             
             <section class="reveal text-center">
                 <h2 class="text-3xl font-bold mb-4">{{t.nextSteps}}</h2>
@@ -375,6 +470,69 @@
                     card.style.transform = 'rotateX(0deg) rotateY(0deg)'; 
                 }); 
             });
+
+            // Portfolio Carousel Auto-Scroll
+            const carouselContainer = document.querySelector('.portfolio-carousel-container');
+            if (carouselContainer) {
+                const carousel = carouselContainer.querySelector('.portfolio-carousel');
+                const items = carouselContainer.querySelectorAll('.portfolio-carousel-item');
+                const dots = carouselContainer.querySelectorAll('.carousel-dot');
+                if (items.length > 2) {
+                    let currentIndex = 0;
+                    let isPaused = false;
+                    const itemWidth = items[0].offsetWidth + 32; // width + gap
+                    
+                    // Auto-scroll function
+                    const scrollCarousel = () => {
+                        if (isPaused) return;
+                        
+                        currentIndex = (currentIndex + 1) % items.length;
+                        const translateX = -currentIndex * itemWidth;
+                        carousel.style.transform = `translateX(${translateX}px)`;
+                        
+                        // Update dots
+                        dots.forEach((dot, idx) => {
+                            if (idx === currentIndex) {
+                                dot.classList.add('bg-blue-500', 'w-8');
+                                dot.classList.remove('bg-white/30');
+                            } else {
+                                dot.classList.remove('bg-blue-500', 'w-8');
+                                dot.classList.add('bg-white/30');
+                            }
+                        });
+                    };
+                    
+                    // Pause on hover
+                    carouselContainer.addEventListener('mouseenter', () => {
+                        isPaused = true;
+                    });
+                    carouselContainer.addEventListener('mouseleave', () => {
+                        isPaused = false;
+                    });
+                    
+                    // Dot navigation
+                    dots.forEach((dot, idx) => {
+                        dot.addEventListener('click', () => {
+                            currentIndex = idx;
+                            const translateX = -currentIndex * itemWidth;
+                            carousel.style.transform = `translateX(${translateX}px)`;
+                            
+                            dots.forEach((d, i) => {
+                                if (i === currentIndex) {
+                                    d.classList.add('bg-blue-500', 'w-8');
+                                    d.classList.remove('bg-white/30');
+                                } else {
+                                    d.classList.remove('bg-blue-500', 'w-8');
+                                    d.classList.add('bg-white/30');
+                                }
+                            });
+                        });
+                    });
+                    
+                    // Start auto-scroll
+                    setInterval(scrollCarousel, 4000); // Change slide every 4 seconds
+                }
+            }
         });
 
         function downloadHTML(event) {
