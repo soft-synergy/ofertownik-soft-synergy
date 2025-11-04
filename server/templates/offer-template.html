@@ -729,28 +729,54 @@
                 }); 
             });
 
-            // Portfolio Carousel Auto-Scroll
+            // Portfolio Carousel Auto-Scroll with infinite loop
             const carouselContainer = document.querySelector('.portfolio-carousel-container');
             if (carouselContainer) {
                 const carousel = carouselContainer.querySelector('.portfolio-carousel');
                 const items = carouselContainer.querySelectorAll('.portfolio-carousel-item');
                 const dots = carouselContainer.querySelectorAll('.carousel-dot');
                 if (items.length > 2) {
-                    let currentIndex = 0;
+                    // Clone first 2 items and append to end, and clone last 2 items and prepend to beginning
+                    const firstItem = items[0].cloneNode(true);
+                    const secondItem = items[1].cloneNode(true);
+                    const lastItem = items[items.length - 1].cloneNode(true);
+                    const secondLastItem = items[items.length - 2].cloneNode(true);
+                    
+                    carousel.appendChild(firstItem);
+                    carousel.appendChild(secondItem);
+                    carousel.insertBefore(lastItem, items[0]);
+                    carousel.insertBefore(secondLastItem, items[0]);
+                    
+                    // Update items list after cloning
+                    const allItems = carouselContainer.querySelectorAll('.portfolio-carousel-item');
+                    const realItemCount = items.length;
+                    const itemWidth = allItems[0].offsetWidth + 32; // width + gap
+                    
+                    // Start at position 2 (after the prepended clones)
+                    let currentIndex = 2;
                     let isPaused = false;
-                    const itemWidth = items[0].offsetWidth + 32; // width + gap
+                    let isTransitioning = false;
+                    
+                    // Set initial position
+                    carousel.style.transition = 'none';
+                    carousel.style.transform = `translateX(${-currentIndex * itemWidth}px)`;
+                    
+                    // Enable transition after initial positioning
+                    setTimeout(() => {
+                        carousel.style.transition = 'transform 0.7s ease-in-out';
+                    }, 50);
                     
                     // Auto-scroll function
                     const scrollCarousel = () => {
-                        if (isPaused) return;
+                        if (isPaused || isTransitioning) return;
                         
-                        currentIndex = (currentIndex + 1) % items.length;
-                        const translateX = -currentIndex * itemWidth;
-                        carousel.style.transform = `translateX(${translateX}px)`;
+                        currentIndex++;
+                        isTransitioning = true;
                         
-                        // Update dots
+                        // Update dots based on real index
+                        const realIndex = ((currentIndex - 2) % realItemCount + realItemCount) % realItemCount;
                         dots.forEach((dot, idx) => {
-                            if (idx === currentIndex) {
+                            if (idx === realIndex) {
                                 dot.classList.add('bg-blue-500', 'w-8');
                                 dot.classList.remove('bg-white/30');
                             } else {
@@ -758,6 +784,24 @@
                                 dot.classList.add('bg-white/30');
                             }
                         });
+                        
+                        carousel.style.transform = `translateX(${-currentIndex * itemWidth}px)`;
+                        
+                        // Check if we've reached the cloned items at the end
+                        setTimeout(() => {
+                            if (currentIndex >= realItemCount + 2) {
+                                // Jump back to the beginning without animation
+                                carousel.style.transition = 'none';
+                                currentIndex = 2;
+                                carousel.style.transform = `translateX(${-currentIndex * itemWidth}px)`;
+                                
+                                // Re-enable transition
+                                setTimeout(() => {
+                                    carousel.style.transition = 'transform 0.7s ease-in-out';
+                                }, 50);
+                            }
+                            isTransitioning = false;
+                        }, 700);
                     };
                     
                     // Pause on hover
@@ -771,12 +815,14 @@
                     // Dot navigation
                     dots.forEach((dot, idx) => {
                         dot.addEventListener('click', () => {
-                            currentIndex = idx;
-                            const translateX = -currentIndex * itemWidth;
-                            carousel.style.transform = `translateX(${translateX}px)`;
+                            if (isTransitioning) return;
+                            isTransitioning = true;
+                            
+                            currentIndex = idx + 2; // Offset by prepended clones
+                            carousel.style.transform = `translateX(${-currentIndex * itemWidth}px)`;
                             
                             dots.forEach((d, i) => {
-                                if (i === currentIndex) {
+                                if (i === idx) {
                                     d.classList.add('bg-blue-500', 'w-8');
                                     d.classList.remove('bg-white/30');
                                 } else {
@@ -784,6 +830,10 @@
                                     d.classList.add('bg-white/30');
                                 }
                             });
+                            
+                            setTimeout(() => {
+                                isTransitioning = false;
+                            }, 700);
                         });
                     });
                     
@@ -792,28 +842,50 @@
                 }
             }
 
-            // Testimonials Carousel Auto-Scroll
+            // Testimonials Carousel Auto-Scroll with infinite loop
             const testimonialsContainer = document.querySelector('.testimonials-carousel-container');
             if (testimonialsContainer) {
                 const carousel = testimonialsContainer.querySelector('.testimonials-carousel');
                 const items = testimonialsContainer.querySelectorAll('.testimonial-item');
                 const dots = testimonialsContainer.querySelectorAll('.testimonial-dot');
                 if (items.length > 1) {
-                    let currentIndex = 0;
+                    // Clone first item and append to end, and clone last item and prepend to beginning
+                    const firstItem = items[0].cloneNode(true);
+                    const lastItem = items[items.length - 1].cloneNode(true);
+                    
+                    carousel.appendChild(firstItem);
+                    carousel.insertBefore(lastItem, items[0]);
+                    
+                    // Update items list after cloning
+                    const allItems = testimonialsContainer.querySelectorAll('.testimonial-item');
+                    const realItemCount = items.length;
+                    const itemWidth = allItems[0].offsetWidth + 24; // width + gap
+                    
+                    // Start at position 1 (after the prepended clone)
+                    let currentIndex = 1;
                     let isPaused = false;
-                    const itemWidth = items[0].offsetWidth + 24; // width + gap
+                    let isTransitioning = false;
+                    
+                    // Set initial position
+                    carousel.style.transition = 'none';
+                    carousel.style.transform = `translateX(${-currentIndex * itemWidth}px)`;
+                    
+                    // Enable transition after initial positioning
+                    setTimeout(() => {
+                        carousel.style.transition = 'transform 0.7s ease-in-out';
+                    }, 50);
                     
                     // Auto-scroll function
                     const scrollTestimonials = () => {
-                        if (isPaused) return;
+                        if (isPaused || isTransitioning) return;
                         
-                        currentIndex = (currentIndex + 1) % items.length;
-                        const translateX = -currentIndex * itemWidth;
-                        carousel.style.transform = `translateX(${translateX}px)`;
+                        currentIndex++;
+                        isTransitioning = true;
                         
-                        // Update dots
+                        // Update dots based on real index
+                        const realIndex = ((currentIndex - 1) % realItemCount + realItemCount) % realItemCount;
                         dots.forEach((dot, idx) => {
-                            if (idx === currentIndex) {
+                            if (idx === realIndex) {
                                 dot.classList.add('bg-blue-500', 'w-8');
                                 dot.classList.remove('bg-white/30');
                             } else {
@@ -821,6 +893,24 @@
                                 dot.classList.add('bg-white/30');
                             }
                         });
+                        
+                        carousel.style.transform = `translateX(${-currentIndex * itemWidth}px)`;
+                        
+                        // Check if we've reached the cloned item at the end
+                        setTimeout(() => {
+                            if (currentIndex >= realItemCount + 1) {
+                                // Jump back to the beginning without animation
+                                carousel.style.transition = 'none';
+                                currentIndex = 1;
+                                carousel.style.transform = `translateX(${-currentIndex * itemWidth}px)`;
+                                
+                                // Re-enable transition
+                                setTimeout(() => {
+                                    carousel.style.transition = 'transform 0.7s ease-in-out';
+                                }, 50);
+                            }
+                            isTransitioning = false;
+                        }, 700);
                     };
                     
                     // Pause on hover
@@ -834,12 +924,14 @@
                     // Dot navigation
                     dots.forEach((dot, idx) => {
                         dot.addEventListener('click', () => {
-                            currentIndex = idx;
-                            const translateX = -currentIndex * itemWidth;
-                            carousel.style.transform = `translateX(${translateX}px)`;
+                            if (isTransitioning) return;
+                            isTransitioning = true;
+                            
+                            currentIndex = idx + 1; // Offset by prepended clone
+                            carousel.style.transform = `translateX(${-currentIndex * itemWidth}px)`;
                             
                             dots.forEach((d, i) => {
-                                if (i === currentIndex) {
+                                if (i === idx) {
                                     d.classList.add('bg-blue-500', 'w-8');
                                     d.classList.remove('bg-white/30');
                                 } else {
@@ -847,6 +939,10 @@
                                     d.classList.add('bg-white/30');
                                 }
                             });
+                            
+                            setTimeout(() => {
+                                isTransitioning = false;
+                            }, 700);
                         });
                     });
                     
