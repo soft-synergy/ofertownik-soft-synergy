@@ -64,7 +64,8 @@ const ProjectForm = () => {
     technologies: {
       stack: [],
       methodologies: []
-    }
+    },
+    projectLink: ''
   });
 
   const { data: project, isLoading } = useQuery(
@@ -743,6 +744,18 @@ const ProjectForm = () => {
                 onChange={handleChange}
                 className="input-field"
                 placeholder="+48 123 456 789"
+              />
+            </div>
+            
+            <div className="sm:col-span-2">
+              <label className="form-label">Link do projektu</label>
+              <input
+                type="url"
+                name="projectLink"
+                value={formData.projectLink}
+                onChange={handleChange}
+                className="input-field"
+                placeholder="https://example.com"
               />
             </div>
           </div>

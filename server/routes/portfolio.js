@@ -54,6 +54,159 @@ const upload = multer({
   }
 }).single('image');
 
+// Get API documentation
+router.get('/documentation', (req, res) => {
+  res.json({
+    title: 'Portfolio API Documentation',
+    version: '1.0.0',
+    baseUrl: '/api/portfolio',
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/',
+        description: 'Get all portfolio items',
+        auth: false,
+        queryParams: {
+          category: 'Filter by category (web, mobile, desktop, api, other)',
+          active: 'Filter by active status (true, false)'
+        },
+        response: {
+          type: 'array',
+          example: [
+            {
+              _id: 'string',
+              title: 'string',
+              description: 'string',
+              category: 'web|mobile|desktop|api|other',
+              technologies: ['string'],
+              image: '/uploads/portfolio/filename.jpg',
+              client: 'string',
+              duration: 'string',
+              results: 'string',
+              projectLink: 'string (URL)',
+              apiLink: 'string (URL)',
+              documentationLink: 'string (URL)',
+              isActive: true,
+              order: 0,
+              createdBy: { _id: 'string', firstName: 'string', lastName: 'string' },
+              createdAt: 'ISO date',
+              updatedAt: 'ISO date'
+            }
+          ]
+        }
+      },
+      {
+        method: 'GET',
+        path: '/:id',
+        description: 'Get single portfolio item by ID',
+        auth: false,
+        response: {
+          type: 'object',
+          example: {
+            _id: 'string',
+            title: 'string',
+            description: 'string',
+            category: 'web',
+            technologies: ['React', 'Node.js'],
+            image: '/uploads/portfolio/filename.jpg',
+            client: 'Example Client',
+            duration: '3 months',
+            results: 'Increased conversion by 40%',
+            projectLink: 'https://example.com',
+            apiLink: 'https://api.example.com/docs',
+            documentationLink: 'https://docs.example.com',
+            isActive: true,
+            order: 0,
+            createdBy: { _id: 'string', firstName: 'John', lastName: 'Doe' },
+            createdAt: '2024-01-01T00:00:00.000Z',
+            updatedAt: '2024-01-01T00:00:00.000Z'
+          }
+        }
+      },
+      {
+        method: 'POST',
+        path: '/',
+        description: 'Create new portfolio item',
+        auth: true,
+        role: ['admin', 'manager'],
+        contentType: 'multipart/form-data',
+        body: {
+          title: 'string (required, min 3 chars)',
+          description: 'string (required, min 10 chars)',
+          category: 'web|mobile|desktop|api|other (required)',
+          technologies: 'JSON array of strings (required)',
+          client: 'string (optional)',
+          duration: 'string (optional)',
+          results: 'string (optional)',
+          projectLink: 'string (optional, URL)',
+          apiLink: 'string (optional, URL)',
+          documentationLink: 'string (optional, URL)',
+          image: 'file (required, jpeg|jpg|png|webp, max 5MB)',
+          isActive: 'boolean (optional, default: true)'
+        }
+      },
+      {
+        method: 'PUT',
+        path: '/:id',
+        description: 'Update portfolio item',
+        auth: true,
+        role: ['admin', 'manager'],
+        contentType: 'multipart/form-data',
+        body: {
+          title: 'string (optional, min 3 chars)',
+          description: 'string (optional, min 10 chars)',
+          category: 'web|mobile|desktop|api|other (optional)',
+          technologies: 'JSON array of strings (optional)',
+          client: 'string (optional)',
+          duration: 'string (optional)',
+          results: 'string (optional)',
+          projectLink: 'string (optional, URL)',
+          apiLink: 'string (optional, URL)',
+          documentationLink: 'string (optional, URL)',
+          image: 'file (optional, jpeg|jpg|png|webp, max 5MB)',
+          isActive: 'boolean (optional)'
+        }
+      },
+      {
+        method: 'DELETE',
+        path: '/:id',
+        description: 'Delete portfolio item',
+        auth: true,
+        role: ['admin', 'manager']
+      },
+      {
+        method: 'PUT',
+        path: '/:id/order',
+        description: 'Update portfolio item order',
+        auth: true,
+        role: ['admin', 'manager'],
+        body: {
+          order: 'number (required)'
+        }
+      },
+      {
+        method: 'PUT',
+        path: '/:id/toggle-status',
+        description: 'Toggle portfolio item active status',
+        auth: true,
+        role: ['admin', 'manager']
+      }
+    ],
+    authentication: {
+      type: 'Bearer Token',
+      header: 'Authorization: Bearer <token>',
+      note: 'Token is obtained from /api/auth/login endpoint'
+    },
+    errors: {
+      400: 'Bad Request - Invalid data',
+      401: 'Unauthorized - Missing or invalid token',
+      403: 'Forbidden - Insufficient permissions',
+      404: 'Not Found - Portfolio item not found',
+      500: 'Internal Server Error'
+    }
+  });
+});
+
 // Get all portfolio items
 router.get('/', async (req, res) => {
   try {

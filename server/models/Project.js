@@ -91,6 +91,10 @@ const projectSchema = new mongoose.Schema({
     min: { type: Number, default: null },
     max: { type: Number, default: null }
   },
+  projectLink: {
+    type: String,
+    trim: true
+  },
   projectManager: {
     name: {
       type: String,

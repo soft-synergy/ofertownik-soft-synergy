@@ -26,6 +26,9 @@ const PortfolioForm = () => {
     client: '',
     duration: '',
     results: '',
+    projectLink: '',
+    apiLink: '',
+    documentationLink: '',
     image: null,
     isActive: true
   });
@@ -76,10 +79,13 @@ const PortfolioForm = () => {
         client: portfolio.client || '',
         duration: portfolio.duration || '',
         results: portfolio.results || '',
+        projectLink: portfolio.projectLink || '',
+        apiLink: portfolio.apiLink || '',
+        documentationLink: portfolio.documentationLink || '',
         image: null,
         isActive: portfolio.isActive
       });
-      setImagePreview(`https://oferty.soft-synergy.com${portfolio.image}`);
+      setImagePreview(portfolio.image?.startsWith('http') ? portfolio.image : `${process.env.REACT_APP_API_URL || 'https://oferty.soft-synergy.com'}${portfolio.image?.startsWith('/') ? portfolio.image : '/' + portfolio.image}`);
     }
   }, [portfolio]);
 
@@ -316,6 +322,48 @@ const PortfolioForm = () => {
                 onChange={handleChange}
                 className="input-field"
                 placeholder="np. Zwiększenie konwersji o 40%"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Links */}
+        <div className="card">
+          <h2 className="text-lg font-medium text-gray-900 mb-4">Linki</h2>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="form-label">Link do projektu</label>
+              <input
+                type="url"
+                name="projectLink"
+                value={formData.projectLink}
+                onChange={handleChange}
+                className="input-field"
+                placeholder="https://example.com"
+              />
+            </div>
+            
+            <div>
+              <label className="form-label">Link do API</label>
+              <input
+                type="url"
+                name="apiLink"
+                value={formData.apiLink}
+                onChange={handleChange}
+                className="input-field"
+                placeholder="https://api.example.com/docs"
+              />
+            </div>
+            
+            <div className="sm:col-span-2">
+              <label className="form-label">Link do dokumentacji</label>
+              <input
+                type="url"
+                name="documentationLink"
+                value={formData.documentationLink}
+                onChange={handleChange}
+                className="input-field"
+                placeholder="https://docs.example.com"
               />
             </div>
           </div>

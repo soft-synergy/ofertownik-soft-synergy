@@ -1,0 +1,551 @@
+<?php
+/**
+ * skytower-qr-tracker-full.php
+ * Kompletny tracker + migrator + panel admina + statystyki per QR
+ */
+
+// KONFIG
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+if(session_status() !== PHP_SESSION_ACTIVE) session_start();
+
+$DB_HOST = 'localhost';
+$DB_NAME = 'wp_finkids_7807';
+$DB_USER = 'usr_finkids_984';
+$DB_PASS = '548ddcf53a2635aa';
+
+$ADMIN_USER = 'admin';
+$ADMIN_PASS = '1!Qaa2@Wss';
+
+define('MIGRATION_FLAG', 'migrated_20251024');
+
+// ---- BAZA ----
+try {
+    $pdo = new PDO("mysql:host={$DB_HOST};dbname={$DB_NAME};charset=utf8mb4", $DB_USER, $DB_PASS, [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+    ]);
+} catch (PDOException $e) {
+    die("Błąd połączenia z bazą: " . $e->getMessage());
+}
+
+// ---- POMOCNICZE ----
+function detectDevice($ua) {
+    if (!$ua) return 'Unknown';
+    if (preg_match('/iPad/i', $ua)) return 'Tablet (iPad)';
+    if (preg_match('/iPhone/i', $ua)) return 'Mobile (iPhone)';
+    if (preg_match('/Android/i', $ua)) return 'Mobile (Android)';
+    if (preg_match('/Mobile|BlackBerry|IEMobile|Opera Mini/i', $ua)) return 'Mobile';
+    if (preg_match('/Windows/i', $ua)) return 'Desktop (Windows)';
+    if (preg_match('/Macintosh|Mac OS/i', $ua)) return 'Desktop (Mac)';
+    if (preg_match('/Linux/i', $ua)) return 'Desktop (Linux)';
+    return 'Unknown';
+}
+function getLocationFromIP($ip) {
+    if (in_array($ip, ['127.0.0.1', '::1'])) return ['country'=>'Local','city'=>'Local'];
+    $context = stream_context_create(['http' => ['timeout' => 4]]);
+    $json = @file_get_contents("http://ip-api.com/json/{$ip}", false, $context);
+    if ($json) {
+        $data = json_decode($json, true);
+        if ($data && ($data['status'] ?? '') === 'success') {
+            return ['country' => $data['country'] ?? 'Unknown', 'city' => $data['city'] ?? 'Unknown'];
+        }
+    }
+    return ['country'=>'Unknown','city'=>'Unknown'];
+}
+function safeCode($s) {
+    return preg_replace('/[^a-zA-Z0-9_\-]/','', trim($s));
+}
+
+// ---- MIGRACJE - SCHEMAT ----
+try {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS qr_links (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        code VARCHAR(128) UNIQUE NOT NULL,
+        label VARCHAR(255) DEFAULT NULL,
+        redirect_url TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS qr_tracking (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        qr_id INT NULL,
+        ip_address VARCHAR(45) NOT NULL,
+        user_agent TEXT,
+        device_info VARCHAR(255),
+        referer TEXT,
+        country VARCHAR(100),
+        city VARCHAR(100),
+        visitor_uid VARCHAR(64),
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX (qr_id),
+        INDEX (ip_address),
+        INDEX (timestamp),
+        FOREIGN KEY (qr_id) REFERENCES qr_links(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS qr_migrations (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        migration_key VARCHAR(255) UNIQUE NOT NULL,
+        applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+} catch (PDOException $e) {
+    die("Błąd podczas tworzenia tabel: " . $e->getMessage());
+}
+
+// ---- MIGRACJA legacy ----
+function alreadyMigrated(PDO $pdo, $key) {
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM qr_migrations WHERE migration_key = ?");
+    $stmt->execute([$key]);
+    return $stmt->fetchColumn() > 0;
+}
+function markMigrated(PDO $pdo, $key) {
+    $stmt = $pdo->prepare("INSERT IGNORE INTO qr_migrations (migration_key) VALUES (?)");
+    $stmt->execute([$key]);
+}
+function tryMigrateLegacyTables(PDO $pdo) {
+    if (alreadyMigrated($pdo, MIGRATION_FLAG)) return ['status'=>'skipped','note'=>'Already migrated'];
+    $possibleTables = ['stats','visits','tracking','qr_stats','qr_tracking_old','old_qr_tracking','page_visits','visit_log'];
+    $stmt = $pdo->query("SHOW TABLES");
+    $allTables = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+    $mapped = [];
+    foreach ($allTables as $tbl) {
+        $lower = strtolower($tbl);
+        if (!in_array($lower, $possibleTables) && !preg_match('/qr_?tracking|qr_stats|visit/i', $lower)) {
+            if (!preg_match('/visit|track|stat/i', $lower)) continue;
+        }
+        try {
+            $colsStmt = $pdo->query("SHOW COLUMNS FROM `{$tbl}`");
+            $cols = $colsStmt->fetchAll(PDO::FETCH_COLUMN);
+        } catch (Exception $e) { continue; }
+        $colLower = array_map('strtolower', $cols);
+        $hasIP = in_array('ip', $colLower) || in_array('ip_address', $colLower) || in_array('remote_addr', $colLower);
+        $hasUA = in_array('user_agent', $colLower) || in_array('ua', $colLower) || in_array('agent', $colLower);
+        $hasURL = in_array('page', $colLower) || in_array('url', $colLower) || in_array('redirect', $colLower) || in_array('page_url', $colLower);
+        $hasTime = in_array('time', $colLower) || in_array('created_at', $colLower) || in_array('timestamp', $colLower) || in_array('date', $colLower);
+        $hasVisitor = in_array('visitor_uid', $colLower) || in_array('visitor', $colLower) || in_array('uid', $colLower);
+
+        if ($hasIP && ($hasUA || $hasURL || $hasTime)) {
+            $count = $pdo->query("SELECT COUNT(*) FROM `{$tbl}`")->fetchColumn();
+            if ($count == 0) continue;
+            $mapped[$tbl] = ['rows'=>$count, 'imported'=>0];
+            $batch = 500;
+            for ($offset = 0; $offset < $count; $offset += $batch) {
+                $dataStmt = $pdo->query("SELECT * FROM `{$tbl}` LIMIT {$batch} OFFSET {$offset}");
+                $rows = $dataStmt->fetchAll(PDO::FETCH_ASSOC);
+                foreach ($rows as $r) {
+                    $ip = $r['ip'] ?? $r['ip_address'] ?? $r['remote_addr'] ?? $r['ipaddr'] ?? null;
+                    $ua = $r['user_agent'] ?? $r['ua'] ?? $r['agent'] ?? null;
+                    $page = $r['page'] ?? $r['url'] ?? $r['page_url'] ?? $r['redirect'] ?? null;
+                    $time = $r['time'] ?? $r['created_at'] ?? $r['timestamp'] ?? $r['date'] ?? null;
+                    $referer = $r['referer'] ?? $r['ref'] ?? $r['http_referer'] ?? null;
+                    $country = $r['country'] ?? $r['geo_country'] ?? null;
+                    $city = $r['city'] ?? $r['geo_city'] ?? null;
+                    $visitor = $r['visitor_uid'] ?? $r['visitor'] ?? $r['uid'] ?? null;
+                    if (!$ip) $ip = $r['remote_addr'] ?? null;
+                    if (!$ua) $ua = $_SERVER['HTTP_USER_AGENT'] ?? null;
+                    $qr_code = null;
+                    if ($page) {
+                        $safe_page = trim((string)$page);
+                        if ($safe_page === '') $safe_page = 'legacy_unknown';
+                        $qr_code = 'legacy_' . substr(md5($safe_page), 0, 10);
+                        $exists = $pdo->prepare("SELECT id, redirect_url FROM qr_links WHERE code = ?");
+                        $exists->execute([$qr_code]);
+                        $link = $exists->fetch();
+                        if (!$link) {
+                            $redirect = (filter_var($safe_page, FILTER_VALIDATE_URL) ? $safe_page : 'about:blank');
+                            $label = "Migrated from {$tbl}: " . (strlen($safe_page) > 120 ? substr($safe_page,0,120).'...' : $safe_page);
+                            $ins = $pdo->prepare("INSERT IGNORE INTO qr_links (code,label,redirect_url) VALUES (?,?,?)");
+                            try {
+                                $ins->execute([$qr_code, $label, $redirect]);
+                                $link_id = $pdo->lastInsertId();
+                            } catch (Exception $e) {
+                                $exists->execute([$qr_code]);
+                                $link = $exists->fetch();
+                                $link_id = $link['id'] ?? null;
+                            }
+                        } else { $link_id = $link['id']; }
+                    } else {
+                        $exists = $pdo->prepare("SELECT id FROM qr_links WHERE code = ?");
+                        $exists->execute(['main']);
+                        $link = $exists->fetch();
+                        if ($link) $link_id = $link['id'];
+                        else {
+                            $pdo->prepare("INSERT INTO qr_links (code,label,redirect_url) VALUES ('main','Migrated main','https://skytower.pl/taras-widokowy/')")->execute();
+                            $link_id = $pdo->lastInsertId();
+                        }
+                    }
+                    $device = detectDevice($ua);
+                    $loc = ['country'=>'Unknown','city'=>'Unknown'];
+                    if ($country || $city) {
+                        $loc['country'] = $country ?: 'Unknown';
+                        $loc['city'] = $city ?: 'Unknown';
+                    }
+                    $visitor_uid = $visitor ?: (isset($r['cookie_uid']) ? $r['cookie_uid'] : null);
+                    $ts = null;
+                    if ($time) {
+                        $possible = strtotime($time);
+                        if ($possible !== false) $ts = date('Y-m-d H:i:s', $possible);
+                    }
+                    $dupCheckSql = "SELECT COUNT(*) FROM qr_tracking WHERE ip_address = ? AND user_agent = ? AND (timestamp = ? OR ABS(TIMESTAMPDIFF(SECOND, timestamp, ?)) < 2)";
+                    $dupCheck = $pdo->prepare($dupCheckSql);
+                    $timeForCheck = $ts ?: date('Y-m-d H:i:s');
+                    $dupCheck->execute([$ip, $ua, $ts ?: $timeForCheck, $timeForCheck]);
+                    $isDup = $dupCheck->fetchColumn() > 0;
+                    if ($isDup) {
+                        $mapped[$tbl]['imported']++;
+                        continue;
+                    }
+                    $insertSql = "INSERT INTO qr_tracking (qr_id, ip_address, user_agent, device_info, referer, country, city, visitor_uid, timestamp)
+                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                    $insert = $pdo->prepare($insertSql);
+                    try {
+                        $insert->execute([
+                            $link_id,
+                            $ip ?? 'Unknown',
+                            $ua ?? null,
+                            $device,
+                            $referer ?? null,
+                            $loc['country'],
+                            $loc['city'],
+                            $visitor_uid ?? null,
+                            $ts ?? date('Y-m-d H:i:s'),
+                        ]);
+                        $mapped[$tbl]['imported']++;
+                    } catch (Exception $e) {}
+                }
+            }
+        }
+    }
+    markMigrated($pdo, MIGRATION_FLAG);
+    return ['status'=>'done','mapped'=>$mapped];
+}
+$migrationResult = tryMigrateLegacyTables($pdo);
+
+// -------------------- LOGOWANIE POPRAWKA ------------------------
+if (!isset($_SESSION['admin_logged_in'])) $_SESSION['admin_logged_in'] = false;
+$is_logged_in = $_SESSION['admin_logged_in'] ?? false;
+
+// Wylogowanie
+if (isset($_GET['logout'])) {
+    $_SESSION = [];
+    if (ini_get("session.use_cookies")) {
+        $params = session_get_cookie_params();
+        setcookie(session_name(), '', time() - 42000,
+            $params["path"], $params["domain"],
+            $params["secure"], $params["httponly"]
+        );
+    }
+    session_destroy();
+    header('Location: ?admin=1');
+    exit;
+}
+
+if (isset($_POST['username'], $_POST['password'])) {
+    // Zawsze sprawdzaj post logowania, niezależnie od $_SESSION
+    if ($_POST['username'] === $ADMIN_USER && $_POST['password'] === $ADMIN_PASS) {
+        $_SESSION['admin_logged_in'] = true;
+        $is_logged_in = true;
+        header("Location: ?admin=1");
+        exit;
+    } else {
+        $login_error = "Nieprawidłowe dane logowania";
+        $_SESSION['admin_logged_in'] = false;
+        $is_logged_in = false;
+    }
+}
+
+// ----- PANEL ADMINA ----
+if (isset($_GET['admin'])) {
+    if (!$is_logged_in) {
+        ?>
+        <!doctype html>
+        <html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>QR Tracker - login</title>
+        <script src="https://cdn.tailwindcss.com"></script></head>
+        <body class="bg-gray-100 min-h-screen flex items-center justify-center">
+        <form method="POST" class="bg-white p-8 rounded shadow w-full max-w-md">
+            <input type="hidden" name="login" value="1">
+            <h2 class="text-2xl font-bold mb-4">Sky Tower QR Tracker - Logowanie</h2>
+            <?php if(isset($login_error)): ?><div class="text-red-600 mb-3"><?php echo htmlspecialchars($login_error); ?></div><?php endif; ?>
+            <input name="username" autocomplete="username" placeholder="login" class="w-full p-2 mb-3 border rounded">
+            <input type="password" name="password" autocomplete="current-password" placeholder="hasło" class="w-full p-2 mb-3 border rounded">
+            <button type="submit" class="w-full bg-blue-600 text-white p-2 rounded">Zaloguj</button>
+        </form></body></html>
+        <?php
+        exit;
+    }
+
+    // ADMIN ACTIONS
+    if (isset($_POST['new_qr'])) {
+        $code = safeCode($_POST['code'] ?? '');
+        $label = trim($_POST['label'] ?? '');
+        $url = filter_var($_POST['redirect_url'] ?? '', FILTER_VALIDATE_URL) ? $_POST['redirect_url'] : null;
+        if (!$code || !$url) $msg = "Kod i poprawny URL są wymagane";
+        else {
+            $ins = $pdo->prepare("INSERT IGNORE INTO qr_links (code,label,redirect_url) VALUES (?, ?, ?)");
+            $ins->execute([$code, $label, $url]);
+            $msg = "Dodano QR: {$code}";
+        }
+    }
+    if (isset($_POST['update_qr'])) {
+        $id = (int)($_POST['id'] ?? 0);
+        $label = trim($_POST['label'] ?? '');
+        $url = filter_var($_POST['redirect_url'] ?? '', FILTER_VALIDATE_URL) ? $_POST['redirect_url'] : null;
+        if ($id && $url) {
+            $up = $pdo->prepare("UPDATE qr_links SET label = ?, redirect_url = ? WHERE id = ?");
+            $up->execute([$label, $url, $id]);
+            $msg = "Zaktualizowano #{$id}";
+        } else $msg = "Błąd aktualizacji";
+    }
+
+    $qrs = $pdo->query("SELECT * FROM qr_links ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
+    $selected_qr = $_GET['view'] ?? null;
+    if ($selected_qr) {
+        $st = $pdo->prepare("SELECT * FROM qr_links WHERE id = ? OR code = ?");
+        $st->execute([ (int)$selected_qr, $selected_qr ]);
+        $qrRow = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$qrRow) $selected_qr = null;
+    }
+    $totals = [];
+    foreach ($qrs as $q) {
+        $stmt = $pdo->prepare("SELECT COUNT(*) as total, COUNT(DISTINCT COALESCE(visitor_uid, CONCAT(ip_address,'|', SUBSTRING(SHA1(user_agent),1,8)))) as unique_total FROM qr_tracking WHERE qr_id = ?");
+        $stmt->execute([$q['id']]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        $totals[$q['id']] = $row;
+    }
+
+    // RENDER
+    ?>
+    <!doctype html>
+    <html lang="pl">
+    <head>
+        <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>Sky Tower QR Tracker - Panel</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-gray-50">
+    <div class="max-w-6xl mx-auto p-6">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold">Sky Tower QR Tracker</h1>
+            <div class="flex gap-3 items-center">
+                <a href="?logout=1" class="bg-red-600 text-white px-4 py-2 rounded">Wyloguj</a>
+            </div>
+        </div>
+
+        <?php if(isset($msg)): ?><div class="bg-green-50 border border-green-200 text-green-700 p-3 rounded mb-4"><?php echo htmlspecialchars($msg); ?></div><?php endif; ?>
+        <?php if(isset($migrationResult)): ?>
+            <div class="bg-yellow-50 border border-yellow-200 p-3 rounded mb-4">
+                <strong>Wynik migracji:</strong>
+                <pre style="white-space:pre-wrap"><?php echo htmlspecialchars(json_encode($migrationResult, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)); ?></pre>
+            </div>
+        <?php endif; ?>
+
+        <div class="bg-white p-4 rounded shadow mb-6">
+            <h2 class="font-semibold mb-3">Dodaj nowy QR</h2>
+            <form method="POST" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <input name="code" placeholder="kod (np. promo2025)" class="border p-2 col-span-1">
+                <input name="label" placeholder="etykieta (opcjonalnie)" class="border p-2 col-span-1">
+                <input name="redirect_url" placeholder="URL docelowy" class="border p-2 col-span-1">
+                <button name="new_qr" class="bg-blue-600 text-white p-2 rounded col-span-1">Dodaj</button>
+            </form>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="bg-white p-4 rounded shadow">
+                <h3 class="font-semibold mb-3">Lista QR</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="text-left text-xs text-gray-500">
+                        <tr><th>ID</th><th>Kod</th><th>Label</th><th>Redirect</th><th>Visits</th><th>QR</th><th>Akcja</th></tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($qrs as $q): ?>
+                            <tr class="border-t">
+                                <td class="py-2"><?php echo $q['id']; ?></td>
+                                <td class="py-2 font-mono"><?php echo htmlspecialchars($q['code']); ?></td>
+                                <td class="py-2"><?php echo htmlspecialchars($q['label']); ?></td>
+                                <td class="py-2"><a href="<?php echo htmlspecialchars($q['redirect_url']); ?>" target="_blank" class="text-blue-600"><?php echo (strlen($q['redirect_url'])>50?substr($q['redirect_url'],0,50).'...':$q['redirect_url']); ?></a></td>
+                                <td class="py-2 text-center font-bold"><?php echo number_format($totals[$q['id']]['total'] ?? 0); ?></td>
+                                <td class="py-2"><a class="text-sm text-indigo-600" href="<?php echo "?" . htmlspecialchars(http_build_query(['qr' => $q['code']])); ?>" target="_blank">Open</a></td>
+                                <td class="py-2">
+                                    <a class="text-xs text-green-600 mr-2" href="?admin=1&view=<?php echo urlencode($q['id']); ?>">Statystyki</a>
+                                    <form method="POST" class="inline-block">
+                                        <input type="hidden" name="id" value="<?php echo $q['id']; ?>">
+                                        <input type="hidden" name="label" value="<?php echo htmlspecialchars($q['label']); ?>">
+                                        <input type="hidden" name="redirect_url" value="<?php echo htmlspecialchars($q['redirect_url']); ?>">
+                                        <button name="update_qr" class="text-xs bg-gray-200 px-2 py-1 rounded">Zapisz</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded shadow lg:col-span-2">
+                <?php if ($selected_qr):
+                    $qrId = $qrRow['id'];
+                    $totStmt = $pdo->prepare("SELECT COUNT(*) as total FROM qr_tracking WHERE qr_id = ?");
+                    $totStmt->execute([$qrId]); $total_visits = (int)$totStmt->fetchColumn();
+                    $uniqueStmt = $pdo->prepare("SELECT COUNT(DISTINCT COALESCE(visitor_uid, CONCAT(ip_address,'|', SUBSTRING(SHA1(user_agent),1,8)))) as unique_total FROM qr_tracking WHERE qr_id = ?");
+                    $uniqueStmt->execute([$qrId]); $unique_total = (int)$uniqueStmt->fetchColumn();
+                    $avg = $unique_total>0 ? round($total_visits / $unique_total, 2) : 0;
+                    $today = $pdo->prepare("SELECT COUNT(*) FROM qr_tracking WHERE qr_id = ? AND DATE(timestamp) = CURDATE()");
+                    $today->execute([$qrId]); $today_v = (int)$today->fetchColumn();
+                    $yest = $pdo->prepare("SELECT COUNT(*) FROM qr_tracking WHERE qr_id = ? AND DATE(timestamp) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)");
+                    $yest->execute([$qrId]); $yest_v = (int)$yest->fetchColumn();
+                    $week = $pdo->prepare("SELECT COUNT(*) FROM qr_tracking WHERE qr_id = ? AND timestamp >= DATE_SUB(NOW(), INTERVAL 7 DAY)");
+                    $week->execute([$qrId]); $week_v = (int)$week->fetchColumn();
+                    $month = $pdo->prepare("SELECT COUNT(*) FROM qr_tracking WHERE qr_id = ? AND MONTH(timestamp) = MONTH(NOW()) AND YEAR(timestamp) = YEAR(NOW())");
+                    $month->execute([$qrId]); $month_v = (int)$month->fetchColumn();
+                    $devStmt = $pdo->prepare("SELECT device_info, COUNT(*) as cnt FROM qr_tracking WHERE qr_id = ? GROUP BY device_info ORDER BY cnt DESC LIMIT 10");
+                    $devStmt->execute([$qrId]); $topDevices = $devStmt->fetchAll(PDO::FETCH_ASSOC);
+                    $ctStmt = $pdo->prepare("SELECT country, COUNT(*) as cnt FROM qr_tracking WHERE qr_id = ? AND country IS NOT NULL GROUP BY country ORDER BY cnt DESC LIMIT 10");
+                    $ctStmt->execute([$qrId]); $topCountries = $ctStmt->fetchAll(PDO::FETCH_ASSOC);
+                    $hrStmt = $pdo->prepare("SELECT HOUR(timestamp) as hour, COUNT(*) as cnt FROM qr_tracking WHERE qr_id = ? AND timestamp >= DATE_SUB(NOW(), INTERVAL 24 HOUR) GROUP BY HOUR(timestamp) ORDER BY hour");
+                    $hrStmt->execute([$qrId]); $hourly = $hrStmt->fetchAll(PDO::FETCH_ASSOC);
+                    $rvStmt = $pdo->prepare("SELECT * FROM qr_tracking WHERE qr_id = ? ORDER BY timestamp DESC LIMIT 50");
+                    $rvStmt->execute([$qrId]); $recent = $rvStmt->fetchAll(PDO::FETCH_ASSOC);
+                    ?>
+                    <h2 class="text-2xl font-bold mb-4">Statystyki: <?php echo htmlspecialchars($qrRow['code'] . ' — ' . ($qrRow['label'] ?? '')); ?></h2>
+                    <div class="grid grid-cols-2 gap-4 mb-6">
+                        <div class="bg-gray-50 p-4 rounded">
+                            <div class="text-3xl font-bold"><?php echo number_format($total_visits); ?></div>
+                            <div class="text-sm text-gray-600">Całkowite odwiedziny</div>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded">
+                            <div class="text-3xl font-bold"><?php echo number_format($unique_total); ?></div>
+                            <div class="text-sm text-gray-600">Unikatowi odwiedzający</div>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded">
+                            <div class="text-3xl font-bold"><?php echo number_format($avg,2); ?></div>
+                            <div class="text-sm text-gray-600">Średnio wejść na osobę</div>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded">
+                            <div class="text-3xl font-bold"><?php echo number_format($today_v); ?></div>
+                            <div class="text-sm text-gray-600">Dziś</div>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded">
+                            <div class="text-3xl font-bold"><?php echo number_format($yest_v); ?></div>
+                            <div class="text-sm text-gray-600">Wczoraj</div>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded">
+                            <div class="text-3xl font-bold"><?php echo number_format($week_v); ?></div>
+                            <div class="text-sm text-gray-600">Ostatnie 7 dni</div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                        <div class="bg-white p-4 rounded shadow">
+                            <h3 class="font-semibold mb-3">Top urządzenia</h3>
+                            <?php foreach($topDevices as $d): ?>
+                                <div class="flex justify-between py-1 border-b">
+                                    <div><?php echo htmlspecialchars($d['device_info']); ?></div>
+                                    <div class="font-bold"><?php echo number_format($d['cnt']); ?></div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                        <div class="bg-white p-4 rounded shadow">
+                            <h3 class="font-semibold mb-3">Top kraje</h3>
+                            <?php foreach($topCountries as $c): ?>
+                                <div class="flex justify-between py-1 border-b">
+                                    <div><?php echo htmlspecialchars($c['country']); ?></div>
+                                    <div class="font-bold"><?php echo number_format($c['cnt']); ?></div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded shadow mb-6">
+                        <h3 class="font-semibold mb-3">Statystyki godzinowe (ostatnie 24h)</h3>
+                        <div class="grid grid-cols-24 gap-1 items-end">
+                            <?php
+                            $hourMap = [];
+                            foreach ($hourly as $h) $hourMap[(int)$h['hour']] = (int)$h['cnt'];
+                            $mx = max($hourMap) ?: 1;
+                            for ($i=0;$i<24;$i++):
+                                $c = $hourMap[$i] ?? 0;
+                                $height = max(4, intval(($c/$mx)*100));
+                            ?>
+                                <div class="text-center">
+                                    <div class="bg-blue-500 rounded-t" style="height:<?php echo $height; ?>px;" title="<?php echo $c;?>"></div>
+                                    <div class="text-xs mt-2"><?php echo sprintf('%02d',$i); ?></div>
+                                </div>
+                            <?php endfor; ?>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded shadow">
+                        <h3 class="font-semibold mb-3">Ostatnie wizyty (<?php echo count($recent); ?>)</h3>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead class="text-left text-xs text-gray-500"><tr><th>Data</th><th>IP</th><th>Urządzenie</th><th>Kraj</th><th>Miasto</th><th>Referer</th></tr></thead>
+                                <tbody>
+                                <?php foreach($recent as $rv): ?>
+                                    <tr class="border-t">
+                                        <td class="py-2"><?php echo date('d.m.Y H:i:s', strtotime($rv['timestamp'])); ?></td>
+                                        <td class="py-2 font-mono"><?php echo htmlspecialchars($rv['ip_address']); ?></td>
+                                        <td class="py-2"><?php echo htmlspecialchars($rv['device_info']); ?></td>
+                                        <td class="py-2"><?php echo htmlspecialchars($rv['country']); ?></td>
+                                        <td class="py-2"><?php echo htmlspecialchars($rv['city']); ?></td>
+                                        <td class="py-2"><?php echo htmlspecialchars($rv['referer']); ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                <?php else: ?>
+                    <h2 class="text-xl font-semibold">Wybierz QR aby zobaczyć szczegółowe statystyki</h2>
+                    <p class="text-sm text-gray-600">Kliknij "Statystyki" przy danym QR (po lewej).</p>
+                <?php endif; ?>
+            </div>
+        </div>
+        <div class="text-center text-xs text-gray-500 mt-6">
+            Stworzone przez Soft Synergy — migracje wykonane: <?php echo htmlspecialchars(MIGRATION_FLAG); ?>
+        </div>
+    </div>
+    </body>
+    </html>
+    <?php
+    exit;
+}
+
+// ------ TRYB UŻYTKOWNIKA -----
+$qr_code = $_GET['qr'] ?? 'main';
+
+$stmt = $pdo->prepare("SELECT * FROM qr_links WHERE code = ? OR id = ?");
+$stmt->execute([$qr_code, (int)$qr_code]);
+$link = $stmt->fetch(PDO::FETCH_ASSOC);
+if (!$link) {
+    $fallback = $pdo->query("SELECT * FROM qr_links ORDER BY id LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+    if ($fallback) $link = $fallback;
+    else {
+        http_response_code(404);
+        echo "QR code not found.";
+        exit; }
+}
+
+$ip = $_SERVER['REMOTE_ADDR'] ?? ($_SERVER['HTTP_X_FORWARDED_FOR'] ?? 'Unknown');
+$ua = $_SERVER['HTTP_USER_AGENT'] ?? null;
+$ref = $_SERVER['HTTP_REFERER'] ?? null;
+$device = detectDevice($ua);
+$loc = getLocationFromIP($ip);
+$visitorCookie = 'qr_tracker_uid';
+$visitor = $_COOKIE[$visitorCookie] ?? bin2hex(random_bytes(16));
+setcookie($visitorCookie, $visitor, time()+60*60*24*180, '/');
+
+try {
+    $ins = $pdo->prepare("INSERT INTO qr_tracking (qr_id, ip_address, user_agent, device_info, referer, country, city, visitor_uid) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+    $ins->execute([
+        $link['id'],
+        $ip,
+        $ua,
+        $device,
+        $ref,
+        $loc['country'] ?? 'Unknown',
+        $loc['city'] ?? 'Unknown',
+        $visitor
+    ]);
+} catch (Exception $e) {
+    @file_put_contents(__DIR__ . '/qr_tracker_errors.log', date('c') . " - Insert error: " . $e->getMessage() . PHP_EOL, FILE_APPEND);
+}
+header('Location: ' . ($link['redirect_url'] ?? '/'));
+exit;
+?>
