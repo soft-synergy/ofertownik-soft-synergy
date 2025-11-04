@@ -22,16 +22,18 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdn.tailwindcss.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "https://fonts.googleapis.com"],
       scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com"],
-      imgSrc: ["'self'", "data:", "https:", "https://oferty.soft-synergy.com"],
-      connectSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "blob:", "https:", "*"],
+      connectSrc: ["'self'", "*"],
     },
   },
+  crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? ['https:///ofertownik.soft-synergy.com', 'https://ofertownik.soft-synergy.com', 'https:///oferty.soft-synergy.com', 'https://oferty.soft-synergy.com'] 
-    : ['https:///localhost:3000', 'https:///ofertownik.soft-synergy.com', 'https://ofertownik.soft-synergy.com', 'https:///oferty.soft-synergy.com', 'https://oferty.soft-synergy.com'],
-  credentials: true
+  origin: true, // Allow all origins
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Length', 'Content-Type']
 }));
 
 // Rate limiting
@@ -45,21 +47,35 @@ app.use(limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Static files
-app.use('/uploads/portfolio', express.static(path.join(__dirname, '../uploads/portfolio')));
-app.use('/uploads/documents', express.static(path.join(__dirname, '../uploads/documents')));
+// Static files with CORS headers
+const setCorsHeaders = (req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+};
 
-// Generated offers with cache-busting
+app.use('/uploads/portfolio', setCorsHeaders, express.static(path.join(__dirname, '../uploads/portfolio')));
+app.use('/uploads/documents', setCorsHeaders, express.static(path.join(__dirname, '../uploads/documents')));
+
+// Generated offers with cache-busting and CORS
 app.use('/generated-offers', (req, res, next) => {
   // Add cache-busting headers for offer files
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
+  // Add CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   next();
 }, express.static(path.join(__dirname, 'generated-offers')));
 
-app.use('/js', express.static(path.join(__dirname, 'public/js')));
-app.use('/img', express.static(path.join(__dirname, 'public/img')));
+app.use('/js', setCorsHeaders, express.static(path.join(__dirname, 'public/js')));
+app.use('/img', setCorsHeaders, express.static(path.join(__dirname, 'public/img')));
 
 // Routes
 app.use('/api/auth', authRoutes);
