@@ -107,7 +107,8 @@ const ClientDetails = ({ client, onClose }) => {
   const assignHosting = useMutation(({ id, hostingId }) => clientsAPI.assignHosting(id, hostingId), {
     onSuccess: () => { queryClient.invalidateQueries(['clientDetails', client._id]); setHostingId(''); }
   });
-  const { data: projectsList = [] } = useQuery(['projectsListForAssign'], () => projectsAPI.getAll({ limit: 100 }));
+  const { data: projectsResp = [] } = useQuery(['projectsListForAssign'], () => projectsAPI.getAll({ limit: 100 }));
+  const projectsList = useMemo(() => (Array.isArray(projectsResp) ? projectsResp : (projectsResp.items || projectsResp.data || [])), [projectsResp]);
   const { data: hostingList = [] } = useQuery(['hostingListForAssign'], () => hostingAPI.getAll({}));
 
   return (
@@ -136,7 +137,7 @@ const ClientDetails = ({ client, onClose }) => {
                 <div className="flex gap-2">
                   <select className="input-field" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
                     <option value="">Wybierz projekt</option>
-                    {projectsList.items ? (projectsList.items).map(p => (<option key={p._id} value={p._id}>{p.name}</option>)) : null}
+                    {projectsList.map(p => (<option key={p._id} value={p._id}>{p.name}</option>))}
                   </select>
                   <button onClick={() => projectId && assignProject.mutate({ id: client._id, projectId })} className="btn-primary">Przypisz</button>
                 </div>

@@ -41,7 +41,9 @@ router.post('/', [
     if (!errors.isEmpty()) {
       return res.status(400).json({ message: 'Nieprawidłowe dane klienta', errors: errors.array() });
     }
-    const client = await Client.create({ ...req.body, createdBy: req.user._id });
+    // generate simple portal token
+    const token = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    const client = await Client.create({ ...req.body, createdBy: req.user._id, portalEnabled: true, portalToken: token });
     res.status(201).json(client);
   } catch (e) {
     res.status(500).json({ message: 'Błąd tworzenia klienta' });
@@ -71,6 +73,21 @@ router.put('/:id', async (req, res) => {
     res.json(client);
   } catch (e) {
     res.status(500).json({ message: 'Błąd aktualizacji klienta' });
+  }
+});
+
+// Regenerate portal token
+router.post('/:id/portal/regenerate', async (req, res) => {
+  try {
+    const client = await Client.findById(req.params.id);
+    if (!client) return res.status(404).json({ message: 'Klient nie znaleziony' });
+    const token = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    client.portalToken = token;
+    client.portalEnabled = true;
+    await client.save();
+    res.json({ message: 'Link portalu zregenerowany', client });
+  } catch (e) {
+    res.status(500).json({ message: 'Błąd regeneracji linku portalu' });
   }
 });
 

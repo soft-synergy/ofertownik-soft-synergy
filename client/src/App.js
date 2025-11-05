@@ -15,6 +15,7 @@ import Employees from './pages/Employees';
 import Activity from './pages/Activity';
 import Hosting from './pages/Hosting';
 import Clients from './pages/Clients';
+import ClientPortal from './pages/ClientPortal';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 
@@ -31,6 +32,7 @@ function AppContent() {
 
   return (
     <Routes>
+      <Route path="/client/:token" element={<ClientPortal />} />
       <Route path="/admin" element={<AdminApp />} />
       <Route path="/employee" element={<EmployeeApp />} />
       <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login />} />
