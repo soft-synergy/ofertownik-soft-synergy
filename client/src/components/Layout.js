@@ -46,13 +46,13 @@ const Layout = () => {
         <div className="p-6 border-b border-gray-200">
           <h1 className="text-xl font-bold text-gray-900">{t('common.appName')}</h1>
           <p className="text-sm text-gray-500 mt-1">Soft Synergy</p>
-        </div>
+      </div>
 
         {/* Navigation */}
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
           {navItems.map((item) => {
-            const Icon = item.icon;
-            return (
+              const Icon = item.icon;
+              return (
               <NavLink
                 key={item.path}
                 to={item.path}
@@ -63,13 +63,13 @@ const Layout = () => {
                       : 'text-gray-700 hover:bg-gray-100'
                   }`
                 }
-              >
+                >
                 <Icon className="h-5 w-5 mr-3" />
                 {item.label}
               </NavLink>
-            );
-          })}
-        </nav>
+              );
+            })}
+          </nav>
 
         {/* User Info & Logout */}
         <div className="p-4 border-t border-gray-200">
@@ -87,17 +87,17 @@ const Layout = () => {
             <LogOut className="h-5 w-5 mr-3" />
             {t('nav.logout')}
           </button>
+          </div>
         </div>
-      </div>
 
       {/* Main Content */}
       <div className="pl-64">
         <div className="p-8">
-          <Outlet />
-        </div>
+            <Outlet />
+          </div>
       </div>
     </div>
   );
 };
 
-export default Layout;
+export default Layout; 

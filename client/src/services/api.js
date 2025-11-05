@@ -130,4 +130,4 @@ export const hostingAPI = {
     const res = await api.get('/api/hosting/monitor/report', { params, responseType: 'blob' });
     return res;
   }
-};
+}; 
