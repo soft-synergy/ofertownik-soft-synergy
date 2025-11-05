@@ -1,185 +1,100 @@
-import React, { useState } from 'react';
-import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+import React from 'react';
+import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { useI18n } from '../contexts/I18nContext';
 import { 
-  Home, 
+  LayoutDashboard, 
   FolderOpen, 
-  Image, 
-  LogOut, 
-  Menu, 
-  X,
-  User,
-  Settings
+  Briefcase, 
+  Users, 
+  Activity,
+  Server,
+  LogOut
 } from 'lucide-react';
 
 const Layout = () => {
   const { user, logout } = useAuth();
-  const { lang, setLang, t } = useI18n();
-  const location = useLocation();
   const navigate = useNavigate();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  const navigation = [
-    { name: t('nav.dashboard'), href: '/dashboard', icon: Home, roles: ['admin','manager','employee'] },
-    { name: t('nav.projects'), href: '/projects', icon: FolderOpen, roles: ['admin','manager','employee'] },
-    { name: t('nav.portfolio'), href: '/portfolio', icon: Image, roles: ['admin','manager'] },
-    { name: t('nav.employees'), href: '/employees', icon: User, roles: ['admin'] },
-    { name: 'Aktywność', href: '/activity', icon: Settings, roles: ['admin'] },
-  ];
 
   const handleLogout = async () => {
     await logout();
     navigate('/login');
   };
 
-  const isActive = (href) => location.pathname === href;
+  const navItems = [
+    { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { path: '/projects', label: 'Projekty', icon: FolderOpen },
+    { path: '/portfolio', label: 'Portfolio', icon: Briefcase },
+    { path: '/activity', label: 'Aktywność', icon: Activity },
+  ];
+
+  // Add admin-only items
+  if (user?.role === 'admin') {
+    navItems.push(
+      { path: '/employees', label: 'Pracownicy', icon: Users },
+      { path: '/hosting', label: 'Hosting', icon: Server }
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Mobile sidebar */}
-      <div className={`fixed inset-0 z-50 lg:hidden ${sidebarOpen ? 'block' : 'hidden'}`}>
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={() => setSidebarOpen(false)} />
-        <div className="fixed inset-y-0 left-0 flex w-64 flex-col bg-white">
-          <div className="flex h-16 items-center justify-between px-4">
-            <h1 className="text-xl font-bold text-gray-900">{t('common.appName')}</h1>
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="text-gray-400 hover:text-gray-600"
-            >
-              <X size={24} />
-            </button>
-          </div>
-          <nav className="flex-1 space-y-1 px-2 py-4">
-            {navigation.filter(n => !n.roles || n.roles.includes(user?.role)).map((item) => {
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
-                    isActive(item.href)
-                      ? 'bg-primary-100 text-primary-900'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
-                  onClick={() => setSidebarOpen(false)}
-                >
-                  <Icon className="mr-3 h-5 w-5" />
-                  {item.name}
-                </Link>
-              );
-            })}
-          </nav>
-          <div className="border-t border-gray-200 p-4">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="h-8 w-8 rounded-full bg-primary-600 flex items-center justify-center">
-                  <User className="h-5 w-5 text-white" />
-                </div>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-700">{user?.fullName}</p>
-                <p className="text-xs text-gray-500">{user?.email}</p>
-              </div>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="mt-3 flex w-full items-center px-2 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-md"
-            >
-              <LogOut className="mr-3 h-5 w-5" />
-              {t('nav.logout')}
-            </button>
-          </div>
+      {/* Sidebar */}
+      <div className="fixed inset-y-0 left-0 w-64 bg-white border-r border-gray-200 flex flex-col">
+        {/* Logo */}
+        <div className="p-6 border-b border-gray-200">
+          <h1 className="text-xl font-bold text-gray-900">Ofertownik</h1>
+          <p className="text-sm text-gray-500 mt-1">Soft Synergy</p>
         </div>
-      </div>
 
-      {/* Desktop sidebar */}
-      <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
-        <div className="flex flex-col flex-grow bg-white border-r border-gray-200">
-          <div className="flex h-16 items-center px-4">
-            <h1 className="text-xl font-bold text-gray-900">{t('common.appName')}</h1>
-          </div>
-          <nav className="flex-1 space-y-1 px-2 py-4">
-            {navigation.filter(n => !n.roles || n.roles.includes(user?.role)).map((item) => {
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
-                    isActive(item.href)
-                      ? 'bg-primary-100 text-primary-900'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
-                >
-                  <Icon className="mr-3 h-5 w-5" />
-                  {item.name}
-                </Link>
-              );
-            })}
-          </nav>
-          <div className="border-t border-gray-200 p-4">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="h-8 w-8 rounded-full bg-primary-600 flex items-center justify-center">
-                  <User className="h-5 w-5 text-white" />
-                </div>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-700">{user?.fullName}</p>
-                <p className="text-xs text-gray-500">{user?.email}</p>
-              </div>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="mt-3 flex w-full items-center px-2 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-md"
-            >
-              <LogOut className="mr-3 h-5 w-5" />
-              {t('nav.logout')}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Main content */}
-      <div className="lg:pl-64">
-        {/* Top bar */}
-        <div className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-gray-200 bg-white px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
-          <button
-            type="button"
-            className="-m-2.5 p-2.5 text-gray-700 lg:hidden"
-            onClick={() => setSidebarOpen(true)}
-          >
-            <Menu className="h-6 w-6" />
-          </button>
-          <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
-            <div className="flex flex-1"></div>
-            <div className="flex items-center gap-x-4 lg:gap-x-6">
-              <select
-                value={lang}
-                onChange={(e) => setLang(e.target.value)}
-                className="border rounded-md text-sm px-2 py-1 text-gray-700"
-                title={t('layout.languageTitle')}
+        {/* Navigation */}
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                className={({ isActive }) =>
+                  `flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                    isActive
+                      ? 'bg-primary-50 text-primary-700'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`
+                }
               >
-                <option value="pl">PL</option>
-                <option value="en">EN</option>
-              </select>
-              <button className="text-gray-400 hover:text-gray-500">
-                <Settings className="h-6 w-6" />
-              </button>
-            </div>
-          </div>
-        </div>
+                <Icon className="h-5 w-5 mr-3" />
+                {item.label}
+              </NavLink>
+            );
+          })}
+        </nav>
 
-        {/* Page content */}
-        <main className="py-6">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <Outlet />
+        {/* User Info & Logout */}
+        <div className="p-4 border-t border-gray-200">
+          <div className="mb-3">
+            <div className="text-sm font-medium text-gray-900">
+              {user?.firstName} {user?.lastName}
+            </div>
+            <div className="text-xs text-gray-500">{user?.email}</div>
+            <div className="text-xs text-gray-400 mt-1 capitalize">{user?.role}</div>
           </div>
-        </main>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center px-4 py-2 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+          >
+            <LogOut className="h-5 w-5 mr-3" />
+            Wyloguj
+          </button>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="pl-64">
+        <div className="p-8">
+          <Outlet />
+        </div>
       </div>
     </div>
   );
 };
 
-export default Layout; 
+export default Layout;

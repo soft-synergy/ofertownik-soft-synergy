@@ -99,3 +99,15 @@ export const offersAPI = {
 export const activityAPI = {
   recent: () => api.get('/api/activities/recent').then(res => res.data),
 };
+
+export const hostingAPI = {
+  getAll: (params) => api.get('/api/hosting', { params }).then(res => res.data),
+  getById: (id) => api.get(`/api/hosting/${id}`).then(res => res.data),
+  create: (data) => api.post('/api/hosting', data).then(res => res.data),
+  update: (id, data) => api.put(`/api/hosting/${id}`, data).then(res => res.data),
+  delete: (id) => api.delete(`/api/hosting/${id}`).then(res => res.data),
+  recordPayment: (id, data) => api.post(`/api/hosting/${id}/payment`, data).then(res => res.data),
+  addReminder: (id, data) => api.post(`/api/hosting/${id}/reminder`, data).then(res => res.data),
+  updateStatus: (id, status) => api.put(`/api/hosting/${id}/status`, { status }).then(res => res.data),
+  getStats: () => api.get('/api/hosting/stats/overview').then(res => res.data),
+};

@@ -51,17 +51,15 @@
         .reveal { opacity: 0; transform: translateY(30px); transition: all 0.8s cubic-bezier(0.165, 0.84, 0.44, 1); }
         .reveal.visible { opacity: 1; transform: translateY(0); }
         .card-3d { transform-style: preserve-3d; transition: transform 0.5s cubic-bezier(0.165, 0.84, 0.44, 1); }
-        .portfolio-carousel-container { position: relative; }
-        .portfolio-carousel { display: flex; will-change: transform; }
-        .portfolio-carousel:hover { animation-play-state: paused; }
+        .portfolio-carousel-container { position: relative; overflow: hidden; width: 100%; }
+        .portfolio-carousel { display: flex; will-change: transform; transition: transform 0.7s ease-in-out; }
         @media (max-width: 768px) {
-            .portfolio-carousel-item { width: 100% !important; }
+            .portfolio-carousel-item { width: 100% !important; min-width: 100% !important; }
         }
-        .testimonials-carousel-container { position: relative; }
-        .testimonials-carousel { display: flex; will-change: transform; }
-        .testimonials-carousel:hover { animation-play-state: paused; }
+        .testimonials-carousel-container { position: relative; overflow: hidden; width: 100%; }
+        .testimonials-carousel { display: flex; will-change: transform; transition: transform 0.7s ease-in-out; }
         @media (max-width: 768px) {
-            .testimonial-item { width: 100% !important; }
+            .testimonial-item { width: 100% !important; min-width: 100% !important; }
         }
         .cookie-banner { 
             position: fixed; 
@@ -729,54 +727,32 @@
                 }); 
             });
 
-            // Portfolio Carousel Auto-Scroll with infinite loop
+            // Portfolio Carousel Auto-Scroll - smooth continuous loop
             const carouselContainer = document.querySelector('.portfolio-carousel-container');
             if (carouselContainer) {
                 const carousel = carouselContainer.querySelector('.portfolio-carousel');
                 const items = carouselContainer.querySelectorAll('.portfolio-carousel-item');
                 const dots = carouselContainer.querySelectorAll('.carousel-dot');
                 if (items.length > 2) {
-                    // Clone first 2 items and append to end, and clone last 2 items and prepend to beginning
-                    const firstItem = items[0].cloneNode(true);
-                    const secondItem = items[1].cloneNode(true);
-                    const lastItem = items[items.length - 1].cloneNode(true);
-                    const secondLastItem = items[items.length - 2].cloneNode(true);
-                    
-                    carousel.appendChild(firstItem);
-                    carousel.appendChild(secondItem);
-                    carousel.insertBefore(lastItem, items[0]);
-                    carousel.insertBefore(secondLastItem, items[0]);
-                    
-                    // Update items list after cloning
-                    const allItems = carouselContainer.querySelectorAll('.portfolio-carousel-item');
-                    const realItemCount = items.length;
-                    const itemWidth = allItems[0].offsetWidth + 32; // width + gap
-                    
-                    // Start at position 2 (after the prepended clones)
-                    let currentIndex = 2;
+                    let currentIndex = 0;
                     let isPaused = false;
                     let isTransitioning = false;
                     
-                    // Set initial position
-                    carousel.style.transition = 'none';
-                    carousel.style.transform = `translateX(${-currentIndex * itemWidth}px)`;
-                    
-                    // Enable transition after initial positioning
-                    setTimeout(() => {
-                        carousel.style.transition = 'transform 0.7s ease-in-out';
-                    }, 50);
+                    const getItemWidth = () => {
+                        return items[0].offsetWidth + 32; // width + gap
+                    };
                     
                     // Auto-scroll function
                     const scrollCarousel = () => {
                         if (isPaused || isTransitioning) return;
                         
-                        currentIndex++;
                         isTransitioning = true;
+                        const nextIndex = (currentIndex + 1) % items.length;
+                        const itemWidth = getItemWidth();
                         
-                        // Update dots based on real index
-                        const realIndex = ((currentIndex - 2) % realItemCount + realItemCount) % realItemCount;
+                        // Update dots before transition
                         dots.forEach((dot, idx) => {
-                            if (idx === realIndex) {
+                            if (idx === nextIndex) {
                                 dot.classList.add('bg-blue-500', 'w-8');
                                 dot.classList.remove('bg-white/30');
                             } else {
@@ -785,23 +761,29 @@
                             }
                         });
                         
-                        carousel.style.transform = `translateX(${-currentIndex * itemWidth}px)`;
-                        
-                        // Check if we've reached the cloned items at the end
-                        setTimeout(() => {
-                            if (currentIndex >= realItemCount + 2) {
-                                // Jump back to the beginning without animation
-                                carousel.style.transition = 'none';
-                                currentIndex = 2;
-                                carousel.style.transform = `translateX(${-currentIndex * itemWidth}px)`;
-                                
-                                // Re-enable transition
-                                setTimeout(() => {
-                                    carousel.style.transition = 'transform 0.7s ease-in-out';
-                                }, 50);
-                            }
-                            isTransitioning = false;
-                        }, 700);
+                        // If we're going from last to first, make it instant and invisible
+                        if (currentIndex === items.length - 1 && nextIndex === 0) {
+                            // Jump to start instantly without animation
+                            carousel.style.transition = 'none';
+                            carousel.style.transform = `translateX(0px)`;
+                            currentIndex = 0;
+                            
+                            // Then immediately move to first visible position
+                            setTimeout(() => {
+                                carousel.style.transition = 'transform 0.7s ease-in-out';
+                                carousel.style.transform = `translateX(0px)`;
+                                isTransitioning = false;
+                            }, 50);
+                        } else {
+                            // Normal transition
+                            currentIndex = nextIndex;
+                            carousel.style.transform = `translateX(${-currentIndex * itemWidth}px)`;
+                            
+                            // Reset transition flag after animation completes
+                            setTimeout(() => {
+                                isTransitioning = false;
+                            }, 700);
+                        }
                     };
                     
                     // Pause on hover
@@ -818,11 +800,12 @@
                             if (isTransitioning) return;
                             isTransitioning = true;
                             
-                            currentIndex = idx + 2; // Offset by prepended clones
+                            currentIndex = idx;
+                            const itemWidth = getItemWidth();
                             carousel.style.transform = `translateX(${-currentIndex * itemWidth}px)`;
                             
                             dots.forEach((d, i) => {
-                                if (i === idx) {
+                                if (i === currentIndex) {
                                     d.classList.add('bg-blue-500', 'w-8');
                                     d.classList.remove('bg-white/30');
                                 } else {
@@ -842,50 +825,32 @@
                 }
             }
 
-            // Testimonials Carousel Auto-Scroll with infinite loop
+            // Testimonials Carousel Auto-Scroll - smooth continuous loop
             const testimonialsContainer = document.querySelector('.testimonials-carousel-container');
             if (testimonialsContainer) {
                 const carousel = testimonialsContainer.querySelector('.testimonials-carousel');
                 const items = testimonialsContainer.querySelectorAll('.testimonial-item');
                 const dots = testimonialsContainer.querySelectorAll('.testimonial-dot');
                 if (items.length > 1) {
-                    // Clone first item and append to end, and clone last item and prepend to beginning
-                    const firstItem = items[0].cloneNode(true);
-                    const lastItem = items[items.length - 1].cloneNode(true);
-                    
-                    carousel.appendChild(firstItem);
-                    carousel.insertBefore(lastItem, items[0]);
-                    
-                    // Update items list after cloning
-                    const allItems = testimonialsContainer.querySelectorAll('.testimonial-item');
-                    const realItemCount = items.length;
-                    const itemWidth = allItems[0].offsetWidth + 24; // width + gap
-                    
-                    // Start at position 1 (after the prepended clone)
-                    let currentIndex = 1;
+                    let currentIndex = 0;
                     let isPaused = false;
                     let isTransitioning = false;
                     
-                    // Set initial position
-                    carousel.style.transition = 'none';
-                    carousel.style.transform = `translateX(${-currentIndex * itemWidth}px)`;
-                    
-                    // Enable transition after initial positioning
-                    setTimeout(() => {
-                        carousel.style.transition = 'transform 0.7s ease-in-out';
-                    }, 50);
+                    const getItemWidth = () => {
+                        return items[0].offsetWidth + 24; // width + gap
+                    };
                     
                     // Auto-scroll function
                     const scrollTestimonials = () => {
                         if (isPaused || isTransitioning) return;
                         
-                        currentIndex++;
                         isTransitioning = true;
+                        const nextIndex = (currentIndex + 1) % items.length;
+                        const itemWidth = getItemWidth();
                         
-                        // Update dots based on real index
-                        const realIndex = ((currentIndex - 1) % realItemCount + realItemCount) % realItemCount;
+                        // Update dots before transition
                         dots.forEach((dot, idx) => {
-                            if (idx === realIndex) {
+                            if (idx === nextIndex) {
                                 dot.classList.add('bg-blue-500', 'w-8');
                                 dot.classList.remove('bg-white/30');
                             } else {
@@ -894,23 +859,29 @@
                             }
                         });
                         
-                        carousel.style.transform = `translateX(${-currentIndex * itemWidth}px)`;
-                        
-                        // Check if we've reached the cloned item at the end
-                        setTimeout(() => {
-                            if (currentIndex >= realItemCount + 1) {
-                                // Jump back to the beginning without animation
-                                carousel.style.transition = 'none';
-                                currentIndex = 1;
-                                carousel.style.transform = `translateX(${-currentIndex * itemWidth}px)`;
-                                
-                                // Re-enable transition
-                                setTimeout(() => {
-                                    carousel.style.transition = 'transform 0.7s ease-in-out';
-                                }, 50);
-                            }
-                            isTransitioning = false;
-                        }, 700);
+                        // If we're going from last to first, make it instant and invisible
+                        if (currentIndex === items.length - 1 && nextIndex === 0) {
+                            // Jump to start instantly without animation
+                            carousel.style.transition = 'none';
+                            carousel.style.transform = `translateX(0px)`;
+                            currentIndex = 0;
+                            
+                            // Then immediately move to first visible position
+                            setTimeout(() => {
+                                carousel.style.transition = 'transform 0.7s ease-in-out';
+                                carousel.style.transform = `translateX(0px)`;
+                                isTransitioning = false;
+                            }, 50);
+                        } else {
+                            // Normal transition
+                            currentIndex = nextIndex;
+                            carousel.style.transform = `translateX(${-currentIndex * itemWidth}px)`;
+                            
+                            // Reset transition flag after animation completes
+                            setTimeout(() => {
+                                isTransitioning = false;
+                            }, 700);
+                        }
                     };
                     
                     // Pause on hover
@@ -927,11 +898,12 @@
                             if (isTransitioning) return;
                             isTransitioning = true;
                             
-                            currentIndex = idx + 1; // Offset by prepended clone
+                            currentIndex = idx;
+                            const itemWidth = getItemWidth();
                             carousel.style.transform = `translateX(${-currentIndex * itemWidth}px)`;
                             
                             dots.forEach((d, i) => {
-                                if (i === idx) {
+                                if (i === currentIndex) {
                                     d.classList.add('bg-blue-500', 'w-8');
                                     d.classList.remove('bg-white/30');
                                 } else {
