@@ -42,6 +42,14 @@ const ClientPortal = () => {
     } catch (e) {}
   };
 
+  const toBackendUrl = (path) => {
+    if (!path) return '';
+    if (/^https?:\/\//i.test(path)) return path;
+    const base = (api.defaults.baseURL || '').replace(/\/+$/, '');
+    const p = path.startsWith('/') ? path : `/${path}`;
+    return `${base}${p}`;
+  };
+
   if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-600">Ładowanie…</div>;
   if (error) return <div className="min-h-screen flex items-center justify-center text-red-600">{error}</div>;
   if (!data) return null;
@@ -104,13 +112,13 @@ const ClientPortal = () => {
                   </div>
                   <div className="mt-4 flex flex-wrap gap-3">
                     {p.generatedOfferUrl && (
-                      <a href={p.generatedOfferUrl} target="_blank" rel="noreferrer" className="inline-flex items-center px-3 py-2 text-sm rounded-md bg-primary-600 text-white hover:bg-primary-700">Podgląd oferty</a>
+                      <a href={toBackendUrl(p.generatedOfferUrl)} target="_blank" rel="noreferrer" className="inline-flex items-center px-3 py-2 text-sm rounded-md bg-primary-600 text-white hover:bg-primary-700">Podgląd oferty</a>
                     )}
                     {p.workSummaryUrl && (
-                      <a href={p.workSummaryUrl} target="_blank" rel="noreferrer" className="inline-flex items-center px-3 py-2 text-sm rounded-md border text-gray-700 hover:bg-gray-50">Podsumowanie prac</a>
+                      <a href={toBackendUrl(p.workSummaryUrl)} target="_blank" rel="noreferrer" className="inline-flex items-center px-3 py-2 text-sm rounded-md border text-gray-700 hover:bg-gray-50">Podsumowanie prac</a>
                     )}
                     {p.workSummaryPdfUrl && (
-                      <a href={p.workSummaryPdfUrl} target="_blank" rel="noreferrer" className="inline-flex items-center px-3 py-2 text-sm rounded-md border text-gray-700 hover:bg-gray-50">Podsumowanie PDF</a>
+                      <a href={toBackendUrl(p.workSummaryPdfUrl)} target="_blank" rel="noreferrer" className="inline-flex items-center px-3 py-2 text-sm rounded-md border text-gray-700 hover:bg-gray-50">Podsumowanie PDF</a>
                     )}
                   </div>
                 </div>
@@ -156,7 +164,7 @@ const ClientPortal = () => {
                             <div className="font-medium text-gray-900 truncate">{d.originalName}</div>
                             <div className="text-xs text-gray-500">{(d.type || '').toUpperCase()} · Projekt: {d.projectName}</div>
                           </div>
-                          <a href={d.filePath} target="_blank" rel="noreferrer" className="inline-flex items-center px-3 py-2 text-sm rounded-md border text-gray-700 hover:bg-gray-50">Pobierz</a>
+                          <a href={toBackendUrl(d.filePath)} target="_blank" rel="noreferrer" className="inline-flex items-center px-3 py-2 text-sm rounded-md border text-gray-700 hover:bg-gray-50">Pobierz</a>
                         </div>
                       ))}
                     </div>
