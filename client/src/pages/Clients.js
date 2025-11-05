@@ -111,6 +111,10 @@ const ClientDetails = ({ client, onClose }) => {
   const projectsList = useMemo(() => (Array.isArray(projectsResp) ? projectsResp : (projectsResp.items || projectsResp.data || [])), [projectsResp]);
   const { data: hostingList = [] } = useQuery(['hostingListForAssign'], () => hostingAPI.getAll({}));
 
+  const regeneratePortal = useMutation(() => clientsAPI.regeneratePortal(client._id), {
+    onSuccess: () => queryClient.invalidateQueries(['clientDetails', client._id])
+  });
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
@@ -123,6 +127,28 @@ const ClientDetails = ({ client, onClose }) => {
             <div className="text-gray-500">Ładowanie...</div>
           ) : (
             <div className="space-y-6">
+              <div className="card">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-semibold">Portal klienta</div>
+                    <div className="text-xs text-gray-500 mt-1">Publiczny link do wglądu projektów i hostingu</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        const url = `${window.location.origin}/client/${(data.client.portalToken || '')}`;
+                        navigator.clipboard?.writeText(url);
+                      }}
+                      className="px-3 py-1 text-xs rounded border text-gray-700 hover:bg-gray-50"
+                    >Kopiuj link</button>
+                    <button
+                      onClick={() => regeneratePortal.mutate()}
+                      className="px-3 py-1 text-xs rounded bg-primary-600 text-white hover:bg-primary-700"
+                    >Regeneruj</button>
+                  </div>
+                </div>
+                <div className="text-xs text-gray-600 mt-2 break-all">{`${window.location.origin}/client/${(data.client.portalToken || '')}`}</div>
+              </div>
               <div>
                 <h3 className="font-semibold mb-2">Podsumowanie</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
