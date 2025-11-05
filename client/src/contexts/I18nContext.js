@@ -12,6 +12,7 @@ const dictionaries = {
       dashboard: 'Dashboard',
       projects: 'Projekty',
       portfolio: 'Portfolio',
+      hosting: 'Hosting',
       employees: 'Pracownicy',
       logout: 'Wyloguj'
     },
@@ -75,6 +76,29 @@ const dictionaries = {
       prev: 'Poprzednia',
       next: 'Następna'
     }
+    ,
+    hosting: {
+      header: 'Monitoring hostingu',
+      subheader: 'Status, alerty i miesięczne raporty',
+      refresh: 'Odśwież',
+      summary: 'Awarii/Alertów',
+      domain: 'Domena',
+      url: 'URL',
+      status: 'Status',
+      lastCheck: 'Ostatnie sprawdzenie',
+      code: 'Kod',
+      rt: 'RT (ms)',
+      error: 'Błąd',
+      snapshot: 'Snapshot',
+      actions: 'Akcje',
+      viewSnapshot: 'Podgląd',
+      ack: 'Potwierdź',
+      acknowledged: 'Potwierdzony',
+      up: 'DZIAŁA',
+      down: 'NIE DZIAŁA',
+      empty: 'Brak monitorów',
+      adminOnly: 'Tylko dla administratorów'
+    }
   },
   en: {
     common: {
@@ -87,6 +111,7 @@ const dictionaries = {
       dashboard: 'Dashboard',
       projects: 'Projects',
       portfolio: 'Portfolio',
+      hosting: 'Hosting',
       employees: 'Employees',
       logout: 'Log out'
     },
@@ -149,6 +174,29 @@ const dictionaries = {
       shownCount: 'Showing {{start}} to {{end}} of {{total}} results',
       prev: 'Previous',
       next: 'Next'
+    }
+    ,
+    hosting: {
+      header: 'Hosting monitoring',
+      subheader: 'Status, alerts and monthly reports',
+      refresh: 'Refresh',
+      summary: 'Down/Alerts',
+      domain: 'Domain',
+      url: 'URL',
+      status: 'Status',
+      lastCheck: 'Last check',
+      code: 'Code',
+      rt: 'RT (ms)',
+      error: 'Error',
+      snapshot: 'Snapshot',
+      actions: 'Actions',
+      viewSnapshot: 'View',
+      ack: 'Acknowledge',
+      acknowledged: 'Acknowledged',
+      up: 'UP',
+      down: 'DOWN',
+      empty: 'No monitors',
+      adminOnly: 'Admin only'
     }
   }
 };

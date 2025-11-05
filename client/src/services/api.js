@@ -110,4 +110,13 @@ export const hostingAPI = {
   addReminder: (id, data) => api.post(`/api/hosting/${id}/reminder`, data).then(res => res.data),
   updateStatus: (id, status) => api.put(`/api/hosting/${id}/status`, { status }).then(res => res.data),
   getStats: () => api.get('/api/hosting/stats/overview').then(res => res.data),
+  // monitoring
+  getMonitorStatus: () => api.get('/api/hosting/monitor/status').then(res => res.data),
+  ackMonitor: (monitorId) => api.post(`/api/hosting/monitor/ack/${monitorId}`).then(res => res.data),
+  downloadMonthlyReport: async (month, hostingId) => {
+    const params = { month };
+    if (hostingId) params.hostingId = hostingId;
+    const res = await api.get('/api/hosting/monitor/report', { params, responseType: 'blob' });
+    return res;
+  }
 };

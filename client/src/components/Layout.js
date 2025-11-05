@@ -1,5 +1,6 @@
 import React from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { useI18n } from '../contexts/I18nContext';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   LayoutDashboard, 
@@ -13,6 +14,7 @@ import {
 
 const Layout = () => {
   const { user, logout } = useAuth();
+  const { t } = useI18n();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -21,17 +23,17 @@ const Layout = () => {
   };
 
   const navItems = [
-    { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { path: '/projects', label: 'Projekty', icon: FolderOpen },
-    { path: '/portfolio', label: 'Portfolio', icon: Briefcase },
+    { path: '/dashboard', label: t('nav.dashboard'), icon: LayoutDashboard },
+    { path: '/projects', label: t('nav.projects'), icon: FolderOpen },
+    { path: '/portfolio', label: t('nav.portfolio'), icon: Briefcase },
     { path: '/activity', label: 'Aktywność', icon: Activity },
   ];
 
   // Add admin-only items
   if (user?.role === 'admin') {
     navItems.push(
-      { path: '/employees', label: 'Pracownicy', icon: Users },
-      { path: '/hosting', label: 'Hosting', icon: Server }
+      { path: '/employees', label: t('nav.employees'), icon: Users },
+      { path: '/hosting', label: t('nav.hosting'), icon: Server }
     );
   }
 
@@ -41,7 +43,7 @@ const Layout = () => {
       <div className="fixed inset-y-0 left-0 w-64 bg-white border-r border-gray-200 flex flex-col">
         {/* Logo */}
         <div className="p-6 border-b border-gray-200">
-          <h1 className="text-xl font-bold text-gray-900">Ofertownik</h1>
+          <h1 className="text-xl font-bold text-gray-900">{t('common.appName')}</h1>
           <p className="text-sm text-gray-500 mt-1">Soft Synergy</p>
         </div>
 
@@ -82,7 +84,7 @@ const Layout = () => {
             className="w-full flex items-center px-4 py-2 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
           >
             <LogOut className="h-5 w-5 mr-3" />
-            Wyloguj
+            {t('nav.logout')}
           </button>
         </div>
       </div>
