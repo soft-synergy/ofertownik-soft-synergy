@@ -33,7 +33,8 @@ const Layout = () => {
   if (user?.role === 'admin') {
     navItems.push(
       { path: '/employees', label: t('nav.employees'), icon: Users },
-      { path: '/hosting', label: t('nav.hosting'), icon: Server }
+      { path: '/hosting', label: t('nav.hosting'), icon: Server },
+      { path: '/clients', label: 'Klienci', icon: Users }
     );
   }
 

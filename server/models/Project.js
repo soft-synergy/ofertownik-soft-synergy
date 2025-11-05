@@ -11,6 +11,11 @@ const projectSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  client: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Client',
+    required: false
+  },
   clientContact: {
     type: String,
     required: true,

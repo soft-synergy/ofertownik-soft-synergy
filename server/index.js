@@ -11,6 +11,7 @@ const projectRoutes = require('./routes/projects');
 const portfolioRoutes = require('./routes/portfolio');
 const offerRoutes = require('./routes/offers');
 const hostingRoutes = require('./routes/hosting');
+const clientsRoutes = require('./routes/clients');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -92,6 +93,7 @@ app.use('/api/projects', projectRoutes);
 app.use('/api/portfolio', portfolioRoutes);
 app.use('/api/offers', offerRoutes);
 app.use('/api/hosting', hostingRoutes);
+app.use('/api/clients', clientsRoutes);
 
 // Activities endpoint (recent)
 const Activity = require('./models/Activity');

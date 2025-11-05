@@ -100,6 +100,16 @@ export const activityAPI = {
   recent: () => api.get('/api/activities/recent').then(res => res.data),
 };
 
+export const clientsAPI = {
+  getAll: (params) => api.get('/api/clients', { params }).then(res => res.data),
+  getById: (id) => api.get(`/api/clients/${id}`).then(res => res.data),
+  create: (data) => api.post('/api/clients', data).then(res => res.data),
+  update: (id, data) => api.put(`/api/clients/${id}`, data).then(res => res.data),
+  delete: (id) => api.delete(`/api/clients/${id}`).then(res => res.data),
+  assignProject: (id, projectId) => api.post(`/api/clients/${id}/assign-project`, { projectId }).then(res => res.data),
+  assignHosting: (id, hostingId) => api.post(`/api/clients/${id}/assign-hosting`, { hostingId }).then(res => res.data),
+};
+
 export const hostingAPI = {
   getAll: (params) => api.get('/api/hosting', { params }).then(res => res.data),
   getById: (id) => api.get(`/api/hosting/${id}`).then(res => res.data),

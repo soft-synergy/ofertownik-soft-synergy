@@ -14,6 +14,7 @@ import PortfolioForm from './pages/PortfolioForm';
 import Employees from './pages/Employees';
 import Activity from './pages/Activity';
 import Hosting from './pages/Hosting';
+import Clients from './pages/Clients';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 
@@ -46,6 +47,7 @@ function AppContent() {
         <Route path="employees" element={<Employees />} />
         <Route path="activity" element={<Activity />} />
         <Route path="hosting" element={<Hosting />} />
+        <Route path="clients" element={<Clients />} />
       </Route>
     </Routes>
   );

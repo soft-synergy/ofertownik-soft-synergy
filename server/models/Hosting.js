@@ -13,6 +13,12 @@ const hostingSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  client: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Client',
+    required: false,
+    index: true
+  },
   clientEmail: {
     type: String,
     trim: true,
