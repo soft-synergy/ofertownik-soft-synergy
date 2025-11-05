@@ -29,7 +29,7 @@ router.get('/', auth, async (req, res) => {
     } else if (owner) {
       query.owner = owner;
     }
-
+    
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: 'i' } },

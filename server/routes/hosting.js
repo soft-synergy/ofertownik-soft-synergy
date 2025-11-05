@@ -3,6 +3,9 @@ const { body, validationResult } = require('express-validator');
 const Hosting = require('../models/Hosting');
 const { auth, requireRole } = require('../middleware/auth');
 const Activity = require('../models/Activity');
+const HostingMonitor = require('../models/HostingMonitor');
+const HostingCheck = require('../models/HostingCheck');
+const { Parser } = require('json2csv');
 
 const router = express.Router();
 
@@ -399,3 +402,87 @@ router.get('/stats/overview', async (req, res) => {
 });
 
 module.exports = router;
+
+// Monitoring endpoints (admin only via router.use above)
+
+// Get current monitoring status for all hostings
+router.get('/monitor/status', async (req, res) => {
+  try {
+    const monitors = await HostingMonitor.find({})
+      .populate('hosting');
+    res.json(monitors.map(m => ({
+      id: m._id,
+      hostingId: m.hosting?._id,
+      domain: m.hosting?.domain,
+      url: m.url,
+      isDown: m.isDown,
+      alarmActive: m.alarmActive,
+      acknowledged: m.acknowledged,
+      downSince: m.downSince,
+      lastCheckedAt: m.lastCheckedAt,
+      lastStatusCode: m.lastStatusCode,
+      lastResponseTimeMs: m.lastResponseTimeMs,
+      lastError: m.lastError,
+      lastHtmlPath: m.lastHtmlPath
+    })));
+  } catch (e) {
+    console.error('Get monitor status error:', e);
+    res.status(500).json({ message: 'Błąd serwera podczas pobierania statusu monitoringu' });
+  }
+});
+
+// Acknowledge alarm for a hosting monitor
+router.post('/monitor/ack/:id', async (req, res) => {
+  try {
+    const m = await HostingMonitor.findById(req.params.id);
+    if (!m) return res.status(404).json({ message: 'Monitor nie znaleziony' });
+    m.acknowledged = true;
+    m.acknowledgedAt = new Date();
+    m.acknowledgedBy = req.user._id;
+    m.alarmActive = false;
+    await m.save();
+    res.json({ message: 'Alarm potwierdzony', monitor: m });
+  } catch (e) {
+    console.error('Acknowledge error:', e);
+    res.status(500).json({ message: 'Błąd serwera podczas potwierdzania alarmu' });
+  }
+});
+
+// Download monthly report CSV
+// Query: month=YYYY-MM, optional hostingId
+router.get('/monitor/report', async (req, res) => {
+  try {
+    const { month, hostingId } = req.query;
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ message: 'Podaj month w formacie YYYY-MM' });
+    }
+    const [y, m] = month.split('-').map(n => parseInt(n, 10));
+    const start = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0));
+    const end = new Date(Date.UTC(y, m, 1, 0, 0, 0));
+
+    const q = { createdAt: { $gte: start, $lt: end } };
+    if (hostingId) q.hosting = hostingId;
+
+    const checks = await HostingCheck.find(q).populate('hosting');
+    const rows = checks.map(c => ({
+      date: c.createdAt.toISOString(),
+      domain: c.hosting?.domain,
+      url: c.url,
+      ok: c.ok,
+      statusCode: c.statusCode,
+      responseTimeMs: c.responseTimeMs,
+      error: c.error || '',
+      htmlPath: c.htmlPath || ''
+    }));
+
+    const parser = new Parser({ fields: ['date', 'domain', 'url', 'ok', 'statusCode', 'responseTimeMs', 'error', 'htmlPath'] });
+    const csv = parser.parse(rows);
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="monitoring-${month}${hostingId ? '-' + hostingId : ''}.csv"`);
+    res.send(csv);
+  } catch (e) {
+    console.error('Report error:', e);
+    res.status(500).json({ message: 'Błąd serwera podczas generowania raportu' });
+  }
+});

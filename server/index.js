@@ -69,6 +69,7 @@ const setCorsHeaders = (req, res, next) => {
 
 app.use('/uploads/portfolio', setCorsHeaders, express.static(path.join(__dirname, '../uploads/portfolio')));
 app.use('/uploads/documents', setCorsHeaders, express.static(path.join(__dirname, '../uploads/documents')));
+app.use('/uploads/monitoring', setCorsHeaders, express.static(path.join(__dirname, '../uploads/monitoring')));
 
 // Generated offers with cache-busting and CORS
 app.use('/generated-offers', (req, res, next) => {
@@ -280,6 +281,14 @@ mongoose.connect(process.env.MONGODB_URI, {
     console.log('⏰ Harmonogram przypomnień follow-up uruchomiony');
   } catch (e) {
     console.error('Nie udało się uruchomić harmonogramu follow-up:', e);
+  }
+  // Start hosting uptime monitor (every 5 minutes)
+  try {
+    const hostingMonitor = require('./services/hostingMonitor');
+    hostingMonitor.start(5 * 60 * 1000);
+    console.log('🖥️  Monitoring hostingu uruchomiony (co 5 minut)');
+  } catch (e) {
+    console.error('Nie udało się uruchomić monitoringu hostingu:', e);
   }
 })
 .catch((err) => {

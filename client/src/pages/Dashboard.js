@@ -146,22 +146,22 @@ const Dashboard = () => {
 
       {/* Recent Activity */}
       {user?.role === 'admin' && (
-        <div>
+      <div>
           <h2 className="text-lg font-medium text-gray-900 mb-4">{t('dashboard.recentActivity')}</h2>
-          <div className="card">
-            <div className="space-y-4">
+        <div className="card">
+          <div className="space-y-4">
               {recent.length === 0 && (
                 <div className="text-sm text-gray-500">No activity yet.</div>
               )}
               {recent.map((a) => (
                 <div key={a._id} className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0">
-                      <div className="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center">
-                        <Calendar className="h-4 w-4 text-primary-600" />
-                      </div>
-                    </div>
-                    <div className="ml-4">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <div className="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center">
+                    <Calendar className="h-4 w-4 text-primary-600" />
+                  </div>
+                </div>
+                <div className="ml-4">
                       <p className="text-sm font-medium text-gray-900">{a.message}</p>
                       <p className="text-sm text-gray-500">{a.author?.firstName} {a.author?.lastName}</p>
                     </div>
