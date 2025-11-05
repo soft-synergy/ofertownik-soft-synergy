@@ -119,6 +119,54 @@ const ClientPortal = () => {
           )}
         </section>
 
+        {/* Documents / Invoices Section */}
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-900">Dokumenty</h2>
+            <div className="text-xs text-gray-500">Faktury i dokumenty powiązane z projektami</div>
+          </div>
+          {(() => {
+            const docs = [];
+            (data.projects || []).forEach(p => {
+              (p.documents || []).forEach(d => {
+                docs.push({ ...d, projectName: p.name, projectId: p._id, createdAt: d.uploadedAt || p.createdAt });
+              });
+            });
+            if (docs.length === 0) {
+              return <div className="p-6 bg-white rounded-lg border text-sm text-gray-500">Brak dokumentów</div>;
+            }
+            // group by YYYY-MM
+            const groups = docs.reduce((acc, d) => {
+              const dt = d.createdAt ? new Date(d.createdAt) : new Date();
+              const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+              acc[key] = acc[key] || [];
+              acc[key].push(d);
+              return acc;
+            }, {});
+            const months = Object.keys(groups).sort().reverse();
+            return (
+              <div className="space-y-6">
+                {months.map(monthKey => (
+                  <div key={monthKey} className="bg-white rounded-lg border overflow-hidden">
+                    <div className="px-6 py-3 bg-gray-50 text-sm font-medium text-gray-700">{monthKey}</div>
+                    <div className="divide-y divide-gray-100">
+                      {groups[monthKey].map((d, idx) => (
+                        <div key={`${d.filePath}-${idx}`} className="px-6 py-3 flex items-center justify-between text-sm">
+                          <div className="min-w-0">
+                            <div className="font-medium text-gray-900 truncate">{d.originalName}</div>
+                            <div className="text-xs text-gray-500">{(d.type || '').toUpperCase()} · Projekt: {d.projectName}</div>
+                          </div>
+                          <a href={d.filePath} target="_blank" rel="noreferrer" className="inline-flex items-center px-3 py-2 text-sm rounded-md border text-gray-700 hover:bg-gray-50">Pobierz</a>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </section>
+
         {/* Hosting Section */}
         <section>
           <div className="flex items-center justify-between mb-4">
@@ -126,6 +174,12 @@ const ClientPortal = () => {
             <div className="flex items-center gap-2">
               <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="border rounded px-3 py-1 text-sm" />
               <span className="text-xs text-gray-500">Miesiąc raportu</span>
+            </div>
+          </div>
+          {/* Cadence badge / explainer */}
+          <div className="mb-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-emerald-100 rounded-lg p-4">
+            <div className="text-sm text-emerald-800">
+              System monitoruje Twoje strony automatycznie co 5 minut. Raport CSV zawiera każdy techniczny check wykonany w wybranym miesiącu.
             </div>
           </div>
           {data.hostings.length === 0 ? (
@@ -137,7 +191,9 @@ const ClientPortal = () => {
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Domena</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Akcje</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nast. rozliczenie</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Monitoring</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Raport</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-100">
@@ -146,6 +202,10 @@ const ClientPortal = () => {
                       <td className="px-6 py-3 text-sm text-gray-900">{h.domain}</td>
                       <td className="px-6 py-3 text-sm">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${h.status === 'active' ? 'bg-green-100 text-green-700' : h.status === 'overdue' ? 'bg-yellow-100 text-yellow-700' : h.status === 'suspended' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'}`}>{h.status}</span>
+                      </td>
+                      <td className="px-6 py-3 text-sm text-gray-700">{h.nextPaymentDate ? new Date(h.nextPaymentDate).toLocaleDateString() : '-'}</td>
+                      <td className="px-6 py-3 text-sm">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">auto-check co 5 min</span>
                       </td>
                       <td className="px-6 py-3 text-sm">
                         <button onClick={() => downloadHostingCsv(h._id)} className="inline-flex items-center px-3 py-2 text-sm rounded-md border text-gray-700 hover:bg-gray-50">Pobierz CSV</button>
