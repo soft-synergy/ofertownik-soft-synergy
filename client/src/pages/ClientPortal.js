@@ -170,6 +170,14 @@ const ClientPortal = () => {
                     {p.workSummaryPdfUrl && (
                       <a href={toBackendUrl(p.workSummaryPdfUrl)} target="_blank" rel="noreferrer" className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg border-2 border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors">Podsumowanie PDF</a>
                     )}
+                    <a
+                      href="https://cal.com/soft-synergy/30min"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center px-4 py-2 text-sm font-bold rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700 transition-all shadow-md hover:shadow-lg"
+                    >
+                      📅 Umów spotkanie
+                    </a>
                     {p.status !== 'accepted' && (
                       <button
                         onClick={() => handleAcceptProject(p._id)}
