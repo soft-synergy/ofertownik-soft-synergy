@@ -21,6 +21,7 @@ const ClientPortal = () => {
   const [monitorLoading, setMonitorLoading] = useState(false);
   const [monitorError, setMonitorError] = useState('');
   const [monitorData, setMonitorData] = useState(null);
+  const [selectedHostingId, setSelectedHostingId] = useState('');
 
   const fetchData = React.useCallback(async () => {
     setLoading(true);
@@ -28,6 +29,8 @@ const ClientPortal = () => {
     try {
       const res = await api.get(`/api/client-portal/${token}`);
       setData(res.data);
+      const firstId = (res.data?.hostings && res.data.hostings[0]?._id) || '';
+      setSelectedHostingId(firstId);
     } catch (e) {
       setLoadError(e?.response?.data?.message || 'Nie udało się pobrać danych');
     } finally {
@@ -286,9 +289,21 @@ const ClientPortal = () => {
               <div className="h-1 w-12 bg-gradient-to-r from-gray-600 to-blue-600 rounded-full"></div>
               <h2 className="text-2xl font-bold text-gray-900">Hosting</h2>
             </div>
-            <div className="flex items-center gap-2">
-              <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-              <span className="text-xs text-gray-500 font-medium">Miesiąc raportu</span>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                <span className="text-xs text-gray-500 font-medium">Miesiąc raportu</span>
+              </div>
+              {data.hostings.length > 0 && (
+                <>
+                  <select value={selectedHostingId} onChange={(e) => setSelectedHostingId(e.target.value)} className="border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    {data.hostings.map(h => (
+                      <option key={h._id} value={h._id}>{h.domain}</option>
+                    ))}
+                  </select>
+                  <button onClick={() => openMonitorPanel(selectedHostingId)} disabled={!selectedHostingId} className="inline-flex items-center px-4 py-2 text-sm font-bold rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 transition-all shadow-sm hover:shadow-md disabled:opacity-50">Zobacz panel</button>
+                </>
+              )}
             </div>
           </div>
           {/* Cadence badge / explainer */}
