@@ -6,28 +6,49 @@ const ClientPortal = () => {
   const { token } = useParams();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
+  const [accepting, setAccepting] = useState(null);
+  const [success, setSuccess] = useState('');
+  const [actionError, setActionError] = useState('');
   const [month, setMonth] = useState(() => {
     const d = new Date();
     const mm = String(d.getMonth() + 1).padStart(2, '0');
     return `${d.getFullYear()}-${mm}`;
   });
 
-  React.useEffect(() => {
-    const run = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const res = await api.get(`/api/client-portal/${token}`);
-        setData(res.data);
-      } catch (e) {
-        setError(e?.response?.data?.message || 'Nie udało się pobrać danych');
-      } finally {
-        setLoading(false);
-      }
-    };
-    run();
+  const fetchData = React.useCallback(async () => {
+    setLoading(true);
+    setLoadError('');
+    try {
+      const res = await api.get(`/api/client-portal/${token}`);
+      setData(res.data);
+    } catch (e) {
+      setLoadError(e?.response?.data?.message || 'Nie udało się pobrać danych');
+    } finally {
+      setLoading(false);
+    }
   }, [token]);
+
+  React.useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleAcceptProject = async (projectId) => {
+    setAccepting(projectId);
+    setSuccess('');
+    setActionError('');
+    try {
+      await api.post(`/api/client-portal/${token}/accept-project/${projectId}`);
+      setSuccess('Oferta została zaakceptowana!');
+      await fetchData();
+      setTimeout(() => setSuccess(''), 5000);
+    } catch (e) {
+      setActionError(e?.response?.data?.message || 'Błąd akceptacji oferty');
+      setTimeout(() => setActionError(''), 5000);
+    } finally {
+      setAccepting(null);
+    }
+  };
 
   const downloadHostingCsv = async (hostingId) => {
     try {
@@ -53,7 +74,7 @@ const ClientPortal = () => {
   const logoUrl = toBackendUrl('/generated-offers/logo-removebg-preview.png');
 
   if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-600">Ładowanie…</div>;
-  if (error) return <div className="min-h-screen flex items-center justify-center text-red-600">{error}</div>;
+  if (loadError) return <div className="min-h-screen flex items-center justify-center text-red-600">{loadError}</div>;
   if (!data) return null;
 
   return (
@@ -98,6 +119,24 @@ const ClientPortal = () => {
 
       {/* Content */}
       <div className="max-w-6xl mx-auto px-6 py-8 space-y-10">
+        {/* Success/Error Messages */}
+        {success && (
+          <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4 text-green-800 font-medium flex items-center gap-2">
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            {success}
+          </div>
+        )}
+        {actionError && (
+          <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4 text-red-800 font-medium flex items-center gap-2">
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            {actionError}
+          </div>
+        )}
+
         {/* Projects Section */}
         <section>
           <div className="flex items-center justify-between mb-6">
@@ -130,6 +169,20 @@ const ClientPortal = () => {
                     )}
                     {p.workSummaryPdfUrl && (
                       <a href={toBackendUrl(p.workSummaryPdfUrl)} target="_blank" rel="noreferrer" className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg border-2 border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors">Podsumowanie PDF</a>
+                    )}
+                    {p.status !== 'accepted' && (
+                      <button
+                        onClick={() => handleAcceptProject(p._id)}
+                        disabled={accepting === p._id}
+                        className="inline-flex items-center px-4 py-2 text-sm font-bold rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 text-white hover:from-green-700 hover:to-emerald-700 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {accepting === p._id ? 'Akceptowanie...' : '✓ Zaakceptuj ofertę'}
+                      </button>
+                    )}
+                    {p.status === 'accepted' && (
+                      <div className="inline-flex items-center px-4 py-2 text-sm font-bold rounded-lg bg-green-100 text-green-700 border-2 border-green-300">
+                        ✓ Oferta zaakceptowana
+                      </div>
                     )}
                   </div>
                 </div>
