@@ -2,6 +2,8 @@ const express = require('express');
 const Client = require('../models/Client');
 const Project = require('../models/Project');
 const Hosting = require('../models/Hosting');
+const HostingMonitor = require('../models/HostingMonitor');
+const HostingCheck = require('../models/HostingCheck');
 
 const router = express.Router();
 
@@ -56,6 +58,77 @@ router.post('/:token/accept-project/:projectId', async (req, res) => {
   } catch (e) {
     console.error('Accept project error:', e);
     res.status(500).json({ message: 'Błąd akceptacji oferty' });
+  }
+});
+
+// Monitoring details for a hosting (via portal token)
+router.get('/:token/hosting/:hostingId/monitor', async (req, res) => {
+  try {
+    const client = await Client.findOne({ portalToken: req.params.token, portalEnabled: true });
+    if (!client) return res.status(404).json({ message: 'Nie znaleziono klienta' });
+
+    const hosting = await Hosting.findById(req.params.hostingId);
+    if (!hosting) return res.status(404).json({ message: 'Hosting nie znaleziony' });
+    if (hosting.client?.toString() !== client._id.toString()) {
+      return res.status(403).json({ message: 'Hosting nie należy do tego klienta' });
+    }
+
+    const month = (req.query.month || '').trim();
+    let start, end;
+    if (/^\d{4}-\d{2}$/.test(month)) {
+      const [y, m] = month.split('-').map(Number);
+      start = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0));
+      end = new Date(Date.UTC(y, m, 1, 0, 0, 0));
+    } else {
+      // default: last 30 days
+      end = new Date();
+      start = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    }
+
+    const monitor = await HostingMonitor.findOne({ hosting: hosting._id });
+    const checks = await HostingCheck.find({ hosting: hosting._id, timestamp: { $gte: start, $lt: end } })
+      .sort({ timestamp: -1 })
+      .limit(200)
+      .lean();
+
+    // Compute simple uptime percentage for the window
+    const total = checks.length || 1;
+    const upCount = checks.filter(c => c.isUp).length;
+    const uptimePct = Math.round((upCount / total) * 100);
+
+    res.json({
+      monitor: monitor ? {
+        domain: monitor.domain,
+        url: monitor.url,
+        isUp: monitor.isUp,
+        isDown: monitor.isDown,
+        lastCheckedAt: monitor.lastCheckedAt,
+        lastStatusCode: monitor.lastStatusCode,
+        lastResponseTimeMs: monitor.lastResponseTimeMs,
+        lastError: monitor.lastError,
+        lastHtmlPath: monitor.lastHtmlPath,
+        alarmActive: monitor.alarmActive,
+        acknowledged: monitor.acknowledged,
+      } : null,
+      stats: {
+        from: start,
+        to: end,
+        totalChecks: checks.length,
+        uptimePct,
+        avgResponseMs: checks.length ? Math.round(checks.filter(c => typeof c.responseTimeMs === 'number').reduce((a, b) => a + (b.responseTimeMs || 0), 0) / checks.length) : null
+      },
+      checks: checks.map(c => ({
+        timestamp: c.timestamp,
+        isUp: c.isUp,
+        statusCode: c.statusCode,
+        responseTimeMs: c.responseTimeMs,
+        error: c.error,
+        htmlPath: c.htmlPath
+      }))
+    });
+  } catch (e) {
+    console.error('Portal monitor details error:', e);
+    res.status(500).json({ message: 'Błąd pobierania danych monitoringu' });
   }
 });
 

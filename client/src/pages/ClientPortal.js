@@ -16,6 +16,12 @@ const ClientPortal = () => {
     return `${d.getFullYear()}-${mm}`;
   });
 
+  // Monitoring modal state
+  const [monitorOpen, setMonitorOpen] = useState(false);
+  const [monitorLoading, setMonitorLoading] = useState(false);
+  const [monitorError, setMonitorError] = useState('');
+  const [monitorData, setMonitorData] = useState(null);
+
   const fetchData = React.useCallback(async () => {
     setLoading(true);
     setLoadError('');
@@ -61,6 +67,21 @@ const ClientPortal = () => {
       a.click();
       window.URL.revokeObjectURL(url);
     } catch (e) {}
+  };
+
+  const openMonitorPanel = async (hostingId) => {
+    setMonitorOpen(true);
+    setMonitorLoading(true);
+    setMonitorError('');
+    setMonitorData(null);
+    try {
+      const res = await api.get(`/api/client-portal/${token}/hosting/${hostingId}/monitor`, { params: { month } });
+      setMonitorData(res.data);
+    } catch (e) {
+      setMonitorError(e?.response?.data?.message || 'Nie udało się pobrać danych monitoringu');
+    } finally {
+      setMonitorLoading(false);
+    }
   };
 
   const toBackendUrl = (path) => {
@@ -312,7 +333,10 @@ const ClientPortal = () => {
                       </td>
                       <td className="px-6 py-4 text-sm font-medium text-gray-700">{h.nextPaymentDate ? new Date(h.nextPaymentDate).toLocaleDateString('pl-PL') : '-'}</td>
                       <td className="px-6 py-4 text-sm">
-                        <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold bg-blue-100 text-blue-700 border-2 border-blue-300 shadow-sm">auto-check co 5 min</span>
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold bg-blue-100 text-blue-700 border-2 border-blue-300 shadow-sm">auto-check co 5 min</span>
+                          <button onClick={() => openMonitorPanel(h._id)} className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 transition-all shadow-sm hover:shadow-md">Zobacz panel</button>
+                        </div>
                       </td>
                       <td className="px-6 py-4 text-sm">
                         <button onClick={() => downloadHostingCsv(h._id)} className="inline-flex items-center px-4 py-2 text-sm font-bold rounded-lg bg-orange-500 text-white hover:bg-orange-600 transition-all shadow-md hover:shadow-lg">Pobierz CSV</button>
@@ -332,10 +356,92 @@ const ClientPortal = () => {
               <img src={logoUrl} alt="SoftSynergy" className="h-8 w-auto opacity-60" />
               <div className="text-sm text-gray-600">© {new Date().getFullYear()} SoftSynergy</div>
             </div>
-            <div className="text-sm text-gray-500 font-medium">Zaufanie. Transparentność. Wynik.</div>
+            <div className="text-sm text-gray-500 font-medium">budujemy software, efektywnie</div>
           </div>
         </footer>
       </div>
+
+      {/* Monitoring Modal */}
+      {monitorOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setMonitorOpen(false)}></div>
+          <div className="relative bg-white rounded-2xl shadow-2xl border-2 border-gray-200 w-[92vw] max-w-4xl max-h-[85vh] overflow-hidden">
+            <div className="px-6 py-4 border-b bg-gradient-to-r from-blue-50 to-gray-50 flex items-center justify-between">
+              <div className="text-lg font-bold text-gray-900">Panel monitoringu</div>
+              <button onClick={() => setMonitorOpen(false)} className="rounded-lg px-3 py-1.5 text-sm font-semibold text-gray-600 hover:bg-gray-100">Zamknij</button>
+            </div>
+            <div className="p-6 overflow-auto" style={{ maxHeight: 'calc(85vh - 56px)' }}>
+              {monitorLoading && (
+                <div className="text-gray-600">Ładowanie…</div>
+              )}
+              {monitorError && (
+                <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4 text-red-800 font-medium">{monitorError}</div>
+              )}
+              {(!monitorLoading && monitorData) && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
+                      <div className="text-xs uppercase text-gray-500 font-bold mb-1">Uptime</div>
+                      <div className="text-2xl font-extrabold text-gray-900">{monitorData.stats?.uptimePct ?? 0}%</div>
+                      <div className="text-xs text-gray-500">Okres: {month}</div>
+                    </div>
+                    <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
+                      <div className="text-xs uppercase text-gray-500 font-bold mb-1">Średni czas odpowiedzi</div>
+                      <div className="text-2xl font-extrabold text-gray-900">{monitorData.stats?.avgResponseMs ?? 0} ms</div>
+                      <div className="text-xs text-gray-500">na podstawie {monitorData.stats?.totalChecks ?? 0} checków</div>
+                    </div>
+                    <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
+                      <div className="text-xs uppercase text-gray-500 font-bold mb-1">Ostatni status</div>
+                      <div className="text-2xl font-extrabold {monitorData.monitor?.isUp ? 'text-green-600' : 'text-red-600'}">{monitorData.monitor?.isUp ? 'UP' : 'DOWN'}</div>
+                      <div className="text-xs text-gray-500">{monitorData.monitor?.lastStatusCode || '-'} • {monitorData.monitor?.lastResponseTimeMs || '-'} ms</div>
+                    </div>
+                  </div>
+
+                  {monitorData.monitor?.lastError && (
+                    <div className="p-4 rounded-xl border-2 border-red-200 bg-red-50">
+                      <div className="text-sm font-bold text-red-800 mb-1">Ostatni błąd</div>
+                      <div className="text-sm text-red-700 break-all">{monitorData.monitor.lastError}</div>
+                      {monitorData.monitor.lastHtmlPath && (
+                        <a href={monitorData.monitor.lastHtmlPath} target="_blank" rel="noreferrer" className="inline-flex mt-2 px-3 py-1.5 text-xs font-bold rounded-lg bg-red-600 text-white hover:bg-red-700">Zobacz snapshot HTML</a>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="rounded-xl border-2 border-gray-200 overflow-hidden">
+                    <div className="px-4 py-3 bg-gray-50 border-b text-sm font-bold text-gray-700">Historia checków (ostatnie {monitorData.checks?.length || 0})</div>
+                    <div className="max-h-80 overflow-auto">
+                      <table className="min-w-full text-sm">
+                        <thead className="bg-white">
+                          <tr>
+                            <th className="px-4 py-2 text-left font-semibold text-gray-600">Czas</th>
+                            <th className="px-4 py-2 text-left font-semibold text-gray-600">Status</th>
+                            <th className="px-4 py-2 text-left font-semibold text-gray-600">HTTP</th>
+                            <th className="px-4 py-2 text-left font-semibold text-gray-600">Response (ms)</th>
+                            <th className="px-4 py-2 text-left font-semibold text-gray-600">Błąd</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {monitorData.checks?.map((c, idx) => (
+                            <tr key={idx} className="hover:bg-gray-50">
+                              <td className="px-4 py-2">{new Date(c.timestamp).toLocaleString('pl-PL')}</td>
+                              <td className="px-4 py-2">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${c.isUp ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'}`}>{c.isUp ? 'UP' : 'DOWN'}</span>
+                              </td>
+                              <td className="px-4 py-2">{c.statusCode || '-'}</td>
+                              <td className="px-4 py-2">{typeof c.responseTimeMs === 'number' ? c.responseTimeMs : '-'}</td>
+                              <td className="px-4 py-2 text-red-700 break-all">{c.error || ''}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
