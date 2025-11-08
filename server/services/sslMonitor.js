@@ -239,13 +239,16 @@ async function certificateCoversDomain(certPath, domain) {
  * Find certificate path for domain - scan all certificates
  */
 async function findCertificatePath(domain) {
+  const normalizedDomain = normalizeDomain(domain);
+  
   // Try standard Let's Encrypt path first
   const standardPath = path.join(LETSENCRYPT_BASE, domain, 'fullchain.pem');
   if (await certificateExists(standardPath)) {
+    console.log(`[SSL Monitor] Found certificate at standard path: ${standardPath}`);
     return standardPath;
   }
   
-  // Try directory name variations
+  // Try directory name variations (exact matches first)
   const domainVariations = [
     domain,
     domain.startsWith('www.') ? domain.replace('www.', '') : `www.${domain}`,
@@ -254,29 +257,52 @@ async function findCertificatePath(domain) {
   for (const variant of domainVariations) {
     const variantPath = path.join(LETSENCRYPT_BASE, variant, 'fullchain.pem');
     if (await certificateExists(variantPath)) {
+      console.log(`[SSL Monitor] Found certificate at variant path: ${variantPath}`);
       return variantPath;
     }
   }
   
-  // Scan all certificates in Let's Encrypt directory
+  // Scan all certificates in Let's Encrypt directory (most comprehensive search)
   try {
     const entries = await fs.readdir(LETSENCRYPT_BASE, { withFileTypes: true });
+    console.log(`[SSL Monitor] Scanning ${entries.length} directories in ${LETSENCRYPT_BASE} for domain ${domain}...`);
+    
     for (const entry of entries) {
       if (entry.isDirectory()) {
         const certPath = path.join(LETSENCRYPT_BASE, entry.name, 'fullchain.pem');
         if (await certificateExists(certPath)) {
-          // Check if this certificate covers the domain
-          const covers = await certificateCoversDomain(certPath, domain);
-          if (covers) {
-            return certPath;
+          try {
+            // Check if directory name matches (case-insensitive)
+            const normalizedDirName = normalizeDomain(entry.name);
+            if (normalizedDirName === normalizedDomain) {
+              console.log(`[SSL Monitor] Found certificate by directory name match: ${certPath}`);
+              return certPath;
+            }
+            
+            // Check if this certificate covers the domain
+            const covers = await certificateCoversDomain(certPath, domain);
+            if (covers) {
+              console.log(`[SSL Monitor] Found certificate by domain coverage: ${certPath} (directory: ${entry.name})`);
+              return certPath;
+            }
+          } catch (checkError) {
+            // If we can't check domain coverage, skip this certificate
+            console.warn(`[SSL Monitor] Could not check certificate ${certPath}: ${checkError.message}`);
           }
         }
       }
     }
   } catch (error) {
     console.error(`[SSL Monitor] Error searching for certificate: ${error.message}`);
+    // If we can't read the directory, try to check if it exists
+    try {
+      await fs.access(LETSENCRYPT_BASE);
+    } catch (accessError) {
+      console.error(`[SSL Monitor] Cannot access Let's Encrypt directory: ${LETSENCRYPT_BASE} - ${accessError.message}`);
+    }
   }
   
+  console.warn(`[SSL Monitor] Certificate not found for domain: ${domain}`);
   return null;
 }
 
@@ -406,10 +432,13 @@ async function renewCertificate(domain) {
  */
 async function checkCertificate(domain) {
   try {
+    console.log(`[SSL Monitor] Checking certificate for domain: ${domain}`);
+    
     // Find certificate path - this scans all certificates
     const certPath = await findCertificatePath(domain);
     
     if (!certPath) {
+      console.warn(`[SSL Monitor] Certificate not found for domain: ${domain}`);
       // Update database with not found status
       await SSLCert.findOneAndUpdate(
         { domain },
@@ -434,6 +463,8 @@ async function checkCertificate(domain) {
       };
     }
     
+    console.log(`[SSL Monitor] Certificate found at: ${certPath}`);
+    
     // Read and parse certificate
     const certInfo = await readCertificate(certPath);
     const daysUntilExpiry = getDaysUntilExpiry(certInfo.validTo);
@@ -442,6 +473,7 @@ async function checkCertificate(domain) {
     // Get all domains from certificate and save them all to DB
     const certDomains = await getCertificateDomains(certPath);
     console.log(`[SSL Monitor] Certificate for ${domain} covers domains: ${certDomains.join(', ')}`);
+    console.log(`[SSL Monitor] Certificate status: ${statusInfo.status}, days until expiry: ${daysUntilExpiry}`);
 
     // Save certificate info for all domains covered by this certificate
     const certData = {
@@ -471,11 +503,12 @@ async function checkCertificate(domain) {
       },
       { upsert: true, new: true }
     );
+    console.log(`[SSL Monitor] Saved certificate for domain: ${domain} (status: ${sslCert.status})`);
 
     // Also save for all other domains in the certificate (if they exist)
     for (const certDomain of certDomains) {
       if (certDomain.toLowerCase() !== domain.toLowerCase()) {
-        await SSLCert.findOneAndUpdate(
+        const savedCert = await SSLCert.findOneAndUpdate(
           { domain: certDomain },
           {
             domain: certDomain,
@@ -484,6 +517,7 @@ async function checkCertificate(domain) {
           },
           { upsert: true, new: true }
         );
+        console.log(`[SSL Monitor] Saved certificate for additional domain: ${certDomain} (status: ${savedCert.status})`);
       }
     }
 
@@ -685,10 +719,12 @@ function extractServerNames(content) {
  */
 async function discoverCertificates() {
   const domains = new Set();
+  const certificatePaths = new Map(); // Map domain -> certPath for faster lookup
   
   // First, scan all certificates in Let's Encrypt directory
   try {
     const entries = await fs.readdir(LETSENCRYPT_BASE, { withFileTypes: true });
+    console.log(`[SSL Monitor] Discovering certificates in ${LETSENCRYPT_BASE} (${entries.length} directories)...`);
     
     for (const entry of entries) {
       if (entry.isDirectory()) {
@@ -698,32 +734,63 @@ async function discoverCertificates() {
           try {
             // Get all domains from certificate
             const certDomains = await getCertificateDomains(certPath);
+            console.log(`[SSL Monitor] Certificate in ${entry.name} covers domains: ${certDomains.join(', ')}`);
+            
             certDomains.forEach(d => {
               if (d && !d.startsWith('*')) {
-                domains.add(d.toLowerCase());
+                const normalizedDomain = d.toLowerCase();
+                domains.add(normalizedDomain);
+                // Store certificate path for this domain
+                if (!certificatePaths.has(normalizedDomain)) {
+                  certificatePaths.set(normalizedDomain, certPath);
+                }
               }
             });
+            
+            // Also add directory name if it's different (certbot might use different naming)
+            const normalizedDirName = normalizeDomain(entry.name);
+            if (!domains.has(normalizedDirName)) {
+              domains.add(normalizedDirName);
+              if (!certificatePaths.has(normalizedDirName)) {
+                certificatePaths.set(normalizedDirName, certPath);
+              }
+            }
           } catch (error) {
             console.warn(`[SSL Monitor] Could not parse certificate in ${entry.name}: ${error.message}`);
             // Fallback: use directory name
-            domains.add(entry.name.toLowerCase());
+            const normalizedDirName = normalizeDomain(entry.name);
+            domains.add(normalizedDirName);
+            certificatePaths.set(normalizedDirName, certPath);
           }
         }
       }
     }
   } catch (error) {
     console.error(`[SSL Monitor] Error discovering certificates: ${error.message}`);
+    // Check if directory exists
+    try {
+      await fs.access(LETSENCRYPT_BASE);
+    } catch (accessError) {
+      console.error(`[SSL Monitor] Cannot access Let's Encrypt directory: ${LETSENCRYPT_BASE} - ${accessError.message}`);
+    }
   }
 
   // Also scan nginx configs to find domains that might have certificates
   try {
     const nginxDomains = await scanNginxConfigs();
-    nginxDomains.forEach(d => domains.add(d.toLowerCase()));
+    console.log(`[SSL Monitor] Found ${nginxDomains.length} domains in nginx configs: ${nginxDomains.join(', ')}`);
+    nginxDomains.forEach(d => {
+      const normalized = normalizeDomain(d);
+      domains.add(normalized);
+    });
   } catch (error) {
     console.warn(`[SSL Monitor] Error scanning nginx configs: ${error.message}`);
   }
 
-  return Array.from(domains);
+  const discoveredDomains = Array.from(domains);
+  console.log(`[SSL Monitor] Total discovered domains: ${discoveredDomains.length} - ${discoveredDomains.join(', ')}`);
+  
+  return discoveredDomains;
 }
 
 /**

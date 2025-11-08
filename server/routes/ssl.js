@@ -105,13 +105,64 @@ router.post('/generate/:domain', auth, async (req, res) => {
 
     const result = await sslMonitor.generateCertificate(domain, email);
     
-    // Check certificate after generation
-    const checkResult = await sslMonitor.checkCertificate(domain);
+    // Wait a bit for certificate files to be written
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    // Discover all certificates (including the newly generated one)
+    console.log(`[SSL Monitor] Discovering certificates after generation for ${domain}...`);
+    const discoveredDomains = await sslMonitor.discoverCertificates();
+    console.log(`[SSL Monitor] Discovered ${discoveredDomains.length} domains: ${discoveredDomains.join(', ')}`);
+    
+    // Check certificate for the requested domain
+    let checkResult = null;
+    try {
+      checkResult = await sslMonitor.checkCertificate(domain);
+      console.log(`[SSL Monitor] Certificate check result for ${domain}:`, checkResult.status);
+    } catch (checkError) {
+      console.error(`[SSL Monitor] Error checking certificate for ${domain}:`, checkError.message);
+      // Try checking all discovered domains to find the one that matches
+      for (const discoveredDomain of discoveredDomains) {
+        const normalizedDiscovered = discoveredDomain.toLowerCase().replace(/^www\./, '');
+        const normalizedRequested = domain.toLowerCase().replace(/^www\./, '');
+        if (normalizedDiscovered === normalizedRequested) {
+          try {
+            checkResult = await sslMonitor.checkCertificate(discoveredDomain);
+            console.log(`[SSL Monitor] Found certificate for ${domain} under ${discoveredDomain}`);
+            break;
+          } catch (e) {
+            // Continue searching
+          }
+        }
+      }
+    }
+    
+    // If still not found, try variations
+    if (!checkResult || checkResult.status === 'not_found') {
+      const variations = [
+        domain,
+        domain.startsWith('www.') ? domain.replace('www.', '') : `www.${domain}`,
+      ];
+      for (const variant of variations) {
+        if (variant !== domain) {
+          try {
+            const variantCheck = await sslMonitor.checkCertificate(variant);
+            if (variantCheck && variantCheck.status !== 'not_found') {
+              checkResult = variantCheck;
+              console.log(`[SSL Monitor] Found certificate for ${domain} under variant ${variant}`);
+              break;
+            }
+          } catch (e) {
+            // Continue
+          }
+        }
+      }
+    }
 
     res.json({
       message: 'Generowanie certyfikatu zakończone',
       generation: result,
-      certificate: checkResult
+      certificate: checkResult || { domain, status: 'not_found', error: 'Certyfikat został wygenerowany, ale nie został wykryty w systemie monitoringu' },
+      discoveredDomains
     });
   } catch (error) {
     console.error('Error generating SSL certificate:', error);
@@ -284,7 +335,7 @@ router.delete('/:domain', auth, async (req, res) => {
   }
 });
 
-// Discover certificates
+// Discover certificates from filesystem
 router.post('/discover', auth, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
