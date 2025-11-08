@@ -4,6 +4,7 @@ const Project = require('../models/Project');
 const Hosting = require('../models/Hosting');
 const HostingMonitor = require('../models/HostingMonitor');
 const HostingCheck = require('../models/HostingCheck');
+const SSLCert = require('../models/SSLCert');
 
 const router = express.Router();
 
@@ -16,7 +17,23 @@ router.get('/:token', async (req, res) => {
       Project.find({ client: client._id }).select('name status offerType generatedOfferUrl workSummaryUrl workSummaryPdfUrl documents createdAt _id'),
       Hosting.find({ client: client._id }).select('domain status monthlyPrice nextPaymentDate lastPaymentDate')
     ]);
-    res.json({ client: { name: client.name, email: client.email, phone: client.phone, company: client.company }, projects, hostings });
+    
+    // Get SSL status for each hosting domain
+    const hostingsWithSSL = await Promise.all(hostings.map(async (h) => {
+      const sslCert = await SSLCert.findOne({ domain: h.domain }).lean();
+      return {
+        ...h.toObject(),
+        sslStatus: sslCert ? {
+          status: sslCert.status,
+          daysUntilExpiry: sslCert.daysUntilExpiry,
+          validTo: sslCert.validTo,
+          isExpiringSoon: sslCert.isExpiringSoon,
+          isExpired: sslCert.isExpired
+        } : null
+      };
+    }));
+    
+    res.json({ client: { name: client.name, email: client.email, phone: client.phone, company: client.company }, projects, hostings: hostingsWithSSL });
   } catch (e) {
     res.status(500).json({ message: 'Błąd pobierania danych klienta' });
   }

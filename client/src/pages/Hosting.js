@@ -319,6 +319,32 @@ const Hosting = () => {
                             {item.lastPaymentDate && (<div className="text-sm text-gray-600 flex items-center gap-1 mt-1"><CheckCircle className="h-3 w-3 text-green-500" />Ostatnia: {format(new Date(item.lastPaymentDate), 'dd.MM.yyyy')}</div>)}
                           </div>
                         </div>
+                        {item.sslStatus && (
+                          <div className={`mb-4 p-3 rounded-lg border-2 ${item.sslStatus.isExpired ? 'border-red-300 bg-red-50' : item.sslStatus.isExpiringSoon ? 'border-yellow-300 bg-yellow-50' : 'border-green-300 bg-green-50'}`}>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold text-gray-700">Certyfikat SSL:</span>
+                                {item.sslStatus.isExpired ? (
+                                  <span className="inline-flex items-center px-2 py-1 rounded text-xs font-bold bg-red-100 text-red-700 border border-red-300">
+                                    🔴 Wygasł
+                                  </span>
+                                ) : item.sslStatus.isExpiringSoon ? (
+                                  <span className="inline-flex items-center px-2 py-1 rounded text-xs font-bold bg-yellow-100 text-yellow-700 border border-yellow-300">
+                                    ⚠️ Wygasa za {item.sslStatus.daysUntilExpiry} dni
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2 py-1 rounded text-xs font-bold bg-green-100 text-green-700 border border-green-300">
+                                    ✓ Ważny ({item.sslStatus.daysUntilExpiry} dni)
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs text-gray-600">
+                                {item.sslStatus.validTo ? `Ważny do: ${format(new Date(item.sslStatus.validTo), 'dd.MM.yyyy')}` : 'Brak danych'}
+                                {item.sslStatus.lastRenewedAt && ` • Ostatnia odnowa: ${format(new Date(item.sslStatus.lastRenewedAt), 'dd.MM.yyyy')}`}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                         {item.notes && (<div className="text-sm text-gray-600 mb-2"><FileText className="h-3 w-3 inline mr-1" />{item.notes}</div>)}
                         {item.paymentHistory && item.paymentHistory.length > 0 && (<div className="text-sm text-gray-500 mt-2">Historia płatności: {item.paymentHistory.length} wpisów</div>)}
                         {item.reminders && item.reminders.length > 0 && (<div className="text-sm text-yellow-600 mt-1">Przypomnienia: {item.reminders.length} wysłanych</div>)}

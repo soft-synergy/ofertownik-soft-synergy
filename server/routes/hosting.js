@@ -5,6 +5,7 @@ const { auth, requireRole } = require('../middleware/auth');
 const Activity = require('../models/Activity');
 const HostingMonitor = require('../models/HostingMonitor');
 const HostingCheck = require('../models/HostingCheck');
+const SSLCert = require('../models/SSLCert');
 const { Parser } = require('json2csv');
 
 const router = express.Router();
@@ -39,9 +40,27 @@ router.get('/', async (req, res) => {
     const hosting = await Hosting.find(query)
       .populate('createdBy', 'firstName lastName email')
       .populate('paymentHistory.recordedBy', 'firstName lastName')
-      .sort({ nextPaymentDate: 1, createdAt: -1 });
+      .sort({ nextPaymentDate: 1, createdAt: -1 })
+      .lean();
 
-    res.json(hosting);
+    // Get SSL status for each hosting domain
+    const hostingWithSSL = await Promise.all(hosting.map(async (h) => {
+      const sslCert = await SSLCert.findOne({ domain: h.domain }).lean();
+      return {
+        ...h,
+        sslStatus: sslCert ? {
+          status: sslCert.status,
+          daysUntilExpiry: sslCert.daysUntilExpiry,
+          validTo: sslCert.validTo,
+          isExpiringSoon: sslCert.isExpiringSoon,
+          isExpired: sslCert.isExpired,
+          lastCheckedAt: sslCert.lastCheckedAt,
+          lastRenewedAt: sslCert.lastRenewedAt
+        } : null
+      };
+    }));
+
+    res.json(hostingWithSSL);
   } catch (error) {
     console.error('Get hosting error:', error);
     res.status(500).json({ message: 'Błąd serwera podczas pobierania hostingu' });

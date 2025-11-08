@@ -13,6 +13,7 @@ const offerRoutes = require('./routes/offers');
 const hostingRoutes = require('./routes/hosting');
 const clientsRoutes = require('./routes/clients');
 const clientPortalRoutes = require('./routes/clientPortal');
+const sslRoutes = require('./routes/ssl');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -96,6 +97,7 @@ app.use('/api/offers', offerRoutes);
 app.use('/api/hosting', hostingRoutes);
 app.use('/api/clients', clientsRoutes);
 app.use('/api/client-portal', clientPortalRoutes);
+app.use('/api/ssl', sslRoutes);
 
 // Activities endpoint (recent)
 const Activity = require('./models/Activity');
@@ -293,6 +295,14 @@ mongoose.connect(process.env.MONGODB_URI, {
     console.log('🖥️  Monitoring hostingu uruchomiony (co 5 minut)');
   } catch (e) {
     console.error('Nie udało się uruchomić monitoringu hostingu:', e);
+  }
+  // Start SSL certificate monitor (once per day, checks every 24 hours)
+  try {
+    const sslMonitor = require('./services/sslMonitor');
+    sslMonitor.start(24 * 60 * 60 * 1000); // Check every 24 hours
+    console.log('🔒 Monitoring certyfikatów SSL uruchomiony (co 24 godziny)');
+  } catch (e) {
+    console.error('Nie udało się uruchomić monitoringu certyfikatów SSL:', e);
   }
 })
 .catch((err) => {

@@ -130,4 +130,15 @@ export const hostingAPI = {
     const res = await api.get('/api/hosting/monitor/report', { params, responseType: 'blob' });
     return res;
   }
+};
+
+export const sslAPI = {
+  getAll: () => api.get('/api/ssl').then(res => res.data),
+  getByDomain: (domain) => api.get(`/api/ssl/${domain}`).then(res => res.data),
+  check: (domain) => api.post(`/api/ssl/check/${domain}`).then(res => res.data),
+  checkAll: () => api.post('/api/ssl/check-all').then(res => res.data),
+  renew: (domain) => api.post(`/api/ssl/renew/${domain}`).then(res => res.data),
+  getStats: () => api.get('/api/ssl/stats/summary').then(res => res.data),
+  discover: () => api.post('/api/ssl/discover').then(res => res.data),
+  acknowledge: (domain) => api.post(`/api/ssl/${domain}/acknowledge`).then(res => res.data)
 }; 

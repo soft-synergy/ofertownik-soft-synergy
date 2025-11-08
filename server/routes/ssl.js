@@ -1,0 +1,314 @@
+const express = require('express');
+const router = express.Router();
+const { auth } = require('../middleware/auth');
+const SSLCert = require('../models/SSLCert');
+const sslMonitor = require('../services/sslMonitor');
+
+// Get all SSL certificates (admin only)
+router.get('/', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Brak uprawnień' });
+    }
+
+    const certificates = await SSLCert.find({})
+      .sort({ domain: 1 })
+      .populate('acknowledgedBy', 'firstName lastName email');
+
+    res.json(certificates);
+  } catch (error) {
+    console.error('Error fetching SSL certificates:', error);
+    res.status(500).json({ message: 'Błąd serwera podczas pobierania certyfikatów SSL' });
+  }
+});
+
+// Get single SSL certificate by domain
+router.get('/:domain', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Brak uprawnień' });
+    }
+
+    const { domain } = req.params;
+    const certificate = await SSLCert.findOne({ domain })
+      .populate('acknowledgedBy', 'firstName lastName email');
+
+    if (!certificate) {
+      return res.status(404).json({ message: 'Certyfikat nie został znaleziony' });
+    }
+
+    res.json(certificate);
+  } catch (error) {
+    console.error('Error fetching SSL certificate:', error);
+    res.status(500).json({ message: 'Błąd serwera podczas pobierania certyfikatu SSL' });
+  }
+});
+
+// Check certificate status (manual trigger)
+router.post('/check/:domain', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Brak uprawnień' });
+    }
+
+    const { domain } = req.params;
+    const result = await sslMonitor.checkCertificate(domain);
+
+    res.json({
+      message: 'Sprawdzanie certyfikatu zakończone',
+      result
+    });
+  } catch (error) {
+    console.error('Error checking SSL certificate:', error);
+    res.status(500).json({ message: 'Błąd serwera podczas sprawdzania certyfikatu SSL', error: error.message });
+  }
+});
+
+// Check all certificates (manual trigger)
+router.post('/check-all', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Brak uprawnień' });
+    }
+
+    const results = await sslMonitor.runOnce();
+
+    res.json({
+      message: 'Sprawdzanie wszystkich certyfikatów zakończone',
+      results,
+      count: results.length
+    });
+  } catch (error) {
+    console.error('Error checking SSL certificates:', error);
+    res.status(500).json({ message: 'Błąd serwera podczas sprawdzania certyfikatów SSL', error: error.message });
+  }
+});
+
+// Renew certificate manually
+router.post('/renew/:domain', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Brak uprawnień' });
+    }
+
+    const { domain } = req.params;
+    
+    // Check if certbot is available
+    const certbotAvailable = await sslMonitor.isCertbotAvailable();
+    if (!certbotAvailable) {
+      return res.status(503).json({ 
+        message: 'Certbot nie jest dostępny. Zainstaluj certbot aby móc odnawiać certyfikaty.',
+        certbotAvailable: false
+      });
+    }
+
+    const result = await sslMonitor.renewCertificate(domain);
+    
+    // Re-check certificate after renewal
+    const checkResult = await sslMonitor.checkCertificate(domain);
+
+    res.json({
+      message: 'Odnowienie certyfikatu zakończone',
+      renewal: result,
+      certificate: checkResult
+    });
+  } catch (error) {
+    console.error('Error renewing SSL certificate:', error);
+    res.status(500).json({ 
+      message: 'Błąd serwera podczas odnawiania certyfikatu SSL', 
+      error: error.message 
+    });
+  }
+});
+
+// Add or update certificate domain
+router.post('/', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Brak uprawnień' });
+    }
+
+    const { domain, autoRenew, renewalThreshold } = req.body;
+
+    if (!domain) {
+      return res.status(400).json({ message: 'Domena jest wymagana' });
+    }
+
+    const certificate = await SSLCert.findOneAndUpdate(
+      { domain },
+      {
+        domain,
+        autoRenew: autoRenew !== undefined ? autoRenew : true,
+        renewalThreshold: renewalThreshold || 30
+      },
+      { upsert: true, new: true }
+    );
+
+    // Check certificate immediately
+    await sslMonitor.checkCertificate(domain);
+
+    res.json({
+      message: 'Certyfikat dodany/zaktualizowany',
+      certificate
+    });
+  } catch (error) {
+    console.error('Error adding SSL certificate:', error);
+    res.status(500).json({ message: 'Błąd serwera podczas dodawania certyfikatu SSL', error: error.message });
+  }
+});
+
+// Update certificate settings
+router.put('/:domain', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Brak uprawnień' });
+    }
+
+    const { domain } = req.params;
+    const { autoRenew, renewalThreshold } = req.body;
+
+    const certificate = await SSLCert.findOneAndUpdate(
+      { domain },
+      {
+        ...(autoRenew !== undefined && { autoRenew }),
+        ...(renewalThreshold !== undefined && { renewalThreshold })
+      },
+      { new: true }
+    );
+
+    if (!certificate) {
+      return res.status(404).json({ message: 'Certyfikat nie został znaleziony' });
+    }
+
+    res.json({
+      message: 'Ustawienia certyfikatu zaktualizowane',
+      certificate
+    });
+  } catch (error) {
+    console.error('Error updating SSL certificate:', error);
+    res.status(500).json({ message: 'Błąd serwera podczas aktualizacji certyfikatu SSL', error: error.message });
+  }
+});
+
+// Acknowledge alarm
+router.post('/:domain/acknowledge', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Brak uprawnień' });
+    }
+
+    const { domain } = req.params;
+    const certificate = await SSLCert.findOneAndUpdate(
+      { domain },
+      {
+        acknowledged: true,
+        acknowledgedAt: new Date(),
+        acknowledgedBy: req.user._id
+      },
+      { new: true }
+    ).populate('acknowledgedBy', 'firstName lastName email');
+
+    if (!certificate) {
+      return res.status(404).json({ message: 'Certyfikat nie został znaleziony' });
+    }
+
+    res.json({
+      message: 'Alarm potwierdzony',
+      certificate
+    });
+  } catch (error) {
+    console.error('Error acknowledging SSL certificate alarm:', error);
+    res.status(500).json({ message: 'Błąd serwera podczas potwierdzania alarmu', error: error.message });
+  }
+});
+
+// Delete certificate from monitoring
+router.delete('/:domain', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Brak uprawnień' });
+    }
+
+    const { domain } = req.params;
+    const certificate = await SSLCert.findOneAndDelete({ domain });
+
+    if (!certificate) {
+      return res.status(404).json({ message: 'Certyfikat nie został znaleziony' });
+    }
+
+    res.json({
+      message: 'Certyfikat usunięty z monitoringu',
+      certificate
+    });
+  } catch (error) {
+    console.error('Error deleting SSL certificate:', error);
+    res.status(500).json({ message: 'Błąd serwera podczas usuwania certyfikatu SSL', error: error.message });
+  }
+});
+
+// Discover certificates
+router.post('/discover', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Brak uprawnień' });
+    }
+
+    const domains = await sslMonitor.discoverCertificates();
+    
+    // Add discovered domains to database
+    for (const domain of domains) {
+      await SSLCert.findOneAndUpdate(
+        { domain },
+        { domain, autoRenew: true, renewalThreshold: 30 },
+        { upsert: true }
+      );
+    }
+
+    res.json({
+      message: 'Wykrywanie certyfikatów zakończone',
+      domains,
+      count: domains.length
+    });
+  } catch (error) {
+    console.error('Error discovering SSL certificates:', error);
+    res.status(500).json({ message: 'Błąd serwera podczas wykrywania certyfikatów SSL', error: error.message });
+  }
+});
+
+// Get SSL status summary
+router.get('/stats/summary', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Brak uprawnień' });
+    }
+
+    const total = await SSLCert.countDocuments();
+    const valid = await SSLCert.countDocuments({ status: 'valid' });
+    const expiringSoon = await SSLCert.countDocuments({ status: 'expiring_soon' });
+    const expired = await SSLCert.countDocuments({ status: 'expired' });
+    const errors = await SSLCert.countDocuments({ status: 'error' });
+    const notFound = await SSLCert.countDocuments({ status: 'not_found' });
+    const alarms = await SSLCert.countDocuments({ alarmActive: true, acknowledged: false });
+    
+    const certbotAvailable = await sslMonitor.isCertbotAvailable();
+    const certbotPath = certbotAvailable ? await sslMonitor.getCertbotPath() : null;
+
+    res.json({
+      total,
+      valid,
+      expiringSoon,
+      expired,
+      errors,
+      notFound,
+      alarms,
+      certbotAvailable,
+      certbotPath
+    });
+  } catch (error) {
+    console.error('Error fetching SSL stats:', error);
+    res.status(500).json({ message: 'Błąd serwera podczas pobierania statystyk SSL', error: error.message });
+  }
+});
+
+module.exports = router;
+

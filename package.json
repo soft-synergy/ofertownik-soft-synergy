@@ -11,7 +11,8 @@
     "install-all": "npm install && cd client && npm install",
     "start": "node server/index.js",
     "create-admin": "node server/scripts/create-admin.js",
-    "import-portfolio": "node server/scripts/import-portfolio.js"
+    "import-portfolio": "node server/scripts/import-portfolio.js",
+    "test-ssl": "node server/scripts/test-ssl-monitor.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
