@@ -126,33 +126,155 @@ function getCertificateStatus(daysUntilExpiry, renewalThreshold = 30) {
 }
 
 /**
- * Find certificate path for domain
+ * Extract all domains from certificate (subject + SAN)
+ */
+async function getCertificateDomains(certPath) {
+  try {
+    // Get full certificate text
+    const { stdout } = await execAsync(`openssl x509 -in "${certPath}" -noout -text`, { timeout: 10000 });
+    const allDomains = new Set();
+    
+    // Extract CN from subject - simpler approach
+    const subjectLine = stdout.split('\n').find(line => line.includes('Subject:'));
+    if (subjectLine) {
+      const cnMatch = subjectLine.match(/CN\s*=\s*([^,/\n]+)/);
+      if (cnMatch && cnMatch[1]) {
+        const cnDomain = cnMatch[1].trim();
+        if (cnDomain) allDomains.add(cnDomain.replace(/\*/g, ''));
+      }
+    }
+    
+    // Extract SAN domains - look for DNS: patterns
+    const lines = stdout.split('\n');
+    let inSanSection = false;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (line.includes('X509v3 Subject Alternative Name')) {
+        inSanSection = true;
+        continue;
+      }
+      if (inSanSection) {
+        // Match DNS:domain patterns
+        const dnsMatches = line.matchAll(/DNS:([^,\s]+)/gi);
+        for (const match of dnsMatches) {
+          if (match[1]) {
+            allDomains.add(match[1].trim().replace(/\*/g, ''));
+          }
+        }
+        // Stop when we hit another section
+        if (line.trim() && !line.includes('DNS:') && !line.match(/^\s/)) {
+          inSanSection = false;
+        }
+      }
+    }
+    
+    // Fallback: try to read from certificate info if we found nothing
+    if (allDomains.size === 0) {
+      try {
+        const certInfo = await readCertificate(certPath);
+        if (certInfo.subject) {
+          const cnMatch = certInfo.subject.match(/CN=([^,]+)/);
+          if (cnMatch) {
+            allDomains.add(cnMatch[1].replace(/\*/g, '').trim());
+          }
+        }
+      } catch (e) {
+        // Ignore
+      }
+    }
+    
+    return Array.from(allDomains).filter(d => d && d.length > 0);
+  } catch (error) {
+    console.warn(`[SSL Monitor] Error extracting domains from certificate: ${error.message}`);
+    // Last fallback: try to read from certificate info
+    try {
+      const certInfo = await readCertificate(certPath);
+      const domains = [];
+      if (certInfo.subject) {
+        const cnMatch = certInfo.subject.match(/CN=([^,]+)/);
+        if (cnMatch) {
+          domains.push(cnMatch[1].replace(/\*/g, '').trim());
+        }
+      }
+      return domains;
+    } catch (e) {
+      return [];
+    }
+  }
+}
+
+/**
+ * Normalize domain for comparison (remove www, lowercase)
+ */
+function normalizeDomain(domain) {
+  if (!domain) return '';
+  return domain.toLowerCase().replace(/^www\./, '').trim();
+}
+
+/**
+ * Check if certificate covers domain
+ */
+async function certificateCoversDomain(certPath, domain) {
+  try {
+    const certDomains = await getCertificateDomains(certPath);
+    const normalizedDomain = normalizeDomain(domain);
+    
+    for (const certDomain of certDomains) {
+      const normalizedCertDomain = normalizeDomain(certDomain);
+      // Exact match
+      if (normalizedCertDomain === normalizedDomain) return true;
+      // Wildcard match (e.g., *.example.com matches example.com)
+      if (normalizedCertDomain.startsWith('*.') && normalizedDomain.endsWith(normalizedCertDomain.slice(2))) return true;
+      // www variant match
+      if (normalizedCertDomain === `www.${normalizedDomain}` || normalizedDomain === `www.${normalizedCertDomain}`) return true;
+    }
+    return false;
+  } catch (error) {
+    console.warn(`[SSL Monitor] Error checking if certificate covers domain ${domain}:`, error.message);
+    return false;
+  }
+}
+
+/**
+ * Find certificate path for domain - scan all certificates
  */
 async function findCertificatePath(domain) {
   // Try standard Let's Encrypt path first
   const standardPath = path.join(LETSENCRYPT_BASE, domain, 'fullchain.pem');
-  
   if (await certificateExists(standardPath)) {
     return standardPath;
   }
   
-  // Try to find in Let's Encrypt directory
+  // Try directory name variations
+  const domainVariations = [
+    domain,
+    domain.startsWith('www.') ? domain.replace('www.', '') : `www.${domain}`,
+  ];
+  
+  for (const variant of domainVariations) {
+    const variantPath = path.join(LETSENCRYPT_BASE, variant, 'fullchain.pem');
+    if (await certificateExists(variantPath)) {
+      return variantPath;
+    }
+  }
+  
+  // Scan all certificates in Let's Encrypt directory
   try {
     const entries = await fs.readdir(LETSENCRYPT_BASE, { withFileTypes: true });
     for (const entry of entries) {
       if (entry.isDirectory()) {
         const certPath = path.join(LETSENCRYPT_BASE, entry.name, 'fullchain.pem');
         if (await certificateExists(certPath)) {
-          // Check if this domain matches (could be wildcard or multiple domains)
-          const certInfo = await readCertificate(certPath);
-          if (certInfo.subject.includes(domain) || certInfo.subject.includes(`*.${domain.split('.')[1]}`)) {
+          // Check if this certificate covers the domain
+          const covers = await certificateCoversDomain(certPath, domain);
+          if (covers) {
             return certPath;
           }
         }
       }
     }
   } catch (error) {
-    console.error(`Error searching for certificate: ${error.message}`);
+    console.error(`[SSL Monitor] Error searching for certificate: ${error.message}`);
   }
   
   return null;
@@ -188,6 +310,56 @@ async function getCertbotPath() {
     return stdout.trim();
   } catch {
     return null;
+  }
+}
+
+/**
+ * Generate new certificate using certbot
+ */
+async function generateCertificate(domain, email = null) {
+  const certbotPath = await getCertbotPath();
+  if (!certbotPath) {
+    throw new Error('Certbot nie jest zainstalowany lub nie można go znaleźć');
+  }
+
+  try {
+    // Check if certificate already exists
+    const existingCert = await findCertificatePath(domain);
+    if (existingCert) {
+      throw new Error(`Certyfikat dla domeny ${domain} już istnieje`);
+    }
+
+    // Default email for Let's Encrypt
+    const certbotEmail = email || 'admin@soft-synergy.com';
+    
+    // Use certbot certonly with nginx plugin or standalone
+    // Try nginx plugin first, fallback to standalone
+    let command = `sudo ${certbotPath} certonly --nginx -d ${domain} --non-interactive --agree-tos --email ${certbotEmail} --quiet`;
+    
+    console.log(`[SSL Monitor] Generating certificate for ${domain}...`);
+    let result;
+    try {
+      result = await execAsync(command, { timeout: 300000 }); // 5 minute timeout
+    } catch (nginxError) {
+      // If nginx plugin fails, try standalone (requires port 80 to be free)
+      console.log(`[SSL Monitor] Nginx plugin failed, trying standalone mode...`);
+      command = `sudo ${certbotPath} certonly --standalone -d ${domain} --non-interactive --agree-tos --email ${certbotEmail} --quiet`;
+      result = await execAsync(command, { timeout: 300000 });
+    }
+    
+    // Reload nginx after certificate generation
+    try {
+      await execAsync('sudo systemctl reload nginx', { timeout: 10000 });
+      console.log(`[SSL Monitor] Nginx reloaded after certificate generation`);
+    } catch (reloadError) {
+      console.warn(`[SSL Monitor] Could not reload nginx: ${reloadError.message}`);
+    }
+    
+    console.log(`[SSL Monitor] Certificate generation completed for ${domain}`);
+    return { success: true, output: result.stdout, error: result.stderr || null };
+  } catch (error) {
+    console.error(`[SSL Monitor] Error generating certificate for ${domain}:`, error.message);
+    throw error;
   }
 }
 
@@ -234,7 +406,7 @@ async function renewCertificate(domain) {
  */
 async function checkCertificate(domain) {
   try {
-    // Find certificate path
+    // Find certificate path - this scans all certificates
     const certPath = await findCertificatePath(domain);
     
     if (!certPath) {
@@ -261,33 +433,59 @@ async function checkCertificate(domain) {
         certificatePath: null
       };
     }
-
+    
     // Read and parse certificate
     const certInfo = await readCertificate(certPath);
     const daysUntilExpiry = getDaysUntilExpiry(certInfo.validTo);
     const statusInfo = getCertificateStatus(daysUntilExpiry, 30);
 
-    // Update database
+    // Get all domains from certificate and save them all to DB
+    const certDomains = await getCertificateDomains(certPath);
+    console.log(`[SSL Monitor] Certificate for ${domain} covers domains: ${certDomains.join(', ')}`);
+
+    // Save certificate info for all domains covered by this certificate
+    const certData = {
+      certificatePath: certPath,
+      issuer: certInfo.issuer,
+      subject: certInfo.subject,
+      validFrom: new Date(certInfo.validFrom),
+      validTo: new Date(certInfo.validTo),
+      daysUntilExpiry,
+      status: statusInfo.status,
+      isExpired: statusInfo.isExpired,
+      isExpiringSoon: statusInfo.isExpiringSoon,
+      lastCheckedAt: new Date(),
+      lastError: null,
+      alarmActive: statusInfo.isExpired || statusInfo.isExpiringSoon,
+      autoRenew: true,
+      renewalThreshold: 30
+    };
+
+    // Update database for the requested domain
     const sslCert = await SSLCert.findOneAndUpdate(
       { domain },
       {
         domain,
-        certificatePath: certPath,
-        issuer: certInfo.issuer,
-        subject: certInfo.subject,
-        validFrom: new Date(certInfo.validFrom),
-        validTo: new Date(certInfo.validTo),
-        daysUntilExpiry,
-        status: statusInfo.status,
-        isExpired: statusInfo.isExpired,
-        isExpiringSoon: statusInfo.isExpiringSoon,
-        lastCheckedAt: new Date(),
-        lastError: null,
-        alarmActive: statusInfo.isExpired || statusInfo.isExpiringSoon,
+        ...certData,
         $inc: { checkCount: 1 }
       },
       { upsert: true, new: true }
     );
+
+    // Also save for all other domains in the certificate (if they exist)
+    for (const certDomain of certDomains) {
+      if (certDomain.toLowerCase() !== domain.toLowerCase()) {
+        await SSLCert.findOneAndUpdate(
+          { domain: certDomain },
+          {
+            domain: certDomain,
+            ...certData,
+            $inc: { checkCount: 1 }
+          },
+          { upsert: true, new: true }
+        );
+      }
+    }
 
     // Auto-renew if needed
     if (sslCert.autoRenew && statusInfo.isExpiringSoon && !statusInfo.isExpired) {
@@ -413,11 +611,82 @@ async function checkAllCertificates() {
 }
 
 /**
- * Auto-discover certificates from Let's Encrypt directory
+ * Scan nginx configuration files to find all domains
+ */
+async function scanNginxConfigs() {
+  const domains = new Set();
+  const nginxConfigPaths = [
+    '/etc/nginx/sites-available',
+    '/etc/nginx/conf.d',
+    '/etc/nginx/nginx.conf'
+  ];
+
+  try {
+    for (const configPath of nginxConfigPaths) {
+      try {
+        const stats = await fs.stat(configPath);
+        if (stats.isFile()) {
+          // Single config file
+          const content = await fs.readFile(configPath, 'utf8');
+          const serverNames = extractServerNames(content);
+          serverNames.forEach(d => domains.add(d));
+        } else if (stats.isDirectory()) {
+          // Directory with config files
+          const entries = await fs.readdir(configPath, { withFileTypes: true });
+          for (const entry of entries) {
+            if (entry.isFile() && !entry.name.endsWith('~') && !entry.name.endsWith('.bak')) {
+              try {
+                const filePath = path.join(configPath, entry.name);
+                const content = await fs.readFile(filePath, 'utf8');
+                const serverNames = extractServerNames(content);
+                serverNames.forEach(d => domains.add(d));
+              } catch (e) {
+                // Skip files we can't read
+              }
+            }
+          }
+        }
+      } catch (e) {
+        // Skip paths that don't exist
+        continue;
+      }
+    }
+  } catch (error) {
+    console.warn(`[SSL Monitor] Error scanning nginx configs: ${error.message}`);
+  }
+
+  return Array.from(domains);
+}
+
+/**
+ * Extract server_name directives from nginx config content
+ */
+function extractServerNames(content) {
+  const domains = [];
+  // Match server_name directives (can be multiple domains per line)
+  const serverNameRegex = /server_name\s+([^;]+);/gi;
+  let match;
+  
+  while ((match = serverNameRegex.exec(content)) !== null) {
+    const serverNames = match[1].trim();
+    // Split by spaces and filter out wildcards, default, and empty strings
+    const names = serverNames.split(/\s+/)
+      .map(name => name.trim())
+      .filter(name => name && name !== '_' && name !== 'default_server' && !name.startsWith('*.'));
+    
+    domains.push(...names);
+  }
+  
+  return domains;
+}
+
+/**
+ * Auto-discover certificates from Let's Encrypt directory and nginx configs
  */
 async function discoverCertificates() {
-  const domains = [];
+  const domains = new Set();
   
+  // First, scan all certificates in Let's Encrypt directory
   try {
     const entries = await fs.readdir(LETSENCRYPT_BASE, { withFileTypes: true });
     
@@ -427,20 +696,17 @@ async function discoverCertificates() {
         
         if (await certificateExists(certPath)) {
           try {
-            const certInfo = await readCertificate(certPath);
-            // Extract domain from certificate subject
-            const subjectMatch = certInfo.subject.match(/CN=([^,]+)/);
-            if (subjectMatch) {
-              const domain = subjectMatch[1].replace(/\*/g, '').trim();
-              if (domain && !domain.startsWith('*')) {
-                domains.push(domain);
+            // Get all domains from certificate
+            const certDomains = await getCertificateDomains(certPath);
+            certDomains.forEach(d => {
+              if (d && !d.startsWith('*')) {
+                domains.add(d.toLowerCase());
               }
-            } else {
-              // Use directory name as fallback
-              domains.push(entry.name);
-            }
+            });
           } catch (error) {
             console.warn(`[SSL Monitor] Could not parse certificate in ${entry.name}: ${error.message}`);
+            // Fallback: use directory name
+            domains.add(entry.name.toLowerCase());
           }
         }
       }
@@ -449,7 +715,15 @@ async function discoverCertificates() {
     console.error(`[SSL Monitor] Error discovering certificates: ${error.message}`);
   }
 
-  return domains;
+  // Also scan nginx configs to find domains that might have certificates
+  try {
+    const nginxDomains = await scanNginxConfigs();
+    nginxDomains.forEach(d => domains.add(d.toLowerCase()));
+  } catch (error) {
+    console.warn(`[SSL Monitor] Error scanning nginx configs: ${error.message}`);
+  }
+
+  return Array.from(domains);
 }
 
 /**
@@ -457,13 +731,15 @@ async function discoverCertificates() {
  */
 async function initializeCertificates() {
   const discoveredDomains = await discoverCertificates();
+  console.log(`[SSL Monitor] Discovered ${discoveredDomains.length} domains: ${discoveredDomains.join(', ')}`);
   
+  // Check certificates for all discovered domains
   for (const domain of discoveredDomains) {
-    await SSLCert.findOneAndUpdate(
-      { domain },
-      { domain, autoRenew: true, renewalThreshold: 30 },
-      { upsert: true }
-    );
+    try {
+      await checkCertificate(domain);
+    } catch (error) {
+      console.warn(`[SSL Monitor] Error checking certificate for ${domain}: ${error.message}`);
+    }
   }
   
   return discoveredDomains;
@@ -543,9 +819,13 @@ module.exports = {
   checkCertificate,
   checkAllCertificates,
   renewCertificate,
+  generateCertificate,
   discoverCertificates,
   initializeCertificates,
   isCertbotAvailable,
-  getCertbotPath
+  getCertbotPath,
+  findCertificatePath,
+  getCertificateDomains,
+  scanNginxConfigs
 };
 

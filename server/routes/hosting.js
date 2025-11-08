@@ -66,9 +66,33 @@ router.get('/', async (req, res) => {
       if (!sslCert) {
         try {
           // This will check the certificate and add it to DB if found
-          await sslMonitor.checkCertificate(h.domain);
-          // Try to find it again
-          sslCert = await SSLCert.findOne({ domain: h.domain }).lean();
+          // First, try to find certificate path - this scans all certs
+          const certPath = await sslMonitor.findCertificatePath(h.domain);
+          if (certPath) {
+            // Found certificate, check it and add to DB
+            await sslMonitor.checkCertificate(h.domain);
+            // Try to find it again
+            sslCert = await SSLCert.findOne({ domain: h.domain }).lean();
+            
+            // If still not found by exact domain, try to find by certificate path
+            if (!sslCert) {
+              // Get all domains from certificate and try to match
+              const certDomains = await sslMonitor.getCertificateDomains(certPath);
+              for (const certDomain of certDomains) {
+                const normalizedCertDomain = certDomain.toLowerCase().replace(/^www\./, '');
+                const normalizedHostingDomain = h.domain.toLowerCase().replace(/^www\./, '');
+                if (normalizedCertDomain === normalizedHostingDomain || 
+                    certDomain.toLowerCase() === h.domain.toLowerCase() ||
+                    certDomain.toLowerCase() === `www.${h.domain.toLowerCase()}` ||
+                    `www.${certDomain.toLowerCase()}` === h.domain.toLowerCase()) {
+                  // Create entry for hosting domain
+                  await sslMonitor.checkCertificate(h.domain);
+                  sslCert = await SSLCert.findOne({ domain: h.domain }).lean();
+                  break;
+                }
+              }
+            }
+          }
         } catch (e) {
           console.log(`[Hosting] Could not check SSL for ${h.domain}:`, e.message);
         }

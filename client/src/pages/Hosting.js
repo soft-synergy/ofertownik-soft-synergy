@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useI18n } from '../contexts/I18nContext';
-import { hostingAPI } from '../services/api';
+import { hostingAPI, sslAPI } from '../services/api';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -19,7 +19,9 @@ import {
   FileText,
   Search,
   Globe,
-  FileDown
+  FileDown,
+  Shield,
+  RefreshCw
 } from 'lucide-react';
 
 const Hosting = () => {
@@ -168,6 +170,22 @@ const Hosting = () => {
     onError: () => toast.error('Błąd podczas aktualizacji statusu')
   });
 
+  const generateSSLMutation = useMutation(({ domain }) => sslAPI.generate(domain), {
+    onSuccess: () => {
+      toast.success('Certyfikat SSL został wygenerowany');
+      queryClient.invalidateQueries('hosting');
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Błąd podczas generowania certyfikatu SSL')
+  });
+
+  const checkSSLMutation = useMutation(({ domain }) => sslAPI.check(domain), {
+    onSuccess: () => {
+      toast.success('Certyfikat SSL został sprawdzony');
+      queryClient.invalidateQueries('hosting');
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Błąd podczas sprawdzania certyfikatu SSL')
+  });
+
   const resetForm = () => {
     setFormData({
       domain: '',
@@ -223,6 +241,29 @@ const Hosting = () => {
         <div className="flex items-center gap-2">
           <button onClick={() => setActiveTab('manage')} className={`px-3 py-2 text-sm rounded ${activeTab === 'manage' ? 'bg-primary-600 text-white' : 'border text-gray-700 hover:bg-gray-50'}`}>Zarządzanie</button>
           <button onClick={() => setActiveTab('monitor')} className={`px-3 py-2 text-sm rounded ${activeTab === 'monitor' ? 'bg-primary-600 text-white' : 'border text-gray-700 hover:bg-gray-50'}`}>Monitoring</button>
+          {activeTab === 'manage' && (
+            <button
+              onClick={async () => {
+                if (window.confirm('Czy chcesz przeskanować wszystkie certyfikaty SSL? To może chwilę potrwać.')) {
+                  try {
+                    toast.loading('Skanowanie certyfikatów SSL...');
+                    await sslAPI.discover();
+                    toast.dismiss();
+                    toast.success('Certyfikaty SSL zostały przeskanowane');
+                    queryClient.invalidateQueries('hosting');
+                  } catch (e) {
+                    toast.dismiss();
+                    toast.error(e.response?.data?.error || 'Błąd podczas skanowania certyfikatów');
+                  }
+                }
+              }}
+              className="px-3 py-2 text-sm rounded border text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+              title="Przeskanuj wszystkie certyfikaty SSL"
+            >
+              <Shield className="h-4 w-4" />
+              <span className="hidden sm:inline">Skanuj SSL</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -319,9 +360,9 @@ const Hosting = () => {
                             {item.lastPaymentDate && (<div className="text-sm text-gray-600 flex items-center gap-1 mt-1"><CheckCircle className="h-3 w-3 text-green-500" />Ostatnia: {format(new Date(item.lastPaymentDate), 'dd.MM.yyyy')}</div>)}
                           </div>
                         </div>
-                        {item.sslStatus && (
-                          <div className={`mb-4 p-3 rounded-lg border-2 ${
-                            item.sslStatus.status === 'not_found' ? 'border-gray-300 bg-gray-50' :
+                        <div className="mb-4">
+                          <div className={`p-3 rounded-lg border-2 ${
+                            !item.sslStatus || item.sslStatus.status === 'not_found' ? 'border-gray-300 bg-gray-50' :
                             item.sslStatus.isExpired ? 'border-red-300 bg-red-50' : 
                             item.sslStatus.isExpiringSoon ? 'border-yellow-300 bg-yellow-50' : 
                             item.sslStatus.status === 'valid' ? 'border-green-300 bg-green-50' :
@@ -329,8 +370,9 @@ const Hosting = () => {
                           }`}>
                             <div className="flex items-center justify-between flex-wrap gap-2">
                               <div className="flex items-center gap-2 flex-wrap">
+                                <Shield className="h-4 w-4 text-gray-600" />
                                 <span className="text-sm font-semibold text-gray-700">Certyfikat SSL:</span>
-                                {item.sslStatus.status === 'not_found' ? (
+                                {!item.sslStatus || item.sslStatus.status === 'not_found' ? (
                                   <span className="inline-flex items-center px-2 py-1 rounded text-xs font-bold bg-gray-100 text-gray-600 border border-gray-300">
                                     ⚠️ Nie znaleziony
                                   </span>
@@ -348,18 +390,42 @@ const Hosting = () => {
                                   </span>
                                 ) : (
                                   <span className="inline-flex items-center px-2 py-1 rounded text-xs font-bold bg-blue-100 text-blue-700 border border-blue-300">
-                                    ℹ️ {item.sslStatus.status}
+                                    ℹ️ {item.sslStatus.status || 'nieznany'}
                                   </span>
                                 )}
                               </div>
-                              <div className="text-xs text-gray-600">
-                                {item.sslStatus.validTo ? `Ważny do: ${format(new Date(item.sslStatus.validTo), 'dd.MM.yyyy')}` : item.sslStatus.status === 'not_found' ? 'Certyfikat nie został wykryty w systemie' : 'Brak danych'}
-                                {item.sslStatus.lastRenewedAt && ` • Ostatnia odnowa: ${format(new Date(item.sslStatus.lastRenewedAt), 'dd.MM.yyyy')}`}
-                                {item.sslStatus.lastCheckedAt && ` • Ostatnie sprawdzenie: ${format(new Date(item.sslStatus.lastCheckedAt), 'dd.MM.yyyy HH:mm')}`}
+                              <div className="flex items-center gap-2">
+                                <div className="text-xs text-gray-600">
+                                  {item.sslStatus && item.sslStatus.validTo ? `Ważny do: ${format(new Date(item.sslStatus.validTo), 'dd.MM.yyyy')}` : !item.sslStatus || item.sslStatus.status === 'not_found' ? 'Certyfikat nie został wykryty' : 'Brak danych'}
+                                  {item.sslStatus && item.sslStatus.lastRenewedAt && ` • Ostatnia odnowa: ${format(new Date(item.sslStatus.lastRenewedAt), 'dd.MM.yyyy')}`}
+                                  {item.sslStatus && item.sslStatus.lastCheckedAt && ` • Sprawdzenie: ${format(new Date(item.sslStatus.lastCheckedAt), 'dd.MM.yyyy HH:mm')}`}
+                                </div>
+                                {(!item.sslStatus || item.sslStatus.status === 'not_found') && (
+                                  <button
+                                    onClick={() => {
+                                      if (window.confirm(`Czy na pewno chcesz wygenerować certyfikat SSL dla domeny ${item.domain}?`)) {
+                                        generateSSLMutation.mutate({ domain: item.domain });
+                                      }
+                                    }}
+                                    disabled={generateSSLMutation.isLoading}
+                                    className="inline-flex items-center px-3 py-1.5 text-xs font-bold rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    <Shield className="h-3 w-3 mr-1" />
+                                    {generateSSLMutation.isLoading ? 'Generowanie...' : 'Wygeneruj certyfikat'}
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => checkSSLMutation.mutate({ domain: item.domain })}
+                                  disabled={checkSSLMutation.isLoading}
+                                  className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                                  title="Sprawdź certyfikat SSL"
+                                >
+                                  <RefreshCw className={`h-3 w-3 ${checkSSLMutation.isLoading ? 'animate-spin' : ''}`} />
+                                </button>
                               </div>
                             </div>
                           </div>
-                        )}
+                        </div>
                         {item.notes && (<div className="text-sm text-gray-600 mb-2"><FileText className="h-3 w-3 inline mr-1" />{item.notes}</div>)}
                         {item.paymentHistory && item.paymentHistory.length > 0 && (<div className="text-sm text-gray-500 mt-2">Historia płatności: {item.paymentHistory.length} wpisów</div>)}
                         {item.reminders && item.reminders.length > 0 && (<div className="text-sm text-yellow-600 mt-1">Przypomnienia: {item.reminders.length} wysłanych</div>)}

@@ -84,6 +84,44 @@ router.post('/check-all', auth, async (req, res) => {
   }
 });
 
+// Generate new certificate
+router.post('/generate/:domain', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Brak uprawnień' });
+    }
+
+    const { domain } = req.params;
+    const { email } = req.body;
+    
+    // Check if certbot is available
+    const certbotAvailable = await sslMonitor.isCertbotAvailable();
+    if (!certbotAvailable) {
+      return res.status(503).json({ 
+        message: 'Certbot nie jest dostępny. Zainstaluj certbot aby móc generować certyfikaty.',
+        certbotAvailable: false
+      });
+    }
+
+    const result = await sslMonitor.generateCertificate(domain, email);
+    
+    // Check certificate after generation
+    const checkResult = await sslMonitor.checkCertificate(domain);
+
+    res.json({
+      message: 'Generowanie certyfikatu zakończone',
+      generation: result,
+      certificate: checkResult
+    });
+  } catch (error) {
+    console.error('Error generating SSL certificate:', error);
+    res.status(500).json({ 
+      message: 'Błąd serwera podczas generowania certyfikatu SSL', 
+      error: error.message 
+    });
+  }
+});
+
 // Renew certificate manually
 router.post('/renew/:domain', auth, async (req, res) => {
   try {
@@ -255,19 +293,23 @@ router.post('/discover', auth, async (req, res) => {
 
     const domains = await sslMonitor.discoverCertificates();
     
-    // Add discovered domains to database
+    // Check certificates for all discovered domains (this will add them to DB)
+    const results = [];
     for (const domain of domains) {
-      await SSLCert.findOneAndUpdate(
-        { domain },
-        { domain, autoRenew: true, renewalThreshold: 30 },
-        { upsert: true }
-      );
+      try {
+        const result = await sslMonitor.checkCertificate(domain);
+        results.push(result);
+      } catch (error) {
+        console.error(`Error checking certificate for ${domain}:`, error);
+        results.push({ domain, status: 'error', error: error.message });
+      }
     }
 
     res.json({
       message: 'Wykrywanie certyfikatów zakończone',
       domains,
-      count: domains.length
+      count: domains.length,
+      results
     });
   } catch (error) {
     console.error('Error discovering SSL certificates:', error);

@@ -137,6 +137,7 @@ export const sslAPI = {
   getByDomain: (domain) => api.get(`/api/ssl/${domain}`).then(res => res.data),
   check: (domain) => api.post(`/api/ssl/check/${domain}`).then(res => res.data),
   checkAll: () => api.post('/api/ssl/check-all').then(res => res.data),
+  generate: (domain, email) => api.post(`/api/ssl/generate/${domain}`, { email }).then(res => res.data),
   renew: (domain) => api.post(`/api/ssl/renew/${domain}`).then(res => res.data),
   getStats: () => api.get('/api/ssl/stats/summary').then(res => res.data),
   discover: () => api.post('/api/ssl/discover').then(res => res.data),

@@ -346,36 +346,34 @@ const ClientPortal = () => {
                       <td className="px-6 py-4 text-sm">
                         <div className="flex flex-col gap-2">
                         <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold ${h.status === 'active' ? 'bg-green-100 text-green-700 border border-green-200' : h.status === 'overdue' ? 'bg-yellow-100 text-yellow-700 border border-yellow-200' : h.status === 'suspended' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-gray-100 text-gray-700 border border-gray-200'}`}>{h.status}</span>
-                          {h.sslStatus && (
-                            <div className="flex items-center gap-2 flex-wrap">
-                              {h.sslStatus.status === 'not_found' ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-gray-100 text-gray-600 border border-gray-300">
-                                  ⚠️ Certyfikat SSL nie znaleziony
-                                </span>
-                              ) : h.sslStatus.isExpired ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-100 text-red-700 border border-red-300">
-                                  🔴 SSL wygasł
-                                </span>
-                              ) : h.sslStatus.isExpiringSoon ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-yellow-100 text-yellow-700 border border-yellow-300">
-                                  ⚠️ SSL wygasa za {h.sslStatus.daysUntilExpiry} dni
-                                </span>
-                              ) : h.sslStatus.status === 'valid' && h.sslStatus.daysUntilExpiry !== null ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700 border border-green-300">
-                                  ✓ SSL ważny ({h.sslStatus.daysUntilExpiry} dni)
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-700 border border-blue-300">
-                                  ℹ️ SSL: {h.sslStatus.status}
-                                </span>
-                              )}
-                              {h.sslStatus.validTo && (
-                                <span className="text-xs text-gray-500">
-                                  do {new Date(h.sslStatus.validTo).toLocaleDateString('pl-PL')}
-                                </span>
-                              )}
-                            </div>
-                          )}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {!h.sslStatus || h.sslStatus.status === 'not_found' ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-gray-100 text-gray-600 border border-gray-300">
+                                ⚠️ Certyfikat SSL nie znaleziony
+                              </span>
+                            ) : h.sslStatus.isExpired ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-100 text-red-700 border border-red-300">
+                                🔴 SSL wygasł
+                              </span>
+                            ) : h.sslStatus.isExpiringSoon ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-yellow-100 text-yellow-700 border border-yellow-300">
+                                ⚠️ SSL wygasa za {h.sslStatus.daysUntilExpiry} dni
+                              </span>
+                            ) : h.sslStatus.status === 'valid' && h.sslStatus.daysUntilExpiry !== null ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700 border border-green-300">
+                                ✓ SSL ważny ({h.sslStatus.daysUntilExpiry} dni)
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-700 border border-blue-300">
+                                ℹ️ SSL: {h.sslStatus.status || 'nieznany'}
+                              </span>
+                            )}
+                            {h.sslStatus && h.sslStatus.validTo && (
+                              <span className="text-xs text-gray-500">
+                                do {new Date(h.sslStatus.validTo).toLocaleDateString('pl-PL')}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm font-medium text-gray-700">{h.nextPaymentDate ? new Date(h.nextPaymentDate).toLocaleDateString('pl-PL') : '-'}</td>
