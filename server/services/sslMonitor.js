@@ -130,6 +130,8 @@ function getCertificateStatus(daysUntilExpiry, renewalThreshold = 30) {
  */
 async function getCertificateDomains(certPath) {
   try {
+    console.log(`[SSL Monitor] getCertificateDomains: Reading certificate from ${certPath}`);
+    
     // Get full certificate text
     const { stdout } = await execAsync(`openssl x509 -in "${certPath}" -noout -text`, { timeout: 10000 });
     const allDomains = new Set();
@@ -137,10 +139,15 @@ async function getCertificateDomains(certPath) {
     // Extract CN from subject - simpler approach
     const subjectLine = stdout.split('\n').find(line => line.includes('Subject:'));
     if (subjectLine) {
+      console.log(`[SSL Monitor] getCertificateDomains: Subject line: ${subjectLine}`);
       const cnMatch = subjectLine.match(/CN\s*=\s*([^,/\n]+)/);
       if (cnMatch && cnMatch[1]) {
         const cnDomain = cnMatch[1].trim();
-        if (cnDomain) allDomains.add(cnDomain.replace(/\*/g, ''));
+        if (cnDomain) {
+          const cleanDomain = cnDomain.replace(/\*/g, '');
+          allDomains.add(cleanDomain);
+          console.log(`[SSL Monitor] getCertificateDomains: Found CN domain: ${cleanDomain}`);
+        }
       }
     }
     
@@ -151,6 +158,7 @@ async function getCertificateDomains(certPath) {
       const line = lines[i];
       if (line.includes('X509v3 Subject Alternative Name')) {
         inSanSection = true;
+        console.log(`[SSL Monitor] getCertificateDomains: Found SAN section at line ${i}`);
         continue;
       }
       if (inSanSection) {
@@ -158,46 +166,60 @@ async function getCertificateDomains(certPath) {
         const dnsMatches = line.matchAll(/DNS:([^,\s]+)/gi);
         for (const match of dnsMatches) {
           if (match[1]) {
-            allDomains.add(match[1].trim().replace(/\*/g, ''));
+            const cleanDomain = match[1].trim().replace(/\*/g, '');
+            allDomains.add(cleanDomain);
+            console.log(`[SSL Monitor] getCertificateDomains: Found SAN domain: ${cleanDomain}`);
           }
         }
         // Stop when we hit another section
         if (line.trim() && !line.includes('DNS:') && !line.match(/^\s/)) {
           inSanSection = false;
+          console.log(`[SSL Monitor] getCertificateDomains: Left SAN section at line ${i}`);
         }
       }
     }
     
     // Fallback: try to read from certificate info if we found nothing
     if (allDomains.size === 0) {
+      console.log(`[SSL Monitor] getCertificateDomains: No domains found in main extraction, trying fallback...`);
       try {
         const certInfo = await readCertificate(certPath);
         if (certInfo.subject) {
+          console.log(`[SSL Monitor] getCertificateDomains: Fallback - Subject: ${certInfo.subject}`);
           const cnMatch = certInfo.subject.match(/CN=([^,]+)/);
           if (cnMatch) {
-            allDomains.add(cnMatch[1].replace(/\*/g, '').trim());
+            const cleanDomain = cnMatch[1].replace(/\*/g, '').trim();
+            allDomains.add(cleanDomain);
+            console.log(`[SSL Monitor] getCertificateDomains: Fallback - Found CN domain: ${cleanDomain}`);
           }
         }
       } catch (e) {
-        // Ignore
+        console.warn(`[SSL Monitor] getCertificateDomains: Fallback failed: ${e.message}`);
       }
     }
     
-    return Array.from(allDomains).filter(d => d && d.length > 0);
+    const domains = Array.from(allDomains).filter(d => d && d.length > 0);
+    console.log(`[SSL Monitor] getCertificateDomains: Final domains extracted: ${domains.join(', ')}`);
+    return domains;
   } catch (error) {
-    console.warn(`[SSL Monitor] Error extracting domains from certificate: ${error.message}`);
+    console.error(`[SSL Monitor] Error extracting domains from certificate ${certPath}: ${error.message}`);
+    console.error(`[SSL Monitor] Error stack:`, error.stack);
+    
     // Last fallback: try to read from certificate info
     try {
+      console.log(`[SSL Monitor] getCertificateDomains: Trying last fallback...`);
       const certInfo = await readCertificate(certPath);
       const domains = [];
       if (certInfo.subject) {
         const cnMatch = certInfo.subject.match(/CN=([^,]+)/);
         if (cnMatch) {
           domains.push(cnMatch[1].replace(/\*/g, '').trim());
+          console.log(`[SSL Monitor] getCertificateDomains: Last fallback - Found domain: ${domains[0]}`);
         }
       }
       return domains;
     } catch (e) {
+      console.error(`[SSL Monitor] getCertificateDomains: Last fallback also failed: ${e.message}`);
       return [];
     }
   }
@@ -219,18 +241,35 @@ async function certificateCoversDomain(certPath, domain) {
     const certDomains = await getCertificateDomains(certPath);
     const normalizedDomain = normalizeDomain(domain);
     
+    console.log(`[SSL Monitor] certificateCoversDomain: Checking if cert at ${certPath} covers ${domain}`);
+    console.log(`[SSL Monitor] certificateCoversDomain: Certificate domains: ${certDomains.join(', ')}`);
+    console.log(`[SSL Monitor] certificateCoversDomain: Normalized search domain: ${normalizedDomain}`);
+    
     for (const certDomain of certDomains) {
       const normalizedCertDomain = normalizeDomain(certDomain);
+      console.log(`[SSL Monitor] certificateCoversDomain: Comparing "${normalizedCertDomain}" with "${normalizedDomain}"`);
+      
       // Exact match
-      if (normalizedCertDomain === normalizedDomain) return true;
+      if (normalizedCertDomain === normalizedDomain) {
+        console.log(`[SSL Monitor] certificateCoversDomain: ✅ Exact match found!`);
+        return true;
+      }
       // Wildcard match (e.g., *.example.com matches example.com)
-      if (normalizedCertDomain.startsWith('*.') && normalizedDomain.endsWith(normalizedCertDomain.slice(2))) return true;
+      if (normalizedCertDomain.startsWith('*.') && normalizedDomain.endsWith(normalizedCertDomain.slice(2))) {
+        console.log(`[SSL Monitor] certificateCoversDomain: ✅ Wildcard match found!`);
+        return true;
+      }
       // www variant match
-      if (normalizedCertDomain === `www.${normalizedDomain}` || normalizedDomain === `www.${normalizedCertDomain}`) return true;
+      if (normalizedCertDomain === `www.${normalizedDomain}` || normalizedDomain === `www.${normalizedCertDomain}`) {
+        console.log(`[SSL Monitor] certificateCoversDomain: ✅ WWW variant match found!`);
+        return true;
+      }
     }
+    console.log(`[SSL Monitor] certificateCoversDomain: ❌ No match found`);
     return false;
   } catch (error) {
     console.warn(`[SSL Monitor] Error checking if certificate covers domain ${domain}:`, error.message);
+    console.warn(`[SSL Monitor] Error stack:`, error.stack);
     return false;
   }
 }
@@ -266,37 +305,62 @@ async function findCertificatePath(domain) {
   try {
     const entries = await fs.readdir(LETSENCRYPT_BASE, { withFileTypes: true });
     console.log(`[SSL Monitor] Scanning ${entries.length} directories in ${LETSENCRYPT_BASE} for domain ${domain}...`);
+    console.log(`[SSL Monitor] Looking for normalized domain: ${normalizedDomain}`);
+    
+    const foundCertificates = [];
     
     for (const entry of entries) {
       if (entry.isDirectory()) {
         const certPath = path.join(LETSENCRYPT_BASE, entry.name, 'fullchain.pem');
-        if (await certificateExists(certPath)) {
+        const certExists = await certificateExists(certPath);
+        
+        if (certExists) {
+          console.log(`[SSL Monitor] Found certificate file in directory: ${entry.name}`);
+          foundCertificates.push(entry.name);
+          
           try {
             // Check if directory name matches (case-insensitive)
             const normalizedDirName = normalizeDomain(entry.name);
+            console.log(`[SSL Monitor] Comparing directory name "${entry.name}" (normalized: "${normalizedDirName}") with domain "${domain}" (normalized: "${normalizedDomain}")`);
+            
             if (normalizedDirName === normalizedDomain) {
-              console.log(`[SSL Monitor] Found certificate by directory name match: ${certPath}`);
+              console.log(`[SSL Monitor] ✅ MATCH! Found certificate by directory name match: ${certPath}`);
               return certPath;
             }
+            
+            // Get domains from certificate to check coverage
+            console.log(`[SSL Monitor] Checking if certificate in ${entry.name} covers domain ${domain}...`);
+            const certDomains = await getCertificateDomains(certPath);
+            console.log(`[SSL Monitor] Certificate in ${entry.name} contains domains: ${certDomains.join(', ')}`);
             
             // Check if this certificate covers the domain
             const covers = await certificateCoversDomain(certPath, domain);
             if (covers) {
-              console.log(`[SSL Monitor] Found certificate by domain coverage: ${certPath} (directory: ${entry.name})`);
+              console.log(`[SSL Monitor] ✅ MATCH! Found certificate by domain coverage: ${certPath} (directory: ${entry.name})`);
               return certPath;
+            } else {
+              console.log(`[SSL Monitor] Certificate in ${entry.name} does NOT cover domain ${domain}`);
             }
           } catch (checkError) {
             // If we can't check domain coverage, skip this certificate
             console.warn(`[SSL Monitor] Could not check certificate ${certPath}: ${checkError.message}`);
+            console.warn(`[SSL Monitor] Error details:`, checkError);
           }
+        } else {
+          console.log(`[SSL Monitor] Directory ${entry.name} exists but fullchain.pem not found`);
         }
       }
     }
+    
+    console.warn(`[SSL Monitor] Scanned ${foundCertificates.length} certificate directories: ${foundCertificates.join(', ')}`);
+    console.warn(`[SSL Monitor] None of them matched domain: ${domain} (normalized: ${normalizedDomain})`);
   } catch (error) {
     console.error(`[SSL Monitor] Error searching for certificate: ${error.message}`);
+    console.error(`[SSL Monitor] Error stack:`, error.stack);
     // If we can't read the directory, try to check if it exists
     try {
       await fs.access(LETSENCRYPT_BASE);
+      console.log(`[SSL Monitor] Directory ${LETSENCRYPT_BASE} is accessible`);
     } catch (accessError) {
       console.error(`[SSL Monitor] Cannot access Let's Encrypt directory: ${LETSENCRYPT_BASE} - ${accessError.message}`);
     }
