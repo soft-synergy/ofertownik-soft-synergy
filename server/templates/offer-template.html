@@ -51,15 +51,17 @@
         .reveal { opacity: 0; transform: translateY(30px); transition: all 0.8s cubic-bezier(0.165, 0.84, 0.44, 1); }
         .reveal.visible { opacity: 1; transform: translateY(0); }
         .card-3d { transform-style: preserve-3d; transition: transform 0.5s cubic-bezier(0.165, 0.84, 0.44, 1); }
-        .portfolio-carousel-container { position: relative; overflow: hidden; width: 100%; }
-        .portfolio-carousel { display: flex; will-change: transform; transition: transform 0.7s ease-in-out; }
+        .portfolio-carousel-container { position: relative; overflow: hidden; width: 100%; padding: 0 0 1rem 0; }
+        .portfolio-carousel { display: flex; will-change: transform; transition: transform 0.7s ease-in-out; gap: 2rem; padding-right: 2rem; }
         @media (max-width: 768px) {
             .portfolio-carousel-item { width: 100% !important; min-width: 100% !important; }
+            .portfolio-carousel { gap: 1rem; padding-right: 1rem; }
         }
-        .testimonials-carousel-container { position: relative; overflow: hidden; width: 100%; }
-        .testimonials-carousel { display: flex; will-change: transform; transition: transform 0.7s ease-in-out; }
+        .testimonials-carousel-container { position: relative; overflow: hidden; width: 100%; padding: 0 0 1rem 0; }
+        .testimonials-carousel { display: flex; will-change: transform; transition: transform 0.7s ease-in-out; gap: 1.5rem; padding-right: 1.5rem; }
         @media (max-width: 768px) {
             .testimonial-item { width: 100% !important; min-width: 100% !important; }
+            .testimonials-carousel { gap: 1rem; padding-right: 1rem; }
         }
         .cookie-banner { 
             position: fixed; 
@@ -348,8 +350,8 @@
                 <h2 class="text-3xl font-bold mb-8 text-center">{{t.portfolioTitle}}</h2>
                 {{#if (gt (length portfolio) 2)}}
                 <!-- Carousel for 3+ items -->
-                <div class="portfolio-carousel-container relative overflow-hidden">
-                    <div class="portfolio-carousel flex gap-8 transition-transform duration-700 ease-in-out" style="transform: translateX(0);">
+                <div class="portfolio-carousel-container">
+                    <div class="portfolio-carousel" style="transform: translateX(0);">
                         {{#each portfolio}}
                         <div class="portfolio-carousel-item flex-shrink-0 w-full md:w-1/2 lg:w-1/3 cursor-pointer group" data-portfolio-index="{{@index}}" data-portfolio-title="{{this.title}}" data-portfolio-image="https:///oferty.soft-synergy.com{{this.image}}" data-portfolio-description="{{this.description}}">
                             <div class="card-3d group">
@@ -484,8 +486,8 @@
                     
                     {{#if testimonials}}
                     <!-- Testimonials Carousel -->
-                    <div class="testimonials-carousel-container relative overflow-hidden mt-8">
-                        <div class="testimonials-carousel flex gap-6 transition-transform duration-700 ease-in-out" style="transform: translateX(0);">
+                    <div class="testimonials-carousel-container mt-8">
+                        <div class="testimonials-carousel" style="transform: translateX(0);">
                             {{#each testimonials}}
                             <div class="testimonial-item flex-shrink-0 w-full md:w-1/2 lg:w-1/3">
                                 <div class="p-6 text-left h-full border border-white/10 hover:border-blue-500/30 transition-all rounded-lg bg-white/5 backdrop-blur-sm">
@@ -753,7 +755,7 @@
                 }); 
             });
 
-            // Portfolio Carousel Auto-Scroll - always show 3 full projects
+            // Portfolio Carousel - fixed and working properly
             const carouselContainer = document.querySelector('.portfolio-carousel-container');
             if (carouselContainer) {
                 const carousel = carouselContainer.querySelector('.portfolio-carousel');
@@ -764,9 +766,27 @@
                     let isPaused = false;
                     let isTransitioning = false;
                     
+                    // Calculate item width including gap (measured dynamically)
+                    let cachedItemWidth = null;
                     const getItemWidth = () => {
+                        if (cachedItemWidth !== null) return cachedItemWidth;
                         if (items.length === 0) return 0;
-                        return items[0].offsetWidth + 32; // width + gap
+                        if (items.length === 1) {
+                            cachedItemWidth = items[0].offsetWidth;
+                            return cachedItemWidth;
+                        }
+                        
+                        // Measure actual gap between items
+                        const firstRect = items[0].getBoundingClientRect();
+                        const secondRect = items[1].getBoundingClientRect();
+                        const actualGap = secondRect.left - firstRect.right;
+                        cachedItemWidth = items[0].offsetWidth + Math.max(actualGap, 0);
+                        return cachedItemWidth;
+                    };
+                    
+                    // Reset cache on resize
+                    const resetCache = () => {
+                        cachedItemWidth = null;
                     };
                     
                     // Get number of visible items based on screen size
@@ -777,82 +797,80 @@
                         return 1; // mobile: 1 item
                     };
                     
-                    // Get maximum index we can scroll to while keeping all visible items filled
-                    const getMaxIndex = () => {
-                        const visibleItems = getVisibleItems();
-                        return Math.max(0, items.length - visibleItems);
+                    // Calculate scroll position for a given index
+                    const getScrollPosition = (index) => {
+                        resetCache(); // Reset cache to get fresh measurements
+                        const itemWidth = getItemWidth();
+                        const containerWidth = carouselContainer.offsetWidth;
+                        const totalCarouselWidth = items.length * itemWidth;
+                        
+                        // For last items, ensure they're not cut off
+                        const maxScroll = Math.max(0, totalCarouselWidth - containerWidth);
+                        const targetScroll = index * itemWidth;
+                        
+                        // Don't scroll past the point where last items are fully visible
+                        return Math.min(targetScroll, maxScroll);
+                    };
+                    
+                    // Update active dot
+                    const updateDots = (activeIndex) => {
+                        dots.forEach((dot, idx) => {
+                            if (idx === activeIndex) {
+                                dot.classList.add('bg-blue-500', 'w-8');
+                                dot.classList.remove('bg-white/30', 'w-2');
+                            } else {
+                                dot.classList.remove('bg-blue-500', 'w-8');
+                                dot.classList.add('bg-white/30', 'w-2');
+                            }
+                        });
+                    };
+                    
+                    // Scroll to specific index
+                    const scrollToIndex = (targetIndex, instant = false) => {
+                        if (isTransitioning && !instant) return;
+                        
+                        // Clamp index to valid range
+                        const maxIndex = Math.max(0, items.length - 1);
+                        targetIndex = Math.max(0, Math.min(targetIndex, maxIndex));
+                        
+                        if (instant) {
+                            carousel.style.transition = 'none';
+                        } else {
+                            isTransitioning = true;
+                            carousel.style.transition = 'transform 0.7s ease-in-out';
+                        }
+                        
+                        const scrollPos = getScrollPosition(targetIndex);
+                        carousel.style.transform = `translateX(${-scrollPos}px)`;
+                        currentIndex = targetIndex;
+                        updateDots(currentIndex);
+                        
+                        if (!instant) {
+                            setTimeout(() => {
+                                isTransitioning = false;
+                            }, 700);
+                        } else {
+                            setTimeout(() => {
+                                carousel.style.transition = 'transform 0.7s ease-in-out';
+                            }, 50);
+                        }
                     };
                     
                     // Auto-scroll function
                     const scrollCarousel = () => {
                         if (isPaused || isTransitioning) return;
                         
-                        isTransitioning = true;
-                        const visibleItems = getVisibleItems();
-                        const maxIndex = getMaxIndex();
-                        let nextIndex;
-                        
-                        // If we can still scroll forward, do it
-                        if (currentIndex < maxIndex) {
-                            nextIndex = currentIndex + 1;
-                        } else {
-                            // Otherwise, loop back to start
-                            nextIndex = 0;
-                        }
-                        
-                        const itemWidth = getItemWidth();
-                        
-                        // Update dots before transition
-                        dots.forEach((dot, idx) => {
-                            if (idx === nextIndex) {
-                                dot.classList.add('bg-blue-500', 'w-8');
-                                dot.classList.remove('bg-white/30');
-                            } else {
-                                dot.classList.remove('bg-blue-500', 'w-8');
-                                dot.classList.add('bg-white/30');
-                            }
-                        });
-                        
-                        // If we're looping back to start
-                        if (nextIndex === 0 && currentIndex > 0) {
-                            // Jump to start instantly without animation
-                            carousel.style.transition = 'none';
-                            carousel.style.transform = `translateX(0px)`;
-                            currentIndex = 0;
-                            
-                            // Then immediately ensure it's at the start
-                            setTimeout(() => {
-                                carousel.style.transition = 'transform 0.7s ease-in-out';
-                                carousel.style.transform = `translateX(0px)`;
-                                isTransitioning = false;
-                            }, 50);
-                        } else {
-                            // Normal transition
-                            currentIndex = nextIndex;
-                            carousel.style.transform = `translateX(${-currentIndex * itemWidth}px)`;
-                            
-                            // Reset transition flag after animation completes
-                            setTimeout(() => {
-                                isTransitioning = false;
-                            }, 700);
-                        }
+                        const nextIndex = (currentIndex + 1) % items.length;
+                        scrollToIndex(nextIndex);
                     };
                     
-                    // Handle window resize to recalculate positions
+                    // Handle window resize
                     let resizeTimeout;
                     window.addEventListener('resize', () => {
                         clearTimeout(resizeTimeout);
                         resizeTimeout = setTimeout(() => {
-                            const maxIndex = getMaxIndex();
-                            if (currentIndex > maxIndex) {
-                                currentIndex = maxIndex;
-                                const itemWidth = getItemWidth();
-                                carousel.style.transition = 'none';
-                                carousel.style.transform = `translateX(${-currentIndex * itemWidth}px)`;
-                                setTimeout(() => {
-                                    carousel.style.transition = 'transform 0.7s ease-in-out';
-                                }, 50);
-                            }
+                            // Recalculate and maintain current position
+                            scrollToIndex(currentIndex, true);
                         }, 250);
                     });
                     
@@ -864,44 +882,27 @@
                         isPaused = false;
                     });
                     
-                    // Dot navigation - only allow dots that keep all visible items filled
+                    // Dot navigation - ALL dots are clickable
                     dots.forEach((dot, idx) => {
-                        dot.addEventListener('click', () => {
-                            if (isTransitioning) return;
-                            const visibleItems = getVisibleItems();
-                            const maxIndex = getMaxIndex();
-                            
-                            // Only allow clicking on dots that keep all visible items filled
-                            if (idx > maxIndex) return;
-                            
-                            isTransitioning = true;
-                            
-                            currentIndex = idx;
-                            const itemWidth = getItemWidth();
-                            carousel.style.transform = `translateX(${-currentIndex * itemWidth}px)`;
-                            
-                            dots.forEach((d, i) => {
-                                if (i === currentIndex) {
-                                    d.classList.add('bg-blue-500', 'w-8');
-                                    d.classList.remove('bg-white/30');
-                                } else {
-                                    d.classList.remove('bg-blue-500', 'w-8');
-                                    d.classList.add('bg-white/30');
-                                }
-                            });
-                            
-                            setTimeout(() => {
-                                isTransitioning = false;
-                            }, 700);
+                        dot.style.cursor = 'pointer';
+                        dot.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (idx !== currentIndex) {
+                                scrollToIndex(idx);
+                            }
                         });
                     });
                     
+                    // Initialize
+                    scrollToIndex(0, true);
+                    
                     // Start auto-scroll
-                    setInterval(scrollCarousel, 4000); // Change slide every 4 seconds
+                    setInterval(scrollCarousel, 4000);
                 }
             }
 
-            // Testimonials Carousel Auto-Scroll - always show full items
+            // Testimonials Carousel - fixed and working properly
             const testimonialsContainer = document.querySelector('.testimonials-carousel-container');
             if (testimonialsContainer) {
                 const carousel = testimonialsContainer.querySelector('.testimonials-carousel');
@@ -912,9 +913,27 @@
                     let isPaused = false;
                     let isTransitioning = false;
                     
+                    // Calculate item width including gap (measured dynamically)
+                    let cachedItemWidthTestimonials = null;
                     const getItemWidth = () => {
+                        if (cachedItemWidthTestimonials !== null) return cachedItemWidthTestimonials;
                         if (items.length === 0) return 0;
-                        return items[0].offsetWidth + 24; // width + gap
+                        if (items.length === 1) {
+                            cachedItemWidthTestimonials = items[0].offsetWidth;
+                            return cachedItemWidthTestimonials;
+                        }
+                        
+                        // Measure actual gap between items
+                        const firstRect = items[0].getBoundingClientRect();
+                        const secondRect = items[1].getBoundingClientRect();
+                        const actualGap = secondRect.left - firstRect.right;
+                        cachedItemWidthTestimonials = items[0].offsetWidth + Math.max(actualGap, 0);
+                        return cachedItemWidthTestimonials;
+                    };
+                    
+                    // Reset cache on resize
+                    const resetCache = () => {
+                        cachedItemWidthTestimonials = null;
                     };
                     
                     // Get number of visible items based on screen size
@@ -925,82 +944,80 @@
                         return 1; // mobile: 1 item
                     };
                     
-                    // Get maximum index we can scroll to while keeping all visible items filled
-                    const getMaxIndex = () => {
-                        const visibleItems = getVisibleItems();
-                        return Math.max(0, items.length - visibleItems);
+                    // Calculate scroll position for a given index
+                    const getScrollPosition = (index) => {
+                        resetCache(); // Reset cache to get fresh measurements
+                        const itemWidth = getItemWidth();
+                        const containerWidth = testimonialsContainer.offsetWidth;
+                        const totalCarouselWidth = items.length * itemWidth;
+                        
+                        // For last items, ensure they're not cut off
+                        const maxScroll = Math.max(0, totalCarouselWidth - containerWidth);
+                        const targetScroll = index * itemWidth;
+                        
+                        // Don't scroll past the point where last items are fully visible
+                        return Math.min(targetScroll, maxScroll);
+                    };
+                    
+                    // Update active dot
+                    const updateDots = (activeIndex) => {
+                        dots.forEach((dot, idx) => {
+                            if (idx === activeIndex) {
+                                dot.classList.add('bg-blue-500', 'w-8');
+                                dot.classList.remove('bg-white/30', 'w-2');
+                            } else {
+                                dot.classList.remove('bg-blue-500', 'w-8');
+                                dot.classList.add('bg-white/30', 'w-2');
+                            }
+                        });
+                    };
+                    
+                    // Scroll to specific index
+                    const scrollToIndex = (targetIndex, instant = false) => {
+                        if (isTransitioning && !instant) return;
+                        
+                        // Clamp index to valid range
+                        const maxIndex = Math.max(0, items.length - 1);
+                        targetIndex = Math.max(0, Math.min(targetIndex, maxIndex));
+                        
+                        if (instant) {
+                            carousel.style.transition = 'none';
+                        } else {
+                            isTransitioning = true;
+                            carousel.style.transition = 'transform 0.7s ease-in-out';
+                        }
+                        
+                        const scrollPos = getScrollPosition(targetIndex);
+                        carousel.style.transform = `translateX(${-scrollPos}px)`;
+                        currentIndex = targetIndex;
+                        updateDots(currentIndex);
+                        
+                        if (!instant) {
+                            setTimeout(() => {
+                                isTransitioning = false;
+                            }, 700);
+                        } else {
+                            setTimeout(() => {
+                                carousel.style.transition = 'transform 0.7s ease-in-out';
+                            }, 50);
+                        }
                     };
                     
                     // Auto-scroll function
                     const scrollTestimonials = () => {
                         if (isPaused || isTransitioning) return;
                         
-                        isTransitioning = true;
-                        const visibleItems = getVisibleItems();
-                        const maxIndex = getMaxIndex();
-                        let nextIndex;
-                        
-                        // If we can still scroll forward, do it
-                        if (currentIndex < maxIndex) {
-                            nextIndex = currentIndex + 1;
-                        } else {
-                            // Otherwise, loop back to start
-                            nextIndex = 0;
-                        }
-                        
-                        const itemWidth = getItemWidth();
-                        
-                        // Update dots before transition
-                        dots.forEach((dot, idx) => {
-                            if (idx === nextIndex) {
-                                dot.classList.add('bg-blue-500', 'w-8');
-                                dot.classList.remove('bg-white/30');
-                            } else {
-                                dot.classList.remove('bg-blue-500', 'w-8');
-                                dot.classList.add('bg-white/30');
-                            }
-                        });
-                        
-                        // If we're looping back to start
-                        if (nextIndex === 0 && currentIndex > 0) {
-                            // Jump to start instantly without animation
-                            carousel.style.transition = 'none';
-                            carousel.style.transform = `translateX(0px)`;
-                            currentIndex = 0;
-                            
-                            // Then immediately ensure it's at the start
-                            setTimeout(() => {
-                                carousel.style.transition = 'transform 0.7s ease-in-out';
-                                carousel.style.transform = `translateX(0px)`;
-                                isTransitioning = false;
-                            }, 50);
-                        } else {
-                            // Normal transition
-                            currentIndex = nextIndex;
-                            carousel.style.transform = `translateX(${-currentIndex * itemWidth}px)`;
-                            
-                            // Reset transition flag after animation completes
-                            setTimeout(() => {
-                                isTransitioning = false;
-                            }, 700);
-                        }
+                        const nextIndex = (currentIndex + 1) % items.length;
+                        scrollToIndex(nextIndex);
                     };
                     
-                    // Handle window resize to recalculate positions
+                    // Handle window resize
                     let resizeTimeoutTestimonials;
                     window.addEventListener('resize', () => {
                         clearTimeout(resizeTimeoutTestimonials);
                         resizeTimeoutTestimonials = setTimeout(() => {
-                            const maxIndex = getMaxIndex();
-                            if (currentIndex > maxIndex) {
-                                currentIndex = maxIndex;
-                                const itemWidth = getItemWidth();
-                                carousel.style.transition = 'none';
-                                carousel.style.transform = `translateX(${-currentIndex * itemWidth}px)`;
-                                setTimeout(() => {
-                                    carousel.style.transition = 'transform 0.7s ease-in-out';
-                                }, 50);
-                            }
+                            // Recalculate and maintain current position
+                            scrollToIndex(currentIndex, true);
                         }, 250);
                     });
                     
@@ -1012,40 +1029,23 @@
                         isPaused = false;
                     });
                     
-                    // Dot navigation - only allow dots that keep all visible items filled
+                    // Dot navigation - ALL dots are clickable
                     dots.forEach((dot, idx) => {
-                        dot.addEventListener('click', () => {
-                            if (isTransitioning) return;
-                            const visibleItems = getVisibleItems();
-                            const maxIndex = getMaxIndex();
-                            
-                            // Only allow clicking on dots that keep all visible items filled
-                            if (idx > maxIndex) return;
-                            
-                            isTransitioning = true;
-                            
-                            currentIndex = idx;
-                            const itemWidth = getItemWidth();
-                            carousel.style.transform = `translateX(${-currentIndex * itemWidth}px)`;
-                            
-                            dots.forEach((d, i) => {
-                                if (i === currentIndex) {
-                                    d.classList.add('bg-blue-500', 'w-8');
-                                    d.classList.remove('bg-white/30');
-                                } else {
-                                    d.classList.remove('bg-blue-500', 'w-8');
-                                    d.classList.add('bg-white/30');
-                                }
-                            });
-                            
-                            setTimeout(() => {
-                                isTransitioning = false;
-                            }, 700);
+                        dot.style.cursor = 'pointer';
+                        dot.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (idx !== currentIndex) {
+                                scrollToIndex(idx);
+                            }
                         });
                     });
                     
+                    // Initialize
+                    scrollToIndex(0, true);
+                    
                     // Start auto-scroll
-                    setInterval(scrollTestimonials, 5000); // Change slide every 5 seconds
+                    setInterval(scrollTestimonials, 5000);
                 }
             }
         });
