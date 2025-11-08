@@ -118,22 +118,45 @@ async function main() {
             const domains = await getCertificateDomains(certPath);
             const dates = await getCertificateDates(certPath);
             
-            console.log(`   Domains: ${domains.length > 0 ? domains.join(', ') : 'NONE FOUND!'}`);
-            console.log(`   Valid from: ${dates.validFrom}`);
-            console.log(`   Valid to: ${dates.validTo}`);
+            console.log(`   📋 Domains in certificate (${domains.length}): ${domains.length > 0 ? domains.join(', ') : 'NONE FOUND!'}`);
+            console.log(`   📅 Valid from: ${dates.validFrom}`);
+            console.log(`   📅 Valid to: ${dates.validTo}`);
             
             // Check if watraconcept.pl is in this certificate
-            const hasWatraconcept = domains.some(d => 
-              d.toLowerCase().includes('watraconcept') || 
-              d.toLowerCase() === 'watraconcept.pl' ||
-              d.toLowerCase() === 'www.watraconcept.pl'
-            );
+            const normalizedWatraconcept = 'watraconcept.pl'.toLowerCase().replace(/^www\./, '');
+            const hasWatraconcept = domains.some(d => {
+              const normalized = d.toLowerCase().replace(/^www\./, '');
+              return normalized.includes('watraconcept') || 
+                     normalized === 'watraconcept.pl' ||
+                     d.toLowerCase() === 'watraconcept.pl' ||
+                     d.toLowerCase() === 'www.watraconcept.pl';
+            });
             
             if (hasWatraconcept) {
-              console.log(`   ✅ CONTAINS watraconcept.pl!`);
+              console.log(`   ✅✅✅ CONTAINS watraconcept.pl! (directory name: ${entry.name})`);
+            } else {
+              // Show why it doesn't match
+              if (domains.length > 0) {
+                console.log(`   ❌ Does NOT contain watraconcept.pl`);
+                console.log(`   📝 Certificate domains: ${domains.map(d => d.toLowerCase()).join(', ')}`);
+                console.log(`   🔍 Looking for: watraconcept.pl (normalized: ${normalizedWatraconcept})`);
+              }
+            }
+            
+            // Important note if directory name differs from domains
+            const dirNameNormalized = entry.name.toLowerCase().replace(/^www\./, '');
+            const dirMatchesAnyDomain = domains.some(d => {
+              const dNormalized = d.toLowerCase().replace(/^www\./, '');
+              return dNormalized === dirNameNormalized;
+            });
+            
+            if (!dirMatchesAnyDomain && domains.length > 0) {
+              console.log(`   ⚠️  NOTE: Directory name "${entry.name}" does NOT match any domain in certificate!`);
+              console.log(`   💡 This is why certificate lookup might fail if only checking directory names!`);
             }
           } catch (error) {
             console.log(`   ❌ Error reading certificate: ${error.message}`);
+            console.log(`   📋 Error details:`, error.stack);
           }
           
           console.log('');
@@ -145,26 +168,70 @@ async function main() {
     
     console.log(`\n✅ Found ${foundCertificates} certificates`);
     
-    // Now check for watraconcept.pl specifically
-    console.log('\n🔍 Searching specifically for watraconcept.pl...\n');
+    // Now check for watraconcept.pl specifically by scanning ALL certificates
+    console.log('\n🔍 Searching specifically for watraconcept.pl in ALL certificates...\n');
     
-    const searchDomains = ['watraconcept.pl', 'www.watraconcept.pl'];
-    for (const domain of searchDomains) {
-      console.log(`Checking: ${domain}`);
-      const certPath = path.join(LETSENCRYPT_BASE, domain, 'fullchain.pem');
+    const searchDomain = 'watraconcept.pl';
+    const normalizedSearchDomain = searchDomain.toLowerCase().replace(/^www\./, '');
+    let foundInCert = false;
+    
+    // First check standard path
+    const standardPaths = [
+      path.join(LETSENCRYPT_BASE, searchDomain, 'fullchain.pem'),
+      path.join(LETSENCRYPT_BASE, `www.${searchDomain}`, 'fullchain.pem'),
+    ];
+    
+    for (const certPath of standardPaths) {
       const exists = await certificateExists(certPath);
-      
       if (exists) {
-        console.log(`   ✅ Found certificate at: ${certPath}`);
+        console.log(`   ✅ Found certificate at standard path: ${certPath}`);
         try {
           const domains = await getCertificateDomains(certPath);
-          console.log(`   Domains in certificate: ${domains.join(', ')}`);
+          console.log(`   📋 Domains in certificate: ${domains.join(', ')}`);
+          foundInCert = true;
         } catch (error) {
           console.log(`   ❌ Error: ${error.message}`);
         }
       } else {
         console.log(`   ❌ Certificate not found at: ${certPath}`);
       }
+    }
+    
+    // Now scan ALL certificates for the domain
+    console.log(`\n🔍 Scanning ALL certificates for "${searchDomain}"...\n`);
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const certPath = path.join(LETSENCRYPT_BASE, entry.name, 'fullchain.pem');
+        if (await certificateExists(certPath)) {
+          try {
+            const domains = await getCertificateDomains(certPath);
+            const hasDomain = domains.some(d => {
+              const normalized = d.toLowerCase().replace(/^www\./, '');
+              return normalized === normalizedSearchDomain || 
+                     d.toLowerCase() === searchDomain ||
+                     d.toLowerCase() === `www.${searchDomain}`;
+            });
+            
+            if (hasDomain) {
+              console.log(`   ✅✅✅ FOUND! Certificate in directory "${entry.name}" contains "${searchDomain}"`);
+              console.log(`   📁 Directory: ${entry.name} (may differ from domain!)`);
+              console.log(`   📄 Path: ${certPath}`);
+              console.log(`   📋 All domains: ${domains.join(', ')}`);
+              foundInCert = true;
+            }
+          } catch (error) {
+            // Skip errors
+          }
+        }
+      }
+    }
+    
+    if (!foundInCert) {
+      console.log(`   ❌❌❌ NOT FOUND: "${searchDomain}" not found in any certificate!`);
+      console.log(`   💡 This means either:`);
+      console.log(`      1. Certificate doesn't exist for this domain`);
+      console.log(`      2. Certificate exists but domain name is different`);
+      console.log(`      3. Certificate exists but can't be read (permissions issue)`);
     }
     
   } catch (error) {

@@ -302,60 +302,129 @@ async function findCertificatePath(domain) {
   }
   
   // Scan all certificates in Let's Encrypt directory (most comprehensive search)
+  // This is the key part - we scan ALL certificates regardless of directory name
   try {
     const entries = await fs.readdir(LETSENCRYPT_BASE, { withFileTypes: true });
     console.log(`[SSL Monitor] Scanning ${entries.length} directories in ${LETSENCRYPT_BASE} for domain ${domain}...`);
     console.log(`[SSL Monitor] Looking for normalized domain: ${normalizedDomain}`);
+    console.log(`[SSL Monitor] NOTE: Checking certificate CONTENT, not just directory names!`);
     
     const foundCertificates = [];
+    const certificatesChecked = [];
     
+    // First pass: Quick check by directory name
     for (const entry of entries) {
       if (entry.isDirectory()) {
         const certPath = path.join(LETSENCRYPT_BASE, entry.name, 'fullchain.pem');
         const certExists = await certificateExists(certPath);
         
         if (certExists) {
-          console.log(`[SSL Monitor] Found certificate file in directory: ${entry.name}`);
-          foundCertificates.push(entry.name);
+          foundCertificates.push({ directory: entry.name, path: certPath });
           
-          try {
-            // Check if directory name matches (case-insensitive)
-            const normalizedDirName = normalizeDomain(entry.name);
-            console.log(`[SSL Monitor] Comparing directory name "${entry.name}" (normalized: "${normalizedDirName}") with domain "${domain}" (normalized: "${normalizedDomain}")`);
-            
-            if (normalizedDirName === normalizedDomain) {
-              console.log(`[SSL Monitor] ✅ MATCH! Found certificate by directory name match: ${certPath}`);
-              return certPath;
-            }
-            
-            // Get domains from certificate to check coverage
-            console.log(`[SSL Monitor] Checking if certificate in ${entry.name} covers domain ${domain}...`);
-            const certDomains = await getCertificateDomains(certPath);
-            console.log(`[SSL Monitor] Certificate in ${entry.name} contains domains: ${certDomains.join(', ')}`);
-            
-            // Check if this certificate covers the domain
-            const covers = await certificateCoversDomain(certPath, domain);
-            if (covers) {
-              console.log(`[SSL Monitor] ✅ MATCH! Found certificate by domain coverage: ${certPath} (directory: ${entry.name})`);
-              return certPath;
-            } else {
-              console.log(`[SSL Monitor] Certificate in ${entry.name} does NOT cover domain ${domain}`);
-            }
-          } catch (checkError) {
-            // If we can't check domain coverage, skip this certificate
-            console.warn(`[SSL Monitor] Could not check certificate ${certPath}: ${checkError.message}`);
-            console.warn(`[SSL Monitor] Error details:`, checkError);
+          // Quick check: does directory name match?
+          const normalizedDirName = normalizeDomain(entry.name);
+          if (normalizedDirName === normalizedDomain) {
+            console.log(`[SSL Monitor] ✅ QUICK MATCH! Directory name "${entry.name}" matches domain "${domain}"`);
+            console.log(`[SSL Monitor] Returning certificate: ${certPath}`);
+            return certPath;
           }
-        } else {
-          console.log(`[SSL Monitor] Directory ${entry.name} exists but fullchain.pem not found`);
         }
       }
     }
     
-    console.warn(`[SSL Monitor] Scanned ${foundCertificates.length} certificate directories: ${foundCertificates.join(', ')}`);
-    console.warn(`[SSL Monitor] None of them matched domain: ${domain} (normalized: ${normalizedDomain})`);
+    console.log(`[SSL Monitor] Found ${foundCertificates.length} certificate directories to check: ${foundCertificates.map(c => c.directory).join(', ')}`);
+    
+    // Second pass: Check certificate content for domain coverage
+    // This is critical - vhost directory name might be different from domain
+    for (const certInfo of foundCertificates) {
+      const { directory, path: certPath } = certInfo;
+      
+      try {
+        console.log(`[SSL Monitor] 📄 Reading certificate from directory: ${directory}`);
+        
+        // Get all domains from certificate - this is the key!
+        const certDomains = await getCertificateDomains(certPath);
+        console.log(`[SSL Monitor] Certificate in "${directory}" contains ${certDomains.length} domains: ${certDomains.join(', ')}`);
+        
+        if (certDomains.length === 0) {
+          console.warn(`[SSL Monitor] ⚠️  Certificate in "${directory}" has no domains extracted!`);
+          continue;
+        }
+        
+        // Check if ANY domain in the certificate matches our search domain
+        let matched = false;
+        for (const certDomain of certDomains) {
+          const normalizedCertDomain = normalizeDomain(certDomain);
+          
+          // Exact match (after normalization)
+          if (normalizedCertDomain === normalizedDomain) {
+            console.log(`[SSL Monitor] ✅ MATCH! Domain "${certDomain}" (normalized: "${normalizedCertDomain}") matches "${domain}" (normalized: "${normalizedDomain}")`);
+            matched = true;
+            break;
+          }
+          
+          // WWW variant match
+          if (normalizedCertDomain === `www.${normalizedDomain}` || normalizedDomain === `www.${normalizedCertDomain}`) {
+            console.log(`[SSL Monitor] ✅ MATCH! WWW variant: "${certDomain}" matches "${domain}"`);
+            matched = true;
+            break;
+          }
+          
+          // Check if one is www version of the other
+          if ((certDomain.toLowerCase().startsWith('www.') && certDomain.toLowerCase().slice(4) === domain.toLowerCase()) ||
+              (domain.toLowerCase().startsWith('www.') && domain.toLowerCase().slice(4) === certDomain.toLowerCase())) {
+            console.log(`[SSL Monitor] ✅ MATCH! WWW variant match: "${certDomain}" <-> "${domain}"`);
+            matched = true;
+            break;
+          }
+          
+          // Wildcard match
+          if (certDomain.startsWith('*.') && normalizedDomain.endsWith(certDomain.slice(2).toLowerCase())) {
+            console.log(`[SSL Monitor] ✅ MATCH! Wildcard: "${certDomain}" matches "${domain}"`);
+            matched = true;
+            break;
+          }
+        }
+        
+        if (matched) {
+          console.log(`[SSL Monitor] ✅✅✅ FOUND CERTIFICATE!`);
+          console.log(`[SSL Monitor] Directory name: "${directory}" (may differ from domain!)`);
+          console.log(`[SSL Monitor] Certificate path: ${certPath}`);
+          console.log(`[SSL Monitor] Certificate covers domain: ${domain}`);
+          certificatesChecked.push({ directory, path: certPath, matched: true, domains: certDomains });
+          return certPath;
+        } else {
+          console.log(`[SSL Monitor] ❌ Certificate in "${directory}" does NOT cover domain "${domain}"`);
+          certificatesChecked.push({ directory, path: certPath, matched: false, domains: certDomains });
+        }
+        
+      } catch (checkError) {
+        // If we can't check this certificate, log it but continue with others
+        console.error(`[SSL Monitor] ❌ ERROR checking certificate in "${directory}": ${checkError.message}`);
+        console.error(`[SSL Monitor] Error stack:`, checkError.stack);
+        certificatesChecked.push({ directory, path: certPath, matched: false, error: checkError.message });
+        // Continue checking other certificates - don't give up!
+      }
+    }
+    
+    // Summary
+    console.warn(`[SSL Monitor] ⚠️  Scanned ${foundCertificates.length} certificate directories`);
+    console.warn(`[SSL Monitor] ⚠️  Checked ${certificatesChecked.filter(c => !c.error).length} certificates`);
+    console.warn(`[SSL Monitor] ⚠️  None of them matched domain: ${domain} (normalized: ${normalizedDomain})`);
+    
+    if (certificatesChecked.length > 0) {
+      console.warn(`[SSL Monitor] 📋 Summary of checked certificates:`);
+      certificatesChecked.forEach(cert => {
+        if (cert.error) {
+          console.warn(`  - ${cert.directory}: ERROR - ${cert.error}`);
+        } else {
+          console.warn(`  - ${cert.directory}: ${cert.domains.join(', ')} (${cert.matched ? '✅ MATCHED' : '❌ no match'})`);
+        }
+      });
+    }
+    
   } catch (error) {
-    console.error(`[SSL Monitor] Error searching for certificate: ${error.message}`);
+    console.error(`[SSL Monitor] ❌ ERROR searching for certificate: ${error.message}`);
     console.error(`[SSL Monitor] Error stack:`, error.stack);
     // If we can't read the directory, try to check if it exists
     try {
@@ -535,9 +604,12 @@ async function checkCertificate(domain) {
     const statusInfo = getCertificateStatus(daysUntilExpiry, 30);
 
     // Get all domains from certificate and save them all to DB
+    // CRITICAL: Certificate may be in a directory with a different name!
+    // We need to save the certificate for ALL domains it covers, not just the requested one
     const certDomains = await getCertificateDomains(certPath);
-    console.log(`[SSL Monitor] Certificate for ${domain} covers domains: ${certDomains.join(', ')}`);
+    console.log(`[SSL Monitor] Certificate for ${domain} covers ${certDomains.length} domains: ${certDomains.join(', ')}`);
     console.log(`[SSL Monitor] Certificate status: ${statusInfo.status}, days until expiry: ${daysUntilExpiry}`);
+    console.log(`[SSL Monitor] Certificate path: ${certPath} (directory name may differ from domain!)`);
 
     // Save certificate info for all domains covered by this certificate
     const certData = {
@@ -557,7 +629,12 @@ async function checkCertificate(domain) {
       renewalThreshold: 30
     };
 
-    // Update database for the requested domain
+    // IMPORTANT: Save certificate for ALL domains in the certificate
+    // This ensures that even if vhost directory name is different, 
+    // all domains will be found in the database
+    const savedDomains = [];
+    
+    // First, save for the requested domain (even if it's not in certDomains)
     const sslCert = await SSLCert.findOneAndUpdate(
       { domain },
       {
@@ -567,11 +644,27 @@ async function checkCertificate(domain) {
       },
       { upsert: true, new: true }
     );
-    console.log(`[SSL Monitor] Saved certificate for domain: ${domain} (status: ${sslCert.status})`);
+    savedDomains.push(domain);
+    console.log(`[SSL Monitor] ✅ Saved certificate for requested domain: ${domain} (status: ${sslCert.status})`);
 
-    // Also save for all other domains in the certificate (if they exist)
+    // Then save for ALL domains found in the certificate
     for (const certDomain of certDomains) {
-      if (certDomain.toLowerCase() !== domain.toLowerCase()) {
+      // Normalize both to avoid duplicates
+      const normalizedCertDomain = normalizeDomain(certDomain);
+      const normalizedRequestedDomain = normalizeDomain(domain);
+      
+      // Skip if it's the same domain (already saved above)
+      if (normalizedCertDomain === normalizedRequestedDomain) {
+        console.log(`[SSL Monitor] Skipping duplicate: ${certDomain} (same as requested domain ${domain})`);
+        continue;
+      }
+      
+      // Skip if we already saved this exact domain
+      if (certDomain.toLowerCase() === domain.toLowerCase()) {
+        continue;
+      }
+      
+      try {
         const savedCert = await SSLCert.findOneAndUpdate(
           { domain: certDomain },
           {
@@ -581,9 +674,42 @@ async function checkCertificate(domain) {
           },
           { upsert: true, new: true }
         );
-        console.log(`[SSL Monitor] Saved certificate for additional domain: ${certDomain} (status: ${savedCert.status})`);
+        savedDomains.push(certDomain);
+        console.log(`[SSL Monitor] ✅ Saved certificate for domain from cert: ${certDomain} (status: ${savedCert.status})`);
+      } catch (saveError) {
+        console.error(`[SSL Monitor] ❌ Error saving certificate for domain ${certDomain}: ${saveError.message}`);
       }
     }
+    
+    // Also save for www variants if they don't already exist
+    const wwwVariants = [
+      domain.startsWith('www.') ? domain.replace('www.', '') : `www.${domain}`,
+    ];
+    for (const variant of wwwVariants) {
+      if (!savedDomains.includes(variant)) {
+        // Check if this variant is in certDomains
+        const variantInCert = certDomains.some(d => normalizeDomain(d) === normalizeDomain(variant));
+        if (variantInCert || normalizeDomain(variant) === normalizedDomain) {
+          try {
+            const savedCert = await SSLCert.findOneAndUpdate(
+              { domain: variant },
+              {
+                domain: variant,
+                ...certData,
+                $inc: { checkCount: 1 }
+              },
+              { upsert: true, new: true }
+            );
+            savedDomains.push(variant);
+            console.log(`[SSL Monitor] ✅ Saved certificate for www variant: ${variant} (status: ${savedCert.status})`);
+          } catch (saveError) {
+            console.error(`[SSL Monitor] ❌ Error saving certificate for variant ${variant}: ${saveError.message}`);
+          }
+        }
+      }
+    }
+    
+    console.log(`[SSL Monitor] 📊 Saved certificate for ${savedDomains.length} domains: ${savedDomains.join(', ')}`);
 
     // Auto-renew if needed
     if (sslCert.autoRenew && statusInfo.isExpiringSoon && !statusInfo.isExpired) {
