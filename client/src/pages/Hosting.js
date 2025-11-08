@@ -320,11 +320,21 @@ const Hosting = () => {
                           </div>
                         </div>
                         {item.sslStatus && (
-                          <div className={`mb-4 p-3 rounded-lg border-2 ${item.sslStatus.isExpired ? 'border-red-300 bg-red-50' : item.sslStatus.isExpiringSoon ? 'border-yellow-300 bg-yellow-50' : 'border-green-300 bg-green-50'}`}>
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
+                          <div className={`mb-4 p-3 rounded-lg border-2 ${
+                            item.sslStatus.status === 'not_found' ? 'border-gray-300 bg-gray-50' :
+                            item.sslStatus.isExpired ? 'border-red-300 bg-red-50' : 
+                            item.sslStatus.isExpiringSoon ? 'border-yellow-300 bg-yellow-50' : 
+                            item.sslStatus.status === 'valid' ? 'border-green-300 bg-green-50' :
+                            'border-blue-300 bg-blue-50'
+                          }`}>
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-sm font-semibold text-gray-700">Certyfikat SSL:</span>
-                                {item.sslStatus.isExpired ? (
+                                {item.sslStatus.status === 'not_found' ? (
+                                  <span className="inline-flex items-center px-2 py-1 rounded text-xs font-bold bg-gray-100 text-gray-600 border border-gray-300">
+                                    ⚠️ Nie znaleziony
+                                  </span>
+                                ) : item.sslStatus.isExpired ? (
                                   <span className="inline-flex items-center px-2 py-1 rounded text-xs font-bold bg-red-100 text-red-700 border border-red-300">
                                     🔴 Wygasł
                                   </span>
@@ -332,15 +342,20 @@ const Hosting = () => {
                                   <span className="inline-flex items-center px-2 py-1 rounded text-xs font-bold bg-yellow-100 text-yellow-700 border border-yellow-300">
                                     ⚠️ Wygasa za {item.sslStatus.daysUntilExpiry} dni
                                   </span>
-                                ) : (
+                                ) : item.sslStatus.status === 'valid' && item.sslStatus.daysUntilExpiry !== null ? (
                                   <span className="inline-flex items-center px-2 py-1 rounded text-xs font-bold bg-green-100 text-green-700 border border-green-300">
                                     ✓ Ważny ({item.sslStatus.daysUntilExpiry} dni)
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2 py-1 rounded text-xs font-bold bg-blue-100 text-blue-700 border border-blue-300">
+                                    ℹ️ {item.sslStatus.status}
                                   </span>
                                 )}
                               </div>
                               <div className="text-xs text-gray-600">
-                                {item.sslStatus.validTo ? `Ważny do: ${format(new Date(item.sslStatus.validTo), 'dd.MM.yyyy')}` : 'Brak danych'}
+                                {item.sslStatus.validTo ? `Ważny do: ${format(new Date(item.sslStatus.validTo), 'dd.MM.yyyy')}` : item.sslStatus.status === 'not_found' ? 'Certyfikat nie został wykryty w systemie' : 'Brak danych'}
                                 {item.sslStatus.lastRenewedAt && ` • Ostatnia odnowa: ${format(new Date(item.sslStatus.lastRenewedAt), 'dd.MM.yyyy')}`}
+                                {item.sslStatus.lastCheckedAt && ` • Ostatnie sprawdzenie: ${format(new Date(item.sslStatus.lastCheckedAt), 'dd.MM.yyyy HH:mm')}`}
                               </div>
                             </div>
                           </div>

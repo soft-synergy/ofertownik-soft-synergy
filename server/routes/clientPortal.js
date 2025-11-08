@@ -5,6 +5,7 @@ const Hosting = require('../models/Hosting');
 const HostingMonitor = require('../models/HostingMonitor');
 const HostingCheck = require('../models/HostingCheck');
 const SSLCert = require('../models/SSLCert');
+const sslMonitor = require('../services/sslMonitor');
 
 const router = express.Router();
 
@@ -20,7 +21,34 @@ router.get('/:token', async (req, res) => {
     
     // Get SSL status for each hosting domain
     const hostingsWithSSL = await Promise.all(hostings.map(async (h) => {
-      const sslCert = await SSLCert.findOne({ domain: h.domain }).lean();
+      // Try to find SSL cert by exact domain match first
+      let sslCert = await SSLCert.findOne({ domain: h.domain }).lean();
+      
+      // If not found, try variations (www.domain, without www)
+      if (!sslCert) {
+        const domainVariations = [
+          h.domain,
+          h.domain.startsWith('www.') ? h.domain.replace('www.', '') : `www.${h.domain}`,
+        ];
+        
+        for (const variant of domainVariations) {
+          sslCert = await SSLCert.findOne({ domain: variant }).lean();
+          if (sslCert) break;
+        }
+      }
+      
+      // If still not found in DB, try to check certificate directly from filesystem
+      if (!sslCert) {
+        try {
+          // This will check the certificate and add it to DB if found
+          await sslMonitor.checkCertificate(h.domain);
+          // Try to find it again
+          sslCert = await SSLCert.findOne({ domain: h.domain }).lean();
+        } catch (e) {
+          console.log(`[ClientPortal] Could not check SSL for ${h.domain}:`, e.message);
+        }
+      }
+      
       return {
         ...h.toObject(),
         sslStatus: sslCert ? {
@@ -29,7 +57,13 @@ router.get('/:token', async (req, res) => {
           validTo: sslCert.validTo,
           isExpiringSoon: sslCert.isExpiringSoon,
           isExpired: sslCert.isExpired
-        } : null
+        } : {
+          status: 'not_found',
+          daysUntilExpiry: null,
+          validTo: null,
+          isExpiringSoon: false,
+          isExpired: false
+        }
       };
     }));
     
