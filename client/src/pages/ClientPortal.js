@@ -289,7 +289,7 @@ const ClientPortal = () => {
               <div className="h-1 w-12 bg-gradient-to-r from-gray-600 to-blue-600 rounded-full"></div>
               <h2 className="text-2xl font-bold text-gray-900">Hosting</h2>
             </div>
-            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
                 <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
                 <span className="text-xs text-gray-500 font-medium">Miesiąc raportu</span>
