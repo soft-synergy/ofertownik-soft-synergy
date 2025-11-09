@@ -180,7 +180,7 @@ const setupFollowUpReminderScheduler = () => {
     }
     try {
       await transporter.sendMail({
-        from: 'develop@soft-synergy.com',
+        from: 'development@soft-synergy.com',
         to,
         subject,
         html
