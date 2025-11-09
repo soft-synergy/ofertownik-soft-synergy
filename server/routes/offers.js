@@ -289,6 +289,7 @@ router.post('/generate/:projectId', auth, async (req, res) => {
       lang,
       t,
       // Project details
+      projectId: project._id.toString(),
       projectName: project.name,
       clientName: project.clientName,
       clientContact: project.clientContact,
@@ -746,6 +747,7 @@ router.get('/preview/:projectId', auth, async (req, res) => {
     const templateData = {
       lang,
       t,
+      projectId: project._id.toString(),
       projectName: project.name,
       clientName: project.clientName,
       clientContact: project.clientContact,
@@ -870,6 +872,7 @@ router.post('/generate-pdf/:projectId', auth, async (req, res) => {
       lang,
       t,
       // Project details
+      projectId: project._id.toString(),
       projectName: project.name,
       clientName: project.clientName,
       clientContact: project.clientContact,
@@ -2228,5 +2231,110 @@ router.get('/contract-draft/:projectId', auth, async (req, res) => {
   } catch (error) {
     console.error('Contract draft error:', error);
     res.status(500).json({ message: 'Błąd serwera podczas generowania szkicu umowy' });
+  }
+});
+
+// Public endpoint to accept offer (no auth required, but validates projectId)
+router.post('/accept/:projectId', async (req, res) => {
+  try {
+    const project = await Project.findById(req.params.projectId);
+    
+    if (!project) {
+      return res.status(404).json({ message: 'Projekt nie został znaleziony' });
+    }
+    
+    // Check if already accepted
+    if (project.status === 'accepted') {
+      return res.status(400).json({ message: 'Oferta została już zaakceptowana' });
+    }
+    
+    // Update project status
+    project.status = 'accepted';
+    await project.save();
+    
+    // Log activity
+    try {
+      await Activity.create({
+        action: 'project.accepted.via_offer',
+        entityType: 'project',
+        entityId: project._id,
+        author: null, // public acceptance
+        message: `Oferta "${project.name}" zaakceptowana przez klienta ${project.clientName} przez przycisk w ofercie`,
+        metadata: {
+          clientName: project.clientName,
+          clientEmail: project.clientEmail,
+          offerNumber: project.offerNumber
+        }
+      });
+    } catch (e) {
+      console.error('Activity logging error:', e);
+    }
+    
+    // Send email notification to info@soft-synergy.com
+    try {
+      const nodemailer = require('nodemailer');
+      const transportConfig = process.env.SMTP_HOST ? {
+        host: process.env.SMTP_HOST,
+        port: parseInt(process.env.SMTP_PORT || '587', 10),
+        secure: process.env.SMTP_SECURE === 'true',
+        auth: process.env.SMTP_USER ? {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS
+        } : undefined
+      } : null;
+
+      if (transportConfig) {
+        const transporter = nodemailer.createTransport(transportConfig);
+        const offerNumber = project.offerNumber || `SS/${new Date().getFullYear()}/${(new Date().getMonth()+1).toString().padStart(2, '0')}/${project._id.toString().slice(-4)}`;
+        
+        const emailSubject = `🚀 Oferta zaakceptowana: ${project.name} - ${offerNumber}`;
+        const emailHtml = `
+          <h2>Oferta została zaakceptowana!</h2>
+          <p><strong>Projekt:</strong> ${project.name}</p>
+          <p><strong>Numer oferty:</strong> ${offerNumber}</p>
+          <p><strong>Klient:</strong> ${project.clientName}</p>
+          <p><strong>Kontakt:</strong> ${project.clientContact}</p>
+          ${project.clientEmail ? `<p><strong>Email:</strong> ${project.clientEmail}</p>` : ''}
+          ${project.clientPhone ? `<p><strong>Telefon:</strong> ${project.clientPhone}</p>` : ''}
+          <p><strong>Data akceptacji:</strong> ${new Date().toLocaleString('pl-PL')}</p>
+          <hr>
+          <p><strong>Następne kroki:</strong></p>
+          <ol>
+            <li>Przygotuj umowę dla klienta</li>
+            <li>Skontaktuj się z klientem w celu omówienia szczegółów</li>
+            <li>Zaplanuj spotkanie kick-off</li>
+          </ol>
+          <p><a href="https://ofertownik.soft-synergy.com/projects/${project._id}">Przejdź do projektu w ofertowniku</a></p>
+        `;
+        
+        await transporter.sendMail({
+          from: process.env.SMTP_USER || 'noreply@soft-synergy.com',
+          to: 'info@soft-synergy.com',
+          subject: emailSubject,
+          html: emailHtml
+        });
+        
+        console.log(`Acceptance email sent to info@soft-synergy.com for project ${project._id}`);
+      } else {
+        console.log(`[Email] Would send acceptance notification to info@soft-synergy.com for project ${project._id}`);
+      }
+    } catch (emailError) {
+      console.error('Email sending error (non-blocking):', emailError);
+      // Don't fail the request if email fails
+    }
+    
+    res.json({ 
+      success: true,
+      message: 'Oferta została zaakceptowana pomyślnie',
+      project: {
+        _id: project._id,
+        name: project.name,
+        status: project.status,
+        offerNumber: project.offerNumber
+      }
+    });
+  } catch (error) {
+    console.error('Accept offer error:', error);
+    res.status(500).json({ message: 'Błąd serwera podczas akceptacji oferty' });
   }
 });

@@ -197,4 +197,11 @@ export const sslAPI = {
   discover: () => api.post('/api/ssl/discover').then(res => res.data),
   acknowledge: (domain) => api.post(`/api/ssl/${domain}/acknowledge`).then(res => res.data),
   addDomain: (domain, autoRenew = true, renewalThreshold = 30) => api.post('/api/ssl', { domain, autoRenew, renewalThreshold }).then(res => res.data)
+};
+
+export const waitlistAPI = {
+  signup: (data) => api.post('/api/waitlist', data).then(res => res.data),
+  getAll: (params) => api.get('/api/waitlist', { params }).then(res => res.data),
+  update: (id, data) => api.patch(`/api/waitlist/${id}`, data).then(res => res.data),
+  delete: (id) => api.delete(`/api/waitlist/${id}`).then(res => res.data),
 }; 

@@ -14,6 +14,7 @@ const hostingRoutes = require('./routes/hosting');
 const clientsRoutes = require('./routes/clients');
 const clientPortalRoutes = require('./routes/clientPortal');
 const sslRoutes = require('./routes/ssl');
+const waitlistRoutes = require('./routes/waitlist');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -106,6 +107,7 @@ app.use('/api/hosting', hostingRoutes);
 app.use('/api/clients', clientsRoutes);
 app.use('/api/client-portal', clientPortalRoutes);
 app.use('/api/ssl', sslRoutes);
+app.use('/api/waitlist', waitlistRoutes);
 
 // Activities endpoint (recent)
 const Activity = require('./models/Activity');
