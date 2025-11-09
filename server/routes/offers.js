@@ -2325,14 +2325,14 @@ router.post('/accept/:projectId', async (req, res) => {
         `;
         
         const mailOptions = {
-          from: process.env.SMTP_USER,
+          from: 'development@soft-synergy.com',
           to: 'info@soft-synergy.com',
           subject: emailSubject,
           html: emailHtml
         };
         
         const info = await transporter.sendMail(mailOptions);
-        console.log(`[Accept Offer] Email sent successfully to info@soft-synergy.com for project ${project._id}`);
+        console.log(`[Accept Offer] Email sent successfully from development@soft-synergy.com to info@soft-synergy.com for project ${project._id}`);
         console.log(`[Accept Offer] Message ID: ${info.messageId}`);
       }
     } catch (emailError) {

@@ -178,14 +178,14 @@ const setupFollowUpReminderScheduler = () => {
       console.log(`[Reminder] SMTP not configured - check SMTP_HOST, SMTP_USER, SMTP_PASS in .env`);
       return;
     }
-    try {
-      await transporter.sendMail({
-        from: 'development@soft-synergy.com',
-        to,
-        subject,
-        html
-      });
-      console.log(`[Reminder] Email sent successfully to ${to}: ${subject}`);
+      try {
+        await transporter.sendMail({
+          from: 'development@soft-synergy.com',
+          to,
+          subject,
+          html
+        });
+        console.log(`[Reminder] Email sent successfully from development@soft-synergy.com to ${to}: ${subject}`);
     } catch (emailError) {
       console.error(`[Reminder] Email sending error to ${to}:`, emailError);
       throw emailError;
