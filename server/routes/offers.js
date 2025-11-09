@@ -2324,59 +2324,16 @@ router.post('/accept/:projectId', async (req, res) => {
           <p><a href="https://ofertownik.soft-synergy.com/projects/${project._id}">Przejdź do projektu w ofertowniku</a></p>
         `;
         
-        // Use SMTP_USER as from address (Brevo requires verified sender)
-        const fromEmail = process.env.SMTP_USER;
-        
-        // For Brevo, you can optionally add a display name
-        const fromWithName = `Soft Synergy Ofertownik <${fromEmail}>`;
-        
         const mailOptions = {
-          from: fromWithName,
+          from: process.env.SMTP_USER,
           to: 'info@soft-synergy.com',
           subject: emailSubject,
-          html: emailHtml,
-          // Add headers for better deliverability
-          headers: {
-            'X-Mailer': 'Ofertownik Soft Synergy',
-            'X-Priority': '1',
-            'Importance': 'high'
-          }
+          html: emailHtml
         };
         
-        console.log(`[Accept Offer] SMTP Config:`, {
-          host: process.env.SMTP_HOST,
-          port: parseInt(process.env.SMTP_PORT || '587', 10),
-          from: fromEmail,
-          to: 'info@soft-synergy.com'
-        });
-        
-        console.log(`[Accept Offer] Sending email from ${fromWithName} to info@soft-synergy.com`);
         const info = await transporter.sendMail(mailOptions);
-        
         console.log(`[Accept Offer] Email sent successfully to info@soft-synergy.com for project ${project._id}`);
         console.log(`[Accept Offer] Message ID: ${info.messageId}`);
-        console.log(`[Accept Offer] Full response:`, JSON.stringify(info, null, 2));
-        
-        // Check SMTP response codes
-        if (info.response) {
-          const responseCode = info.response.match(/\d{3}/)?.[0];
-          console.log(`[Accept Offer] SMTP Response Code: ${responseCode}`);
-          
-          if (responseCode === '250' || responseCode === '250-OK' || info.response.includes('250')) {
-            console.log(`[Accept Offer] ✓ Email accepted by SMTP server (250 OK)`);
-          } else {
-            console.warn(`[Accept Offer] ⚠ Unexpected SMTP response code: ${responseCode}`);
-            console.warn(`[Accept Offer] Full response: ${info.response}`);
-          }
-        }
-        
-        // Important: Check Brevo dashboard for email status
-        console.log(`[Accept Offer] ⚠ IMPORTANT: Check Brevo dashboard to verify email was actually sent`);
-        console.log(`[Accept Offer] ⚠ If email not received, check:`);
-        console.log(`[Accept Offer]   1. Brevo dashboard -> Transactional emails`);
-        console.log(`[Accept Offer]   2. Spam folder`);
-        console.log(`[Accept Offer]   3. Domain verification in Brevo`);
-        console.log(`[Accept Offer]   4. Sender verification in Brevo`);
       }
     } catch (emailError) {
       console.error('[Accept Offer] Email sending error:', emailError);
