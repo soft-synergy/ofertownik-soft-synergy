@@ -179,15 +179,45 @@ const setupFollowUpReminderScheduler = () => {
       return;
     }
     try {
-      await transporter.sendMail({
+      const fromEmail = process.env.SMTP_USER || 'noreply@soft-synergy.com';
+      const fromWithName = `Soft Synergy Ofertownik <${fromEmail}>`;
+      
+      const mailOptions = {
         from: 'development@soft-synergy.com',
         to,
         subject,
-        html
-      });
+        html,
+        headers: {
+          'X-Mailer': 'Ofertownik Soft Synergy',
+          'X-Priority': '1',
+          'Importance': 'high'
+        }
+      };
+      
+      console.log(`[Reminder] Sending email from ${fromWithName} to ${to}`);
+      const info = await transporter.sendMail(mailOptions);
       console.log(`[Reminder] Email sent successfully to ${to}: ${subject}`);
+      console.log(`[Reminder] Message ID: ${info.messageId}`);
+      console.log(`[Reminder] Response: ${info.response}`);
+      
+      // Check SMTP response
+      if (info.response) {
+        const responseCode = info.response.match(/\d{3}/)?.[0];
+        if (responseCode === '250' || info.response.includes('250')) {
+          console.log(`[Reminder] ✓ Email accepted by SMTP server (250 OK)`);
+        } else {
+          console.warn(`[Reminder] ⚠ Unexpected SMTP response: ${info.response}`);
+        }
+      }
     } catch (emailError) {
       console.error(`[Reminder] Email sending error to ${to}:`, emailError);
+      console.error(`[Reminder] Error details:`, {
+        message: emailError.message,
+        code: emailError.code,
+        command: emailError.command,
+        response: emailError.response,
+        responseCode: emailError.responseCode
+      });
       throw emailError;
     }
   };
