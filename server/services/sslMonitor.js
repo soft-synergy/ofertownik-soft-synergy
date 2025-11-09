@@ -3,6 +3,7 @@ const { promisify } = require('util');
 const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
+const tls = require('tls');
 const SSLCert = require('../models/SSLCert');
 
 const execAsync = promisify(exec);
@@ -10,6 +11,135 @@ const execAsync = promisify(exec);
 // Standard Let's Encrypt paths
 const LETSENCRYPT_BASE = '/etc/letsencrypt/live';
 const CERTBOT_PATH = '/usr/bin/certbot'; // Standard path for certbot
+
+/**
+ * Check certificate by connecting to domain over network
+ * This is the primary method - doesn't rely on filesystem
+ */
+async function checkCertificateOverNetwork(domain, port = 443) {
+  return new Promise((resolve, reject) => {
+    const options = {
+      host: domain,
+      port: port,
+      rejectUnauthorized: false, // We want to check the cert even if it's expired
+      servername: domain, // SNI
+    };
+
+    const socket = tls.connect(options, () => {
+      const cert = socket.getPeerCertificate(true);
+      
+      if (!cert || !cert.valid_to) {
+        socket.destroy();
+        return reject(new Error('No certificate received'));
+      }
+
+      const result = {
+        validFrom: new Date(cert.valid_from),
+        validTo: new Date(cert.valid_to),
+        issuer: cert.issuer ? JSON.stringify(cert.issuer) : null,
+        subject: cert.subject ? JSON.stringify(cert.subject) : null,
+        subjectaltname: cert.subjectaltname || null,
+        serialNumber: cert.serialNumber || null,
+        fingerprint: cert.fingerprint256 || cert.fingerprint || null,
+      };
+
+      socket.destroy();
+      resolve(result);
+    });
+
+    socket.on('error', (error) => {
+      socket.destroy();
+      reject(error);
+    });
+
+    socket.setTimeout(10000, () => {
+      socket.destroy();
+      reject(new Error('Connection timeout'));
+    });
+  });
+}
+
+/**
+ * Get certificate domains from network certificate
+ */
+function extractDomainsFromCertificate(certInfo) {
+  const domains = new Set();
+  
+  // Extract from subject
+  if (certInfo.subject) {
+    try {
+      const subject = typeof certInfo.subject === 'string' ? JSON.parse(certInfo.subject) : certInfo.subject;
+      if (subject.CN) {
+        domains.add(subject.CN);
+      }
+    } catch (e) {
+      // Try to extract CN from string format
+      const cnMatch = certInfo.subject.match(/CN=([^,]+)/);
+      if (cnMatch) {
+        domains.add(cnMatch[1].trim());
+      }
+    }
+  }
+  
+  // Extract from subjectAltName
+  if (certInfo.subjectaltname) {
+    // Format: "DNS:domain1.com, DNS:domain2.com"
+    const sanMatches = certInfo.subjectaltname.matchAll(/DNS:([^,\s]+)/gi);
+    for (const match of sanMatches) {
+      if (match[1]) {
+        domains.add(match[1].trim());
+      }
+    }
+  }
+  
+  return Array.from(domains).filter(d => d && d.length > 0);
+}
+
+/**
+ * Check certificate using openssl s_client (alternative method)
+ */
+async function checkCertificateWithOpenSSL(domain, port = 443) {
+  try {
+    // Use openssl s_client to get certificate
+    const command = `echo | openssl s_client -servername ${domain} -connect ${domain}:${port} -showcerts 2>/dev/null | openssl x509 -noout -dates -subject -issuer -serial -fingerprint -sha256`;
+    
+    const { stdout } = await execAsync(command, { timeout: 15000 });
+    
+    const lines = stdout.split('\n');
+    const result = {
+      validFrom: null,
+      validTo: null,
+      issuer: null,
+      subject: null,
+      serialNumber: null,
+      fingerprint: null,
+    };
+
+    for (const line of lines) {
+      if (line.startsWith('notBefore=')) {
+        result.validFrom = new Date(line.replace('notBefore=', '').trim());
+      } else if (line.startsWith('notAfter=')) {
+        result.validTo = new Date(line.replace('notAfter=', '').trim());
+      } else if (line.startsWith('subject=')) {
+        result.subject = line.replace('subject=', '').trim();
+      } else if (line.startsWith('issuer=')) {
+        result.issuer = line.replace('issuer=', '').trim();
+      } else if (line.startsWith('serial=')) {
+        result.serialNumber = line.replace('serial=', '').trim();
+      } else if (line.startsWith('SHA256 Fingerprint=')) {
+        result.fingerprint = line.replace('SHA256 Fingerprint=', '').trim();
+      }
+    }
+
+    if (!result.validTo) {
+      throw new Error('Could not extract certificate dates');
+    }
+
+    return result;
+  } catch (error) {
+    throw new Error(`OpenSSL check failed: ${error.message}`);
+  }
+}
 
 /**
  * Check if certificate file exists
@@ -562,62 +692,116 @@ async function renewCertificate(domain) {
 
 /**
  * Check certificate for a single domain
+ * PRIMARY METHOD: Check over network (doesn't rely on filesystem)
+ * FALLBACK: Try filesystem if network check fails
  */
 async function checkCertificate(domain) {
   try {
     console.log(`[SSL Monitor] Checking certificate for domain: ${domain}`);
     
-    // Find certificate path - this scans all certificates
-    const certPath = await findCertificatePath(domain);
+    let certInfo = null;
+    let certPath = null;
+    let certDomains = [];
+    let checkMethod = 'unknown';
     
-    if (!certPath) {
-      console.warn(`[SSL Monitor] Certificate not found for domain: ${domain}`);
-      // Update database with not found status
-      await SSLCert.findOneAndUpdate(
-        { domain },
-        {
-          domain,
-          certificatePath: null,
-          status: 'not_found',
-          isExpired: false,
-          isExpiringSoon: false,
-          lastCheckedAt: new Date(),
-          lastError: 'Certificate file not found',
-          $inc: { checkCount: 1 }
-        },
-        { upsert: true, new: true }
-      );
+    // PRIMARY METHOD: Check certificate over network (recommended)
+    try {
+      console.log(`[SSL Monitor] Attempting network check for ${domain}...`);
+      certInfo = await checkCertificateOverNetwork(domain);
+      certDomains = extractDomainsFromCertificate(certInfo);
+      checkMethod = 'network';
+      console.log(`[SSL Monitor] ✅ Network check successful for ${domain}`);
+      console.log(`[SSL Monitor] Certificate valid to: ${certInfo.validTo}`);
+      console.log(`[SSL Monitor] Certificate domains: ${certDomains.join(', ')}`);
+    } catch (networkError) {
+      console.log(`[SSL Monitor] Network check failed, trying OpenSSL s_client...`);
       
-      return {
-        domain,
-        status: 'not_found',
-        error: 'Certificate file not found',
-        certificatePath: null
-      };
+      // FALLBACK 1: Try openssl s_client
+      try {
+        certInfo = await checkCertificateWithOpenSSL(domain);
+        // For OpenSSL method, we need to extract domains differently
+        if (certInfo.subject) {
+          const cnMatch = certInfo.subject.match(/CN=([^,/\n]+)/);
+          if (cnMatch) {
+            certDomains.push(cnMatch[1].trim());
+          }
+        }
+        checkMethod = 'openssl_network';
+        console.log(`[SSL Monitor] ✅ OpenSSL network check successful for ${domain}`);
+      } catch (opensslError) {
+        console.log(`[SSL Monitor] OpenSSL network check failed, trying filesystem...`);
+        
+        // FALLBACK 2: Try filesystem (if we have access)
+        try {
+          certPath = await findCertificatePath(domain);
+          if (certPath) {
+            certInfo = await readCertificate(certPath);
+            certDomains = await getCertificateDomains(certPath);
+            checkMethod = 'filesystem';
+            console.log(`[SSL Monitor] ✅ Filesystem check successful for ${domain}`);
+          } else {
+            throw new Error('Certificate not found in filesystem');
+          }
+        } catch (fsError) {
+          console.error(`[SSL Monitor] All check methods failed for ${domain}`);
+          throw new Error(`All certificate check methods failed: Network: ${networkError.message}, OpenSSL: ${opensslError.message}, Filesystem: ${fsError.message}`);
+        }
+      }
     }
     
-    console.log(`[SSL Monitor] Certificate found at: ${certPath}`);
+    if (!certInfo || !certInfo.validTo) {
+      throw new Error('Could not extract certificate information');
+    }
     
-    // Read and parse certificate
-    const certInfo = await readCertificate(certPath);
-    const daysUntilExpiry = getDaysUntilExpiry(certInfo.validTo);
+    // Convert validTo to Date if it's a string
+    const validToDate = certInfo.validTo instanceof Date ? certInfo.validTo : new Date(certInfo.validTo);
+    const validFromDate = certInfo.validFrom instanceof Date ? certInfo.validFrom : new Date(certInfo.validFrom);
+    
+    const daysUntilExpiry = getDaysUntilExpiry(validToDate.toISOString());
     const statusInfo = getCertificateStatus(daysUntilExpiry, 30);
 
-    // Get all domains from certificate and save them all to DB
-    // CRITICAL: Certificate may be in a directory with a different name!
-    // We need to save the certificate for ALL domains it covers, not just the requested one
-    const certDomains = await getCertificateDomains(certPath);
-    console.log(`[SSL Monitor] Certificate for ${domain} covers ${certDomains.length} domains: ${certDomains.join(', ')}`);
+    // For OpenSSL method, try to get full domain list if we don't have it
+    if (checkMethod === 'openssl_network' && certDomains.length === 0 && certInfo.subject) {
+      // Try to get full certificate text with SAN
+      try {
+        const { stdout } = await execAsync(`echo | openssl s_client -servername ${domain} -connect ${domain}:443 -showcerts 2>/dev/null | openssl x509 -noout -text`, { timeout: 15000 });
+        const sanMatches = stdout.matchAll(/DNS:([^,\s\n]+)/gi);
+        for (const match of sanMatches) {
+          if (match[1]) {
+            certDomains.push(match[1].trim());
+          }
+        }
+      } catch (e) {
+        // Ignore
+      }
+    }
+
+    console.log(`[SSL Monitor] Certificate for ${domain} covers ${certDomains.length} domains: ${certDomains.join(', ') || 'none extracted'}`);
     console.log(`[SSL Monitor] Certificate status: ${statusInfo.status}, days until expiry: ${daysUntilExpiry}`);
-    console.log(`[SSL Monitor] Certificate path: ${certPath} (directory name may differ from domain!)`);
+    console.log(`[SSL Monitor] Check method: ${checkMethod}`);
+    if (certPath) {
+      console.log(`[SSL Monitor] Certificate path: ${certPath}`);
+    }
+
+    // Ensure we have at least the requested domain in the list
+    if (certDomains.length === 0) {
+      certDomains = [domain];
+    } else {
+      // Add the requested domain if it's not already in the list
+      const normalizedRequested = normalizeDomain(domain);
+      const hasRequestedDomain = certDomains.some(d => normalizeDomain(d) === normalizedRequested);
+      if (!hasRequestedDomain) {
+        certDomains.push(domain);
+      }
+    }
 
     // Save certificate info for all domains covered by this certificate
     const certData = {
-      certificatePath: certPath,
-      issuer: certInfo.issuer,
-      subject: certInfo.subject,
-      validFrom: new Date(certInfo.validFrom),
-      validTo: new Date(certInfo.validTo),
+      certificatePath: certPath || null,
+      issuer: typeof certInfo.issuer === 'string' ? certInfo.issuer : JSON.stringify(certInfo.issuer),
+      subject: typeof certInfo.subject === 'string' ? certInfo.subject : JSON.stringify(certInfo.subject),
+      validFrom: validFromDate,
+      validTo: validToDate,
       daysUntilExpiry,
       status: statusInfo.status,
       isExpired: statusInfo.isExpired,
@@ -711,15 +895,35 @@ async function checkCertificate(domain) {
     
     console.log(`[SSL Monitor] 📊 Saved certificate for ${savedDomains.length} domains: ${savedDomains.join(', ')}`);
 
-    // Auto-renew if needed
+    // Auto-renew if needed (based on daysUntilExpiry from database)
     if (sslCert.autoRenew && statusInfo.isExpiringSoon && !statusInfo.isExpired) {
       try {
-        console.log(`[SSL Monitor] Auto-renewing certificate for ${domain} (expires in ${daysUntilExpiry} days)`);
+        console.log(`[SSL Monitor] 🔄 Auto-renewing certificate for ${domain} (expires in ${daysUntilExpiry} days)`);
         const renewalResult = await renewCertificate(domain);
         
-        // Re-check certificate after renewal
-        const renewedCertInfo = await readCertificate(certPath);
-        const renewedDaysUntilExpiry = getDaysUntilExpiry(renewedCertInfo.validTo);
+        // Wait a bit for renewal to complete
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+        // Re-check certificate after renewal (use network check)
+        let renewedCertInfo;
+        try {
+          renewedCertInfo = await checkCertificateOverNetwork(domain);
+        } catch (networkError) {
+          // Fallback to OpenSSL
+          try {
+            renewedCertInfo = await checkCertificateWithOpenSSL(domain);
+          } catch (opensslError) {
+            // If network check fails, try filesystem
+            if (certPath) {
+              renewedCertInfo = await readCertificate(certPath);
+            } else {
+              throw new Error('Could not re-check certificate after renewal');
+            }
+          }
+        }
+        
+        const renewedValidTo = renewedCertInfo.validTo instanceof Date ? renewedCertInfo.validTo : new Date(renewedCertInfo.validTo);
+        const renewedDaysUntilExpiry = getDaysUntilExpiry(renewedValidTo.toISOString());
         const renewedStatusInfo = getCertificateStatus(renewedDaysUntilExpiry, 30);
 
         await SSLCert.findOneAndUpdate(
@@ -727,8 +931,8 @@ async function checkCertificate(domain) {
           {
             lastRenewedAt: new Date(),
             lastRenewalError: null,
-            validFrom: new Date(renewedCertInfo.validFrom),
-            validTo: new Date(renewedCertInfo.validTo),
+            validFrom: renewedCertInfo.validFrom instanceof Date ? renewedCertInfo.validFrom : new Date(renewedCertInfo.validFrom),
+            validTo: renewedValidTo,
             daysUntilExpiry: renewedDaysUntilExpiry,
             status: renewedStatusInfo.status,
             isExpired: renewedStatusInfo.isExpired,
@@ -739,13 +943,14 @@ async function checkCertificate(domain) {
         );
 
         // Reload web server if needed (nginx, apache, etc.)
-        // This is optional and depends on your setup
         try {
           await execAsync('sudo systemctl reload nginx', { timeout: 10000 });
-          console.log(`[SSL Monitor] Nginx reloaded after certificate renewal for ${domain}`);
+          console.log(`[SSL Monitor] ✅ Nginx reloaded after certificate renewal for ${domain}`);
         } catch (reloadError) {
-          console.warn(`[SSL Monitor] Could not reload nginx: ${reloadError.message}`);
+          console.warn(`[SSL Monitor] ⚠️  Could not reload nginx: ${reloadError.message}`);
         }
+
+        console.log(`[SSL Monitor] ✅ Certificate renewed successfully for ${domain}. New expiry: ${renewedDaysUntilExpiry} days`);
 
         return {
           domain,
@@ -756,6 +961,7 @@ async function checkCertificate(domain) {
           ...renewedCertInfo
         };
       } catch (renewalError) {
+        console.error(`[SSL Monitor] ❌ Error renewing certificate for ${domain}:`, renewalError.message);
         await SSLCert.findOneAndUpdate(
           { domain },
           {
@@ -810,19 +1016,27 @@ async function checkCertificate(domain) {
 
 /**
  * Check all certificates in database
+ * This runs periodically and checks all monitored domains
+ * Uses network-based checking (doesn't rely on filesystem)
  */
 async function checkAllCertificates() {
   const certificates = await SSLCert.find({});
+  console.log(`[SSL Monitor] 🔍 Checking ${certificates.length} monitored certificates...`);
   const results = [];
 
   for (const cert of certificates) {
     try {
+      console.log(`[SSL Monitor] Checking ${cert.domain}...`);
       const result = await checkCertificate(cert.domain);
       results.push(result);
+      
+      // Note: Auto-renewal is handled inside checkCertificate
+      // if daysUntilExpiry <= renewalThreshold
+      
       // Small delay between checks to avoid overwhelming the system
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 2000));
     } catch (error) {
-      console.error(`[SSL Monitor] Error checking certificate ${cert.domain}:`, error);
+      console.error(`[SSL Monitor] ❌ Error checking certificate ${cert.domain}:`, error);
       results.push({
         domain: cert.domain,
         status: 'error',
@@ -831,6 +1045,7 @@ async function checkAllCertificates() {
     }
   }
 
+  console.log(`[SSL Monitor] ✅ Completed checking ${results.length} certificates`);
   return results;
 }
 
@@ -1013,40 +1228,36 @@ function start(intervalMs = 24 * 60 * 60 * 1000) { // Default: once per day
     return;
   }
 
-  console.log('[SSL Monitor] Inicjalizacja monitora SSL...');
+  console.log('[SSL Monitor] 🚀 Inicjalizacja monitora SSL (database-based tracking)...');
+  console.log('[SSL Monitor] 💡 Tip: Add domains to monitoring using POST /api/ssl endpoint');
   
-  // Initialize certificates on start
-  initializeCertificates()
-    .then((domains) => {
-      console.log(`[SSL Monitor] Znaleziono ${domains.length} certyfikatów: ${domains.join(', ')}`);
-    })
-    .catch((error) => {
-      console.error('[SSL Monitor] Błąd podczas inicjalizacji:', error);
-    });
-
   // Run initial check after 10 seconds
+  // This checks all domains already in the database (network-based)
   setTimeout(async () => {
-    console.log('[SSL Monitor] Uruchamianie pierwszego sprawdzenia certyfikatów...');
+    console.log('[SSL Monitor] 🔍 Uruchamianie pierwszego sprawdzenia certyfikatów...');
     try {
       await checkAllCertificates();
-      console.log('[SSL Monitor] Pierwsze sprawdzenie zakończone');
+      console.log('[SSL Monitor] ✅ Pierwsze sprawdzenie zakończone');
     } catch (error) {
-      console.error('[SSL Monitor] Błąd podczas pierwszego sprawdzenia:', error);
+      console.error('[SSL Monitor] ❌ Błąd podczas pierwszego sprawdzenia:', error);
     }
   }, 10000);
 
-  // Set up periodic checks
+  // Set up periodic checks (checks all domains in database)
   intervalHandle = setInterval(async () => {
-    console.log('[SSL Monitor] Sprawdzanie certyfikatów SSL...');
+    console.log('[SSL Monitor] 🔄 Sprawdzanie certyfikatów SSL (scheduled check)...');
     try {
       await checkAllCertificates();
-      console.log('[SSL Monitor] Sprawdzanie zakończone');
+      console.log('[SSL Monitor] ✅ Sprawdzanie zakończone');
     } catch (error) {
-      console.error('[SSL Monitor] Błąd podczas sprawdzania:', error);
+      console.error('[SSL Monitor] ❌ Błąd podczas sprawdzania:', error);
     }
   }, intervalMs);
 
-  console.log(`[SSL Monitor] Monitor SSL uruchomiony (sprawdzanie co ${intervalMs / 1000 / 60} minut)`);
+  const intervalMinutes = Math.round(intervalMs / 1000 / 60);
+  const intervalHours = Math.round(intervalMinutes / 60);
+  console.log(`[SSL Monitor] ✅ Monitor SSL uruchomiony (sprawdzanie co ${intervalHours}h / ${intervalMinutes}min)`);
+  console.log(`[SSL Monitor] 📊 Monitoring domains from database (use POST /api/ssl to add domains)`);
 }
 
 /**
@@ -1083,6 +1294,9 @@ module.exports = {
   getCertbotPath,
   findCertificatePath,
   getCertificateDomains,
-  scanNginxConfigs
+  scanNginxConfigs,
+  checkCertificateOverNetwork,
+  checkCertificateWithOpenSSL,
+  extractDomainsFromCertificate
 };
 

@@ -6,7 +6,6 @@ import {
   ArrowLeft, 
   Plus, 
   Trash2,
-  Upload,
   Image
 } from 'lucide-react';
 import { portfolioAPI } from '../services/api';
@@ -125,6 +124,22 @@ const PortfolioForm = () => {
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (file) {
+      // Check file size (10MB limit)
+      const maxSize = 10 * 1024 * 1024; // 10MB
+      if (file.size > maxSize) {
+        toast.error('Plik jest zbyt duży. Maksymalny rozmiar to 10MB.');
+        e.target.value = ''; // Reset input
+        return;
+      }
+      
+      // Check file type
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      if (!allowedTypes.includes(file.type)) {
+        toast.error('Tylko pliki obrazów (JPG, PNG, WEBP) są dozwolone.');
+        e.target.value = ''; // Reset input
+        return;
+      }
+      
       setFormData(prev => ({
         ...prev,
         image: file
@@ -437,7 +452,7 @@ const PortfolioForm = () => {
                     <p className="pl-1">lub przeciągnij i upuść</p>
                   </div>
                   <p className="text-xs text-gray-500">
-                    PNG, JPG, WEBP do 5MB
+                    PNG, JPG, WEBP do 10MB
                     {isEditing && imagePreview && (
                       <span className="block text-green-600">Obecne zdjęcie zostanie zachowane</span>
                     )}

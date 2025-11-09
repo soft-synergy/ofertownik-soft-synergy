@@ -36,7 +36,7 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB limit
+    fileSize: 10 * 1024 * 1024 // 10MB limit
   },
   fileFilter: (req, file, cb) => {
     console.log('Multer fileFilter called for:', file.originalname);
@@ -53,6 +53,34 @@ const upload = multer({
     }
   }
 }).single('image');
+
+// Wrapper for multer upload to handle errors properly
+const uploadMiddleware = (req, res, next) => {
+  upload(req, res, (err) => {
+    if (err) {
+      console.error('Multer error:', err);
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ 
+          message: 'Plik jest zbyt duży. Maksymalny rozmiar to 10MB.' 
+        });
+      }
+      if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+        return res.status(400).json({ 
+          message: 'Nieoczekiwane pole pliku' 
+        });
+      }
+      if (err.message) {
+        return res.status(400).json({ 
+          message: err.message 
+        });
+      }
+      return res.status(400).json({ 
+        message: 'Błąd podczas przetwarzania pliku' 
+      });
+    }
+    next();
+  });
+};
 
 // Get API documentation
 router.get('/documentation', (req, res) => {
@@ -141,7 +169,7 @@ router.get('/documentation', (req, res) => {
           projectLink: 'string (optional, URL)',
           apiLink: 'string (optional, URL)',
           documentationLink: 'string (optional, URL)',
-          image: 'file (required, jpeg|jpg|png|webp, max 5MB)',
+          image: 'file (required, jpeg|jpg|png|webp, max 10MB)',
           isActive: 'boolean (optional, default: true)'
         }
       },
@@ -163,7 +191,7 @@ router.get('/documentation', (req, res) => {
           projectLink: 'string (optional, URL)',
           apiLink: 'string (optional, URL)',
           documentationLink: 'string (optional, URL)',
-          image: 'file (optional, jpeg|jpg|png|webp, max 5MB)',
+          image: 'file (optional, jpeg|jpg|png|webp, max 10MB)',
           isActive: 'boolean (optional)'
         }
       },
@@ -254,7 +282,7 @@ router.get('/:id', async (req, res) => {
 router.post('/', [
   auth,
   requireRole(['admin', 'manager']),
-  upload,
+  uploadMiddleware,
   body('title').trim().isLength({ min: 3 }),
   body('description').trim().isLength({ min: 10 }),
   body('category').isIn(['web', 'mobile', 'desktop', 'api', 'other'])
@@ -264,21 +292,13 @@ router.post('/', [
     console.log('File:', req.file);
     console.log('Body:', req.body);
     
-    // Handle multer errors
-    if (req.fileValidationError) {
-      return res.status(400).json({ message: req.fileValidationError });
-    }
-    
-    if (req.fileError) {
-      return res.status(400).json({ message: req.fileError });
-    }
-    
     if (!req.file) {
       return res.status(400).json({ message: 'Obraz jest wymagany' });
     }
     
     console.log('File saved successfully:', req.file.filename);
     console.log('File path:', req.file.path);
+    console.log('File size:', req.file.size, 'bytes');
   
   try {
     const errors = validationResult(req);
@@ -350,7 +370,7 @@ router.post('/', [
 router.put('/:id', [
   auth,
   requireRole(['admin', 'manager']),
-  upload,
+  uploadMiddleware,
   body('title').trim().isLength({ min: 3 }),
   body('description').trim().isLength({ min: 10 }),
   body('category').isIn(['web', 'mobile', 'desktop', 'api', 'other'])

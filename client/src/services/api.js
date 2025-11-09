@@ -69,12 +69,24 @@ export const portfolioAPI = {
   getById: (id) => api.get(`/api/portfolio/${id}`).then(res => res.data),
   create: (data) => {
     // If data is FormData, let browser set the Content-Type header automatically
-    const config = data instanceof FormData ? { headers: {} } : {};
+    // Increase timeout and maxContentLength for file uploads
+    const config = data instanceof FormData ? { 
+      headers: {},
+      timeout: 60000, // 60 seconds for file uploads
+      maxContentLength: 15 * 1024 * 1024, // 15MB
+      maxBodyLength: 15 * 1024 * 1024 // 15MB
+    } : {};
     return api.post('/api/portfolio', data, config).then(res => res.data);
   },
   update: (id, data) => {
     // If data is FormData, let browser set the Content-Type header automatically
-    const config = data instanceof FormData ? { headers: {} } : {};
+    // Increase timeout and maxContentLength for file uploads
+    const config = data instanceof FormData ? { 
+      headers: {},
+      timeout: 60000, // 60 seconds for file uploads
+      maxContentLength: 15 * 1024 * 1024, // 15MB
+      maxBodyLength: 15 * 1024 * 1024 // 15MB
+    } : {};
     return api.put(`/api/portfolio/${id}`, data, config).then(res => res.data);
   },
   delete: (id) => api.delete(`/api/portfolio/${id}`).then(res => res.data),
@@ -141,5 +153,6 @@ export const sslAPI = {
   renew: (domain) => api.post(`/api/ssl/renew/${domain}`).then(res => res.data),
   getStats: () => api.get('/api/ssl/stats/summary').then(res => res.data),
   discover: () => api.post('/api/ssl/discover').then(res => res.data),
-  acknowledge: (domain) => api.post(`/api/ssl/${domain}/acknowledge`).then(res => res.data)
+  acknowledge: (domain) => api.post(`/api/ssl/${domain}/acknowledge`).then(res => res.data),
+  addDomain: (domain, autoRenew = true, renewalThreshold = 30) => api.post('/api/ssl', { domain, autoRenew, renewalThreshold }).then(res => res.data)
 }; 

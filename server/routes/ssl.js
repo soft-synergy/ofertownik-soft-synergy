@@ -210,7 +210,7 @@ router.post('/renew/:domain', auth, async (req, res) => {
   }
 });
 
-// Add or update certificate domain
+// Add or update certificate domain (primary method - adds domain to monitoring)
 router.post('/', auth, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
@@ -223,22 +223,43 @@ router.post('/', auth, async (req, res) => {
       return res.status(400).json({ message: 'Domena jest wymagana' });
     }
 
+    console.log(`[SSL API] Adding domain to monitoring: ${domain}`);
+
+    // Check certificate immediately (this will add it to DB with current status)
+    // Uses network check - doesn't rely on filesystem
+    let checkResult;
+    try {
+      checkResult = await sslMonitor.checkCertificate(domain);
+      console.log(`[SSL API] Certificate check result for ${domain}: ${checkResult.status}`);
+    } catch (checkError) {
+      console.error(`[SSL API] Error checking certificate for ${domain}:`, checkError.message);
+      // Even if check fails, we still want to add it to monitoring
+      // It will be checked again during next scheduled check
+      checkResult = {
+        domain,
+        status: 'error',
+        error: checkError.message
+      };
+    }
+
+    // Update or create certificate entry
     const certificate = await SSLCert.findOneAndUpdate(
       { domain },
       {
         domain,
         autoRenew: autoRenew !== undefined ? autoRenew : true,
-        renewalThreshold: renewalThreshold || 30
+        renewalThreshold: renewalThreshold || 30,
+        // Update status from check if available
+        ...(checkResult.status && { status: checkResult.status }),
+        ...(checkResult.error && { lastError: checkResult.error })
       },
       { upsert: true, new: true }
     );
 
-    // Check certificate immediately
-    await sslMonitor.checkCertificate(domain);
-
     res.json({
-      message: 'Certyfikat dodany/zaktualizowany',
-      certificate
+      message: 'Domena dodana do monitoringu SSL',
+      certificate,
+      checkResult
     });
   } catch (error) {
     console.error('Error adding SSL certificate:', error);

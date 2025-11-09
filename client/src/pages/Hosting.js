@@ -264,6 +264,28 @@ const Hosting = () => {
               <span className="hidden sm:inline">Skanuj SSL</span>
             </button>
           )}
+          <button
+            onClick={async () => {
+              const domain = prompt('Podaj domenę do monitorowania SSL:');
+              if (domain && domain.trim()) {
+                toast.loading('Dodawanie domeny do monitoringu...');
+                try {
+                  await sslAPI.addDomain(domain.trim());
+                  toast.dismiss();
+                  toast.success(`Domena ${domain.trim()} dodana do monitoringu SSL`);
+                  queryClient.invalidateQueries('hosting');
+                } catch (e) {
+                  toast.dismiss();
+                  toast.error(e.response?.data?.error || e.response?.data?.message || e.message || 'Błąd podczas dodawania domeny');
+                }
+              }
+            }}
+            className="px-3 py-2 text-sm rounded border text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+            title="Dodaj domenę do monitoringu SSL (sprawdzanie przez sieć)"
+          >
+            <Shield className="h-4 w-4" />
+            <span className="hidden sm:inline">Dodaj SSL</span>
+          </button>
         </div>
       </div>
 
