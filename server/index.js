@@ -178,16 +178,28 @@ const setupFollowUpReminderScheduler = () => {
       console.log(`[Reminder] SMTP not configured - check SMTP_HOST, SMTP_USER, SMTP_PASS in .env`);
       return;
     }
-      try {
-        await transporter.sendMail({
-          from: 'development@soft-synergy.com',
-          to,
-          subject,
-          html
-        });
-        console.log(`[Reminder] Email sent successfully from development@soft-synergy.com to ${to}: ${subject}`);
+    try {
+      // Verify transporter configuration before sending (same as accept offer endpoint)
+      await transporter.verify();
+      
+      const mailOptions = {
+        from: 'development@soft-synergy.com',
+        to,
+        subject,
+        html
+      };
+      
+      const info = await transporter.sendMail(mailOptions);
+      console.log(`[Reminder] Email sent successfully from development@soft-synergy.com to ${to}: ${subject}`);
+      console.log(`[Reminder] Message ID: ${info.messageId}`);
     } catch (emailError) {
       console.error(`[Reminder] Email sending error to ${to}:`, emailError);
+      console.error(`[Reminder] Error details:`, {
+        message: emailError.message,
+        code: emailError.code,
+        command: emailError.command,
+        response: emailError.response
+      });
       throw emailError;
     }
   };
