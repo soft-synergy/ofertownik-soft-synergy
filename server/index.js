@@ -18,6 +18,12 @@ const sslRoutes = require('./routes/ssl');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Increase server timeout for file uploads (5 minutes)
+app.timeout = 300000; // 5 minutes in milliseconds
+if (app.server) {
+  app.server.timeout = 300000;
+}
+
 // Security middleware
 app.use(helmet({
   contentSecurityPolicy: {
@@ -55,8 +61,10 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // Body parsing middleware
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Note: These parsers should NOT process multipart/form-data (multer handles that)
+// But we increase limits to match file upload limits
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
 // Static files with CORS headers
 const setCorsHeaders = (req, res, next) => {

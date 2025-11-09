@@ -36,10 +36,15 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB limit
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+    fieldSize: 10 * 1024 * 1024, // 10MB for fields
+    fields: 50, // Maximum number of non-file fields
+    fieldNameSize: 100, // Maximum field name size
+    files: 1 // Maximum number of file fields
   },
   fileFilter: (req, file, cb) => {
     console.log('Multer fileFilter called for:', file.originalname);
+    console.log('File mimetype:', file.mimetype);
     const allowedTypes = /jpeg|jpg|png|webp/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
@@ -56,9 +61,16 @@ const upload = multer({
 
 // Wrapper for multer upload to handle errors properly
 const uploadMiddleware = (req, res, next) => {
+  console.log('Upload middleware called');
+  console.log('Content-Type:', req.headers['content-type']);
+  console.log('Content-Length:', req.headers['content-length']);
+  
   upload(req, res, (err) => {
     if (err) {
       console.error('Multer error:', err);
+      console.error('Multer error code:', err.code);
+      console.error('Multer error message:', err.message);
+      
       if (err.code === 'LIMIT_FILE_SIZE') {
         return res.status(400).json({ 
           message: 'Plik jest zbyt duży. Maksymalny rozmiar to 10MB.' 
@@ -78,6 +90,7 @@ const uploadMiddleware = (req, res, next) => {
         message: 'Błąd podczas przetwarzania pliku' 
       });
     }
+    console.log('Upload middleware success, file:', req.file);
     next();
   });
 };
@@ -282,23 +295,36 @@ router.get('/:id', async (req, res) => {
 router.post('/', [
   auth,
   requireRole(['admin', 'manager']),
+  (req, res, next) => {
+    // Increase timeout for this specific route (5 minutes)
+    req.setTimeout(300000);
+    res.setTimeout(300000);
+    next();
+  },
   uploadMiddleware,
   body('title').trim().isLength({ min: 3 }),
   body('description').trim().isLength({ min: 10 }),
   body('category').isIn(['web', 'mobile', 'desktop', 'api', 'other'])
 ], async (req, res) => {
-      console.log('POST /portfolio - Request received');
-    console.log('Files:', req.files);
-    console.log('File:', req.file);
-    console.log('Body:', req.body);
-    
-    if (!req.file) {
-      return res.status(400).json({ message: 'Obraz jest wymagany' });
-    }
-    
-    console.log('File saved successfully:', req.file.filename);
-    console.log('File path:', req.file.path);
-    console.log('File size:', req.file.size, 'bytes');
+  console.log('POST /portfolio - Request received');
+  console.log('Request headers:', {
+    'content-type': req.headers['content-type'],
+    'content-length': req.headers['content-length'],
+    'content-encoding': req.headers['content-encoding']
+  });
+  console.log('Files:', req.files);
+  console.log('File:', req.file);
+  console.log('Body:', req.body);
+  
+  if (!req.file) {
+    console.log('No file received in request');
+    return res.status(400).json({ message: 'Obraz jest wymagany' });
+  }
+  
+  console.log('File saved successfully:', req.file.filename);
+  console.log('File path:', req.file.path);
+  console.log('File size:', req.file.size, 'bytes');
+  console.log('File mimetype:', req.file.mimetype);
   
   try {
     const errors = validationResult(req);
@@ -370,6 +396,12 @@ router.post('/', [
 router.put('/:id', [
   auth,
   requireRole(['admin', 'manager']),
+  (req, res, next) => {
+    // Increase timeout for this specific route (5 minutes)
+    req.setTimeout(300000);
+    res.setTimeout(300000);
+    next();
+  },
   uploadMiddleware,
   body('title').trim().isLength({ min: 3 }),
   body('description').trim().isLength({ min: 10 }),

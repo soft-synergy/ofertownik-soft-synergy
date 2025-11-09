@@ -2,7 +2,7 @@ import axios from 'axios';
 
 export const api = axios.create({
   baseURL: process.env.REACT_APP_API_URL || 'https://oferty.soft-synergy.com',
-  timeout: 10000,
+  timeout: 300000, // 5 minutes default timeout (increased for file uploads)
   headers: {
     'Content-Type': 'application/json',
   },
@@ -70,24 +70,66 @@ export const portfolioAPI = {
   create: (data) => {
     // If data is FormData, let browser set the Content-Type header automatically
     // Increase timeout and maxContentLength for file uploads
-    const config = data instanceof FormData ? { 
-      headers: {},
-      timeout: 60000, // 60 seconds for file uploads
-      maxContentLength: 15 * 1024 * 1024, // 15MB
-      maxBodyLength: 15 * 1024 * 1024 // 15MB
-    } : {};
-    return api.post('/api/portfolio', data, config).then(res => res.data);
+    if (data instanceof FormData) {
+      // Create a new axios instance with extended timeout for file uploads
+      const uploadAxios = axios.create({
+        baseURL: process.env.REACT_APP_API_URL || 'https://oferty.soft-synergy.com',
+        timeout: 300000, // 5 minutes for large file uploads
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+      });
+      
+      // Add auth token to upload requests
+      uploadAxios.interceptors.request.use((config) => {
+        const token = localStorage.getItem('token');
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+        // Remove Content-Type for FormData to let browser set it with boundary
+        if (config.data instanceof FormData) {
+          delete config.headers['Content-Type'];
+        }
+        return config;
+      });
+      
+      return uploadAxios.post('/api/portfolio', data).then(res => res.data);
+    }
+    return api.post('/api/portfolio', data).then(res => res.data);
   },
   update: (id, data) => {
     // If data is FormData, let browser set the Content-Type header automatically
     // Increase timeout and maxContentLength for file uploads
-    const config = data instanceof FormData ? { 
-      headers: {},
-      timeout: 60000, // 60 seconds for file uploads
-      maxContentLength: 15 * 1024 * 1024, // 15MB
-      maxBodyLength: 15 * 1024 * 1024 // 15MB
-    } : {};
-    return api.put(`/api/portfolio/${id}`, data, config).then(res => res.data);
+    if (data instanceof FormData) {
+      // Create a new axios instance with extended timeout for file uploads
+      const uploadAxios = axios.create({
+        baseURL: process.env.REACT_APP_API_URL || 'https://oferty.soft-synergy.com',
+        timeout: 300000, // 5 minutes for large file uploads
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+      });
+      
+      // Add auth token to upload requests
+      uploadAxios.interceptors.request.use((config) => {
+        const token = localStorage.getItem('token');
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+        // Remove Content-Type for FormData to let browser set it with boundary
+        if (config.data instanceof FormData) {
+          delete config.headers['Content-Type'];
+        }
+        return config;
+      });
+      
+      return uploadAxios.put(`/api/portfolio/${id}`, data).then(res => res.data);
+    }
+    return api.put(`/api/portfolio/${id}`, data).then(res => res.data);
   },
   delete: (id) => api.delete(`/api/portfolio/${id}`).then(res => res.data),
   updateOrder: (id, order) => api.put(`/api/portfolio/${id}/order`, { order }).then(res => res.data),

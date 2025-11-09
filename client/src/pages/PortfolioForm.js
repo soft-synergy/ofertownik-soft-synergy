@@ -47,8 +47,20 @@ const PortfolioForm = () => {
       navigate('/portfolio');
     },
     onError: (error) => {
-      console.error('Create portfolio error:', error.response?.data);
-      toast.error(error.response?.data?.message || 'Błąd podczas tworzenia elementu portfolio');
+      console.error('Create portfolio error:', error);
+      console.error('Error response:', error.response);
+      console.error('Error message:', error.message);
+      console.error('Error code:', error.code);
+      
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        toast.error('Przesyłanie pliku trwa zbyt długo. Spróbuj ponownie lub zmniejsz rozmiar pliku.');
+      } else if (error.message === 'Network Error' || error.code === 'ERR_NETWORK') {
+        toast.error('Błąd połączenia z serwerem. Sprawdź połączenie internetowe.');
+      } else if (error.response?.data?.message) {
+        toast.error(error.response.data.message);
+      } else {
+        toast.error(error.message || 'Błąd podczas tworzenia elementu portfolio');
+      }
     }
   });
 
@@ -62,8 +74,20 @@ const PortfolioForm = () => {
         navigate('/portfolio');
       },
       onError: (error) => {
-        console.error('Update portfolio error:', error.response?.data);
-        toast.error(error.response?.data?.message || 'Błąd podczas aktualizacji elementu portfolio');
+        console.error('Update portfolio error:', error);
+        console.error('Error response:', error.response);
+        console.error('Error message:', error.message);
+        console.error('Error code:', error.code);
+        
+        if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+          toast.error('Przesyłanie pliku trwa zbyt długo. Spróbuj ponownie lub zmniejsz rozmiar pliku.');
+        } else if (error.message === 'Network Error' || error.code === 'ERR_NETWORK') {
+          toast.error('Błąd połączenia z serwerem. Sprawdź połączenie internetowe.');
+        } else if (error.response?.data?.message) {
+          toast.error(error.response.data.message);
+        } else {
+          toast.error(error.message || 'Błąd podczas aktualizacji elementu portfolio');
+        }
       }
     }
   );
