@@ -138,30 +138,58 @@ const setupFollowUpReminderScheduler = () => {
   const Project = require('./models/Project');
 
   // Configure transport from env or fallback to log-only
-  const transportConfig = process.env.SMTP_HOST ? {
+  const transportConfig = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS ? {
     host: process.env.SMTP_HOST,
     port: parseInt(process.env.SMTP_PORT || '587', 10),
     secure: process.env.SMTP_SECURE === 'true',
-    auth: process.env.SMTP_USER ? {
+    auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS
-    } : undefined
+    }
   } : null;
 
-  const transporter = transportConfig ? nodemailer.createTransport(transportConfig) : null;
+  if (!transportConfig) {
+    console.warn('[SMTP] SMTP not configured - emails will not be sent');
+    console.warn('[SMTP] Required env variables: SMTP_HOST, SMTP_USER, SMTP_PASS');
+    console.warn('[SMTP] Optional env variables: SMTP_PORT (default: 587), SMTP_SECURE (default: false)');
+  } else {
+    console.log('[SMTP] SMTP configured:', {
+      host: process.env.SMTP_HOST,
+      port: parseInt(process.env.SMTP_PORT || '587', 10),
+      secure: process.env.SMTP_SECURE === 'true',
+      user: process.env.SMTP_USER
+    });
+  }
 
-  const sendEmail = async (subject, html) => {
-    const to = 'jakub.czajka@soft-synergy.com';
+  const transporter = transportConfig ? nodemailer.createTransport(transportConfig) : null;
+  
+  // Verify SMTP connection on startup if configured
+  if (transporter) {
+    transporter.verify().then(() => {
+      console.log('[SMTP] Connection verified successfully');
+    }).catch((err) => {
+      console.error('[SMTP] Connection verification failed:', err);
+    });
+  }
+
+  const sendEmail = async (subject, html, to = 'info@soft-synergy.com') => {
     if (!transporter) {
       console.log(`[Reminder] Would send email to ${to}: ${subject}`);
+      console.log(`[Reminder] SMTP not configured - check SMTP_HOST, SMTP_USER, SMTP_PASS in .env`);
       return;
     }
-    await transporter.sendMail({
-      from: 'development@soft-synergy.com',
-      to,
-      subject,
-      html
-    });
+    try {
+      await transporter.sendMail({
+        from: process.env.SMTP_USER || 'noreply@soft-synergy.com',
+        to,
+        subject,
+        html
+      });
+      console.log(`[Reminder] Email sent successfully to ${to}: ${subject}`);
+    } catch (emailError) {
+      console.error(`[Reminder] Email sending error to ${to}:`, emailError);
+      throw emailError;
+    }
   };
 
   const runCheck = async () => {

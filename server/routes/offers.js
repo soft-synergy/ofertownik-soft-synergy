@@ -2273,18 +2273,35 @@ router.post('/accept/:projectId', async (req, res) => {
     // Send email notification to info@soft-synergy.com
     try {
       const nodemailer = require('nodemailer');
-      const transportConfig = process.env.SMTP_HOST ? {
-        host: process.env.SMTP_HOST,
-        port: parseInt(process.env.SMTP_PORT || '587', 10),
-        secure: process.env.SMTP_SECURE === 'true',
-        auth: process.env.SMTP_USER ? {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS
-        } : undefined
-      } : null;
+      
+      // Check if SMTP is configured
+      const smtpHost = process.env.SMTP_HOST;
+      const smtpUser = process.env.SMTP_USER;
+      const smtpPass = process.env.SMTP_PASS;
+      
+      if (!smtpHost || !smtpUser || !smtpPass) {
+        console.error('[Accept Offer] SMTP not configured - missing required variables:');
+        console.error(`[Accept Offer] SMTP_HOST: ${smtpHost ? '✓' : '✗'}`);
+        console.error(`[Accept Offer] SMTP_USER: ${smtpUser ? '✓' : '✗'}`);
+        console.error(`[Accept Offer] SMTP_PASS: ${smtpPass ? '✓' : '✗'}`);
+        console.log(`[Accept Offer] Would send email to info@soft-synergy.com for project ${project._id}`);
+      } else {
+        const transportConfig = {
+          host: process.env.SMTP_HOST,
+          port: parseInt(process.env.SMTP_PORT || '587', 10),
+          secure: process.env.SMTP_SECURE === 'true',
+          auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS
+          }
+        };
 
-      if (transportConfig) {
         const transporter = nodemailer.createTransport(transportConfig);
+        
+        // Verify transporter configuration
+        await transporter.verify();
+        console.log('[Accept Offer] SMTP connection verified successfully');
+        
         const offerNumber = project.offerNumber || `SS/${new Date().getFullYear()}/${(new Date().getMonth()+1).toString().padStart(2, '0')}/${project._id.toString().slice(-4)}`;
         
         const emailSubject = `🚀 Oferta zaakceptowana: ${project.name} - ${offerNumber}`;
@@ -2307,20 +2324,26 @@ router.post('/accept/:projectId', async (req, res) => {
           <p><a href="https://ofertownik.soft-synergy.com/projects/${project._id}">Przejdź do projektu w ofertowniku</a></p>
         `;
         
-        await transporter.sendMail({
-          from: process.env.SMTP_USER || 'noreply@soft-synergy.com',
+        const mailOptions = {
+          from: process.env.SMTP_USER,
           to: 'info@soft-synergy.com',
           subject: emailSubject,
           html: emailHtml
-        });
+        };
         
-        console.log(`Acceptance email sent to info@soft-synergy.com for project ${project._id}`);
-      } else {
-        console.log(`[Email] Would send acceptance notification to info@soft-synergy.com for project ${project._id}`);
+        const info = await transporter.sendMail(mailOptions);
+        console.log(`[Accept Offer] Email sent successfully to info@soft-synergy.com for project ${project._id}`);
+        console.log(`[Accept Offer] Message ID: ${info.messageId}`);
       }
     } catch (emailError) {
-      console.error('Email sending error (non-blocking):', emailError);
-      // Don't fail the request if email fails
+      console.error('[Accept Offer] Email sending error:', emailError);
+      console.error('[Accept Offer] Error details:', {
+        message: emailError.message,
+        code: emailError.code,
+        command: emailError.command,
+        response: emailError.response
+      });
+      // Don't fail the request if email fails, but log it clearly
     }
     
     res.json({ 
