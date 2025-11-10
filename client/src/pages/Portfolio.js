@@ -264,6 +264,9 @@ const Portfolio = () => {
   };
 
   const handleDragEnd = (e) => {
+    // Restore opacity
+    e.currentTarget.style.opacity = '';
+    
     // Clean up any visual states
     const allItems = document.querySelectorAll('.drag-over');
     allItems.forEach(item => {
