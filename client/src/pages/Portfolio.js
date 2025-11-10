@@ -13,55 +13,30 @@ import {
   Settings,
   GripVertical
 } from 'lucide-react';
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from '@dnd-kit/core';
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  rectSortingStrategy,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import { portfolioAPI } from '../services/api';
 import toast from 'react-hot-toast';
 
-// Sortable Portfolio Item Component
-const SortablePortfolioItem = ({ item, getCategoryIcon, getCategoryLabel, handleDelete, handleToggleStatus }) => {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: item._id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  };
-
+// Sortable Portfolio Item Component using native HTML5 drag and drop
+const SortablePortfolioItem = ({ item, index, getCategoryIcon, getCategoryLabel, handleDelete, handleToggleStatus, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd, isDragging, dragIndex }) => {
   const CategoryIcon = getCategoryIcon(item.category);
+  const isBeingDragged = isDragging && dragIndex === index;
 
   return (
     <div
-      ref={setNodeRef}
-      style={style}
-      className={`card hover:shadow-md transition-shadow duration-200 ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+      draggable
+      onDragStart={(e) => onDragStart(e, index)}
+      onDragOver={(e) => onDragOver(e, index)}
+      onDragLeave={onDragLeave}
+      onDrop={(e) => onDrop(e, index)}
+      onDragEnd={onDragEnd}
+      className={`card hover:shadow-md transition-all duration-200 cursor-move ${
+        isBeingDragged ? 'opacity-50 scale-95 border-2 border-blue-500' : ''
+      }`}
     >
       <div className="flex items-start space-x-3">
         <div
-          {...attributes}
-          {...listeners}
           className="mt-2 p-1 text-gray-400 hover:text-gray-600 cursor-grab active:cursor-grabbing"
+          style={{ touchAction: 'none' }}
         >
           <GripVertical className="h-5 w-5" />
         </div>
@@ -169,15 +144,10 @@ const Portfolio = () => {
   });
 
   const [portfolioItems, setPortfolioItems] = useState([]);
+  const [draggedIndex, setDraggedIndex] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const queryClient = useQueryClient();
-
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
 
   const { data: portfolio, isLoading } = useQuery(
     ['portfolio', filters],
@@ -223,34 +193,86 @@ const Portfolio = () => {
     }
   });
 
-  const handleDragEnd = (event) => {
-    const { active, over } = event;
+  // Native HTML5 drag and drop handlers
+  const handleDragStart = (e, index) => {
+    setDraggedIndex(index);
+    setIsDragging(true);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', index.toString());
+    // Make the dragged element semi-transparent
+    e.currentTarget.style.opacity = '0.5';
+  };
 
-    if (!over || active.id === over.id) {
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    
+    if (draggedIndex === null || draggedIndex === index) {
       return;
     }
 
-    setPortfolioItems((items) => {
-      const oldIndex = items.findIndex(item => item._id === active.id);
-      const newIndex = items.findIndex(item => item._id === over.id);
-      
-      if (oldIndex === -1 || newIndex === -1) {
-        return items;
-      }
-      
-      const newItems = arrayMove(items, oldIndex, newIndex);
-      
-      // Update order values based on new positions
-      const updates = newItems.map((item, index) => ({
-        id: item._id,
-        order: index
-      }));
-      
-      // Save new order to backend
-      updateOrderMutation.mutate(updates);
-      
-      return newItems;
+    // Visual feedback only - don't update state here to avoid flickering
+    const targetElement = e.currentTarget;
+    if (!targetElement.classList.contains('drag-over')) {
+      targetElement.classList.add('drag-over');
+      targetElement.style.borderTop = '3px solid #3b82f6';
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    const targetElement = e.currentTarget;
+    targetElement.classList.remove('drag-over');
+    targetElement.style.borderTop = '';
+  };
+
+  const handleDrop = (e, dropIndex) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const targetElement = e.currentTarget;
+    targetElement.classList.remove('drag-over');
+    targetElement.style.borderTop = '';
+    
+    if (draggedIndex === null || draggedIndex === dropIndex) {
+      setIsDragging(false);
+      setDraggedIndex(null);
+      return;
+    }
+
+    // Reorder items
+    const newItems = [...portfolioItems];
+    const draggedItem = newItems[draggedIndex];
+    
+    // Remove from old position
+    newItems.splice(draggedIndex, 1);
+    // Insert at new position
+    newItems.splice(dropIndex, 0, draggedItem);
+    
+    setPortfolioItems(newItems);
+    
+    // Update order values based on new positions
+    const updates = newItems.map((item, idx) => ({
+      id: item._id,
+      order: idx
+    }));
+    
+    // Save new order to backend
+    updateOrderMutation.mutate(updates);
+    
+    setIsDragging(false);
+    setDraggedIndex(null);
+  };
+
+  const handleDragEnd = (e) => {
+    // Clean up any visual states
+    const allItems = document.querySelectorAll('.drag-over');
+    allItems.forEach(item => {
+      item.classList.remove('drag-over');
+      item.style.borderTop = '';
     });
+    
+    setIsDragging(false);
+    setDraggedIndex(null);
   };
 
   const getCategoryIcon = (category) => {
@@ -355,30 +377,27 @@ const Portfolio = () => {
         </div>
       </div>
 
-      {/* Portfolio Grid with Drag and Drop */}
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
-      >
-        <SortableContext
-          items={portfolioItems.map(item => item._id)}
-          strategy={rectSortingStrategy}
-        >
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {portfolioItems.map((item) => (
-              <SortablePortfolioItem
-                key={item._id}
-                item={item}
-                getCategoryIcon={getCategoryIcon}
-                getCategoryLabel={getCategoryLabel}
-                handleDelete={handleDelete}
-                handleToggleStatus={handleToggleStatus}
-              />
-            ))}
-          </div>
-        </SortableContext>
-      </DndContext>
+      {/* Portfolio Grid with Native HTML5 Drag and Drop */}
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {portfolioItems.map((item, index) => (
+          <SortablePortfolioItem
+            key={item._id}
+            item={item}
+            index={index}
+            getCategoryIcon={getCategoryIcon}
+            getCategoryLabel={getCategoryLabel}
+            handleDelete={handleDelete}
+            handleToggleStatus={handleToggleStatus}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onDragEnd={handleDragEnd}
+            isDragging={isDragging}
+            dragIndex={draggedIndex}
+          />
+        ))}
+      </div>
       
       {portfolioItems?.length === 0 && (
         <div className="text-center py-12">
