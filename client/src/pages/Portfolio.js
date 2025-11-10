@@ -5,7 +5,6 @@ import {
   Plus, 
   Edit, 
   Trash2, 
-  Eye,
   Image as ImageIcon,
   Globe,
   Smartphone,
