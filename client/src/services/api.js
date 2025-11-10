@@ -133,6 +133,7 @@ export const portfolioAPI = {
   },
   delete: (id) => api.delete(`/api/portfolio/${id}`).then(res => res.data),
   updateOrder: (id, order) => api.put(`/api/portfolio/${id}/order`, { order }).then(res => res.data),
+  updateOrderBatch: (updates) => api.put('/api/portfolio/order/batch', { updates }).then(res => res.data),
   toggleStatus: (id) => api.patch(`/api/portfolio/${id}/toggle`).then(res => res.data),
 };
 

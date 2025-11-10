@@ -11,10 +11,157 @@ import {
   Smartphone,
   Monitor,
   Code,
-  Settings
+  Settings,
+  GripVertical
 } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  rectSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { portfolioAPI } from '../services/api';
 import toast from 'react-hot-toast';
+
+// Sortable Portfolio Item Component
+const SortablePortfolioItem = ({ item, getCategoryIcon, getCategoryLabel, handleDelete, handleToggleStatus }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: item._id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  const CategoryIcon = getCategoryIcon(item.category);
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`card hover:shadow-md transition-shadow duration-200 ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+    >
+      <div className="flex items-start space-x-3">
+        <div
+          {...attributes}
+          {...listeners}
+          className="mt-2 p-1 text-gray-400 hover:text-gray-600 cursor-grab active:cursor-grabbing"
+        >
+          <GripVertical className="h-5 w-5" />
+        </div>
+        <div className="flex-1">
+          <div className="aspect-w-16 aspect-h-9 mb-4">
+            <img
+              src={item.image?.startsWith('http') ? item.image : `${process.env.REACT_APP_API_URL || 'https://oferty.soft-synergy.com'}${item.image?.startsWith('/') ? item.image : '/' + item.image}`}
+              alt={item.title}
+              className="w-full h-48 object-cover rounded-lg"
+              onError={(e) => {
+                e.target.src = 'https://via.placeholder.com/400x300?text=No+Image';
+              }}
+            />
+          </div>
+          
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <CategoryIcon className="h-4 w-4 text-gray-400" />
+                <span className="text-xs text-gray-500">
+                  {getCategoryLabel(item.category)}
+                </span>
+              </div>
+              <button
+                onClick={() => handleToggleStatus(item._id)}
+                className={`text-xs px-2 py-1 rounded-full ${
+                  item.isActive 
+                    ? 'bg-green-100 text-green-800' 
+                    : 'bg-gray-100 text-gray-800'
+                }`}
+              >
+                {item.isActive ? 'Aktywny' : 'Nieaktywny'}
+              </button>
+            </div>
+            
+            <div>
+              <h3 className="font-medium text-gray-900">{item.title}</h3>
+              <p className="text-sm text-gray-600 mt-1">{item.description}</p>
+            </div>
+            
+            {item.client && (
+              <div className="text-sm text-gray-500">
+                <span className="font-medium">Klient:</span> {item.client}
+              </div>
+            )}
+            
+            {item.duration && (
+              <div className="text-sm text-gray-500">
+                <span className="font-medium">Czas realizacji:</span> {item.duration}
+              </div>
+            )}
+            
+            {item.results && (
+              <div className="text-sm text-gray-500">
+                <span className="font-medium">Wyniki:</span> {item.results}
+              </div>
+            )}
+            
+            {item.technologies && item.technologies.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {item.technologies.map((tech, index) => (
+                  <span
+                    key={index}
+                    className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800"
+                  >
+                    {tech}
+                  </span>
+                ))}
+              </div>
+            )}
+            
+            <div className="flex items-center justify-between pt-3 border-t border-gray-200">
+              <div className="text-xs text-gray-500">
+                Utworzył: {item.createdBy?.firstName} {item.createdBy?.lastName}
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <Link
+                  to={`/portfolio/${item._id}/edit`}
+                  className="p-1 text-gray-400 hover:text-blue-600"
+                  title="Edytuj"
+                >
+                  <Edit className="h-4 w-4" />
+                </Link>
+                <button
+                  onClick={() => handleDelete(item._id)}
+                  className="p-1 text-gray-400 hover:text-red-600"
+                  title="Usuń"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const Portfolio = () => {
   const [filters, setFilters] = useState({
@@ -22,11 +169,25 @@ const Portfolio = () => {
     active: 'true'
   });
 
+  const [portfolioItems, setPortfolioItems] = useState([]);
+
   const queryClient = useQueryClient();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   const { data: portfolio, isLoading } = useQuery(
     ['portfolio', filters],
-    () => portfolioAPI.getAll(filters)
+    () => portfolioAPI.getAll(filters),
+    {
+      onSuccess: (data) => {
+        setPortfolioItems(data || []);
+      }
+    }
   );
 
   const deleteMutation = useMutation(portfolioAPI.delete, {
@@ -48,6 +209,50 @@ const Portfolio = () => {
       toast.error('Błąd podczas aktualizacji statusu');
     }
   });
+
+  const updateOrderMutation = useMutation(portfolioAPI.updateOrderBatch, {
+    onSuccess: () => {
+      toast.success('Kolejność portfolio została zaktualizowana');
+      queryClient.invalidateQueries('portfolio');
+    },
+    onError: (error) => {
+      toast.error('Błąd podczas aktualizacji kolejności');
+      // Revert to original order on error
+      if (portfolio) {
+        setPortfolioItems([...portfolio]);
+      }
+    }
+  });
+
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    setPortfolioItems((items) => {
+      const oldIndex = items.findIndex(item => item._id === active.id);
+      const newIndex = items.findIndex(item => item._id === over.id);
+      
+      if (oldIndex === -1 || newIndex === -1) {
+        return items;
+      }
+      
+      const newItems = arrayMove(items, oldIndex, newIndex);
+      
+      // Update order values based on new positions
+      const updates = newItems.map((item, index) => ({
+        id: item._id,
+        order: index
+      }));
+      
+      // Save new order to backend
+      updateOrderMutation.mutate(updates);
+      
+      return newItems;
+    });
+  };
 
   const getCategoryIcon = (category) => {
     const icons = {
@@ -151,108 +356,32 @@ const Portfolio = () => {
         </div>
       </div>
 
-      {/* Portfolio Grid */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {portfolio?.map((item) => {
-          const CategoryIcon = getCategoryIcon(item.category);
-          return (
-            <div key={item._id} className="card hover:shadow-md transition-shadow duration-200">
-              <div className="aspect-w-16 aspect-h-9 mb-4">
-                <img
-                  src={item.image?.startsWith('http') ? item.image : `${process.env.REACT_APP_API_URL || 'https://oferty.soft-synergy.com'}${item.image?.startsWith('/') ? item.image : '/' + item.image}`}
-                  alt={item.title}
-                  className="w-full h-48 object-cover rounded-lg"
-                  onError={(e) => {
-                    e.target.src = 'https://via.placeholder.com/400x300?text=No+Image';
-                  }}
-                />
-              </div>
-              
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <CategoryIcon className="h-4 w-4 text-gray-400" />
-                    <span className="text-xs text-gray-500">
-                      {getCategoryLabel(item.category)}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => handleToggleStatus(item._id)}
-                    className={`text-xs px-2 py-1 rounded-full ${
-                      item.isActive 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-gray-100 text-gray-800'
-                    }`}
-                  >
-                    {item.isActive ? 'Aktywny' : 'Nieaktywny'}
-                  </button>
-                </div>
-                
-                <div>
-                  <h3 className="font-medium text-gray-900">{item.title}</h3>
-                  <p className="text-sm text-gray-600 mt-1">{item.description}</p>
-                </div>
-                
-                {item.client && (
-                  <div className="text-sm text-gray-500">
-                    <span className="font-medium">Klient:</span> {item.client}
-                  </div>
-                )}
-                
-                {item.duration && (
-                  <div className="text-sm text-gray-500">
-                    <span className="font-medium">Czas realizacji:</span> {item.duration}
-                  </div>
-                )}
-                
-                {item.results && (
-                  <div className="text-sm text-gray-500">
-                    <span className="font-medium">Wyniki:</span> {item.results}
-                  </div>
-                )}
-                
-                {item.technologies && item.technologies.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {item.technologies.map((tech, index) => (
-                      <span
-                        key={index}
-                        className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800"
-                      >
-                        {tech}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                
-                <div className="flex items-center justify-between pt-3 border-t border-gray-200">
-                  <div className="text-xs text-gray-500">
-                    Utworzył: {item.createdBy?.firstName} {item.createdBy?.lastName}
-                  </div>
-                  
-                  <div className="flex items-center space-x-2">
-                    <Link
-                      to={`/portfolio/${item._id}/edit`}
-                      className="p-1 text-gray-400 hover:text-blue-600"
-                      title="Edytuj"
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Link>
-                    <button
-                      onClick={() => handleDelete(item._id)}
-                      className="p-1 text-gray-400 hover:text-red-600"
-                      title="Usuń"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      {/* Portfolio Grid with Drag and Drop */}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext
+          items={portfolioItems.map(item => item._id)}
+          strategy={rectSortingStrategy}
+        >
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {portfolioItems.map((item) => (
+              <SortablePortfolioItem
+                key={item._id}
+                item={item}
+                getCategoryIcon={getCategoryIcon}
+                getCategoryLabel={getCategoryLabel}
+                handleDelete={handleDelete}
+                handleToggleStatus={handleToggleStatus}
+              />
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
       
-      {portfolio?.length === 0 && (
+      {portfolioItems?.length === 0 && (
         <div className="text-center py-12">
           <ImageIcon className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">Brak projektów portfolio</h3>

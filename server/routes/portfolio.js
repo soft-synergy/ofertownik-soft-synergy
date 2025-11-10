@@ -369,11 +369,16 @@ router.post('/', [
       });
     }
 
+    // Get the highest order value and add 1 for the new item
+    const maxOrderItem = await Portfolio.findOne().sort({ order: -1 });
+    const newOrder = maxOrderItem ? maxOrderItem.order + 1 : 0;
+
     const portfolioData = {
       ...req.body,
       technologies: technologies.filter(tech => tech.trim() !== ''),
       image: `/uploads/portfolio/${req.file.filename}`,
-      createdBy: req.user._id
+      createdBy: req.user._id,
+      order: newOrder
     };
 
     const portfolio = new Portfolio(portfolioData);
@@ -519,6 +524,42 @@ router.put('/:id/order', [
   } catch (error) {
     console.error('Update portfolio order error:', error);
     res.status(500).json({ message: 'Błąd serwera podczas aktualizacji kolejności' });
+  }
+});
+
+// Batch update portfolio order
+router.put('/order/batch', [
+  auth,
+  requireRole(['admin', 'manager']),
+  body('updates').isArray().withMessage('Updates must be an array'),
+  body('updates.*.id').notEmpty().withMessage('Portfolio ID is required'),
+  body('updates.*.order').isInt({ min: 0 }).withMessage('Order must be a non-negative integer')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ 
+        message: 'Nieprawidłowe dane',
+        errors: errors.array() 
+      });
+    }
+
+    const { updates } = req.body;
+
+    // Update all portfolio items in parallel
+    const updatePromises = updates.map(({ id, order }) => 
+      Portfolio.findByIdAndUpdate(id, { order }, { new: true })
+    );
+
+    const updatedPortfolio = await Promise.all(updatePromises);
+
+    res.json({
+      message: 'Kolejność portfolio została zaktualizowana pomyślnie',
+      portfolio: updatedPortfolio
+    });
+  } catch (error) {
+    console.error('Batch update portfolio order error:', error);
+    res.status(500).json({ message: 'Błąd serwera podczas aktualizacji kolejności portfolio' });
   }
 });
 

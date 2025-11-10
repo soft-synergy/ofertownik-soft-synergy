@@ -189,7 +189,7 @@ const setupFollowUpReminderScheduler = () => {
         html
       };
       
-      const info = await transporter.sendMail(mailOptions);
+      const  info = await transporter.sendMail(mailOptions);
       console.log(`[Reminder] Email sent successfully from development@soft-synergy.com to ${to}: ${subject}`);
       console.log(`[Reminder] Message ID: ${info.messageId}`);
     } catch (emailError) {
