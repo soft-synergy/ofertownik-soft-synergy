@@ -6,6 +6,15 @@ const Activity = require('../models/Activity');
 
 const router = express.Router();
 
+function canEditProject(project, user) {
+  if (!project || !user) return false;
+  if (user.role === 'admin') return true;
+  const userId = user._id?.toString?.() || String(user._id);
+  const createdBy = project.createdBy?.toString?.() || String(project.createdBy);
+  const owner = project.owner ? (project.owner?.toString?.() || String(project.owner)) : null;
+  return createdBy === userId || (owner && owner === userId);
+}
+
 // Get all projects
 router.get('/', auth, async (req, res) => {
   try {
@@ -58,6 +67,79 @@ router.get('/', auth, async (req, res) => {
   } catch (error) {
     console.error('Get projects error:', error);
     res.status(500).json({ message: 'Błąd serwera podczas pobierania projektów' });
+  }
+});
+
+// --- Offer workflow for preliminary offers ---
+// Mark preliminary offer as "Do wyceny finalnej" (orange highlight)
+router.post('/:id/request-final-estimation', auth, async (req, res) => {
+  try {
+    const project = await Project.findById(req.params.id);
+    if (!project) return res.status(404).json({ message: 'Projekt nie został znaleziony' });
+    if (!canEditProject(project, req.user)) return res.status(403).json({ message: 'Brak uprawnień' });
+
+    if (project.offerType !== 'preliminary') {
+      return res.status(400).json({ message: 'Ta akcja jest dostępna tylko dla ofert wstępnych' });
+    }
+
+    project.status = 'to_final_estimation';
+    await project.save();
+
+    const updated = await Project.findById(project._id)
+      .populate('createdBy', 'firstName lastName email')
+      .populate('owner', 'firstName lastName email')
+      .populate('teamMembers.user', 'firstName lastName email role avatar');
+
+    return res.json({ message: 'Ustawiono status: Do wyceny finalnej', project: updated });
+  } catch (e) {
+    console.error('request-final-estimation error:', e);
+    return res.status(500).json({ message: 'Błąd serwera' });
+  }
+});
+
+// Submit final estimate (single total) and mark as "Do przygotowania oferty finalnej" (green highlight)
+router.post('/:id/submit-final-estimate', [
+  auth,
+  body('total').isNumeric().toFloat().custom(v => v >= 0)
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ message: 'Nieprawidłowa cena', errors: errors.array() });
+    }
+
+    const project = await Project.findById(req.params.id);
+    if (!project) return res.status(404).json({ message: 'Projekt nie został znaleziony' });
+    if (!canEditProject(project, req.user)) return res.status(403).json({ message: 'Brak uprawnień' });
+
+    if (project.offerType !== 'preliminary') {
+      return res.status(400).json({ message: 'Ta akcja jest dostępna tylko dla ofert wstępnych' });
+    }
+
+    const total = Number(req.body.total);
+    project.finalEstimateTotal = total;
+    project.finalEstimateSubmittedAt = new Date();
+    project.status = 'to_prepare_final_offer';
+
+    // Keep pricing in sync with UI currency display (single-number input)
+    project.pricing = project.pricing || {};
+    project.pricing.phase1 = total;
+    project.pricing.phase2 = 0;
+    project.pricing.phase3 = 0;
+    project.pricing.phase4 = 0;
+    // pricing.total is calculated in pre-save hook
+
+    await project.save();
+
+    const updated = await Project.findById(project._id)
+      .populate('createdBy', 'firstName lastName email')
+      .populate('owner', 'firstName lastName email')
+      .populate('teamMembers.user', 'firstName lastName email role avatar');
+
+    return res.json({ message: 'Zapisano wycenę finalną i ustawiono status: Do przygotowania oferty finalnej', project: updated });
+  } catch (e) {
+    console.error('submit-final-estimate error:', e);
+    return res.status(500).json({ message: 'Błąd serwera' });
   }
 });
 
@@ -176,8 +258,8 @@ router.put('/:id', [
       return res.status(404).json({ message: 'Projekt nie został znaleziony' });
     }
 
-    // Sprawdź uprawnienia (tylko twórca lub admin może edytować)
-    if (project.createdBy.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+    // Sprawdź uprawnienia (twórca, owner lub admin może edytować)
+    if (!canEditProject(project, req.user)) {
       return res.status(403).json({ message: 'Brak uprawnień do edycji tego projektu' });
     }
 

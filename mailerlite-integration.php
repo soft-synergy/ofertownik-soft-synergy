@@ -298,3 +298,5 @@ function mailerlite_status_page() {
     </div>
     <?php
 }
+
+

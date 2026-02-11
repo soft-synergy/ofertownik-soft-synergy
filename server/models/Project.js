@@ -137,8 +137,26 @@ const projectSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['draft', 'active', 'accepted', 'completed', 'cancelled'],
+    enum: [
+      'draft',
+      'active',
+      'accepted',
+      'completed',
+      'cancelled',
+      // Offer workflow (for preliminary offers moving toward final offer preparation)
+      'to_final_estimation',        // "Do wyceny finalnej" (orange)
+      'to_prepare_final_offer'      // "Do przygotowania oferty finalnej" (green)
+    ],
     default: 'draft'
+  },
+  // For preliminary offers: single-number total from "Finalna wycena"
+  finalEstimateTotal: {
+    type: Number,
+    default: null
+  },
+  finalEstimateSubmittedAt: {
+    type: Date,
+    default: null
   },
   priority: {
     type: String,

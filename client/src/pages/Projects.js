@@ -12,7 +12,8 @@ import {
   Calendar,
   User,
   FolderOpen,
-  Download
+  Download,
+  DollarSign
 } from 'lucide-react';
 import { projectsAPI, offersAPI } from '../services/api';
 import { useI18n } from '../contexts/I18nContext';
@@ -27,6 +28,9 @@ const Projects = () => {
     owner: '',
     page: 1,
   });
+  const [showFinalEstimateModal, setShowFinalEstimateModal] = useState(false);
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [finalEstimateTotal, setFinalEstimateTotal] = useState('');
 
   const { data, isLoading, refetch } = useQuery(
     ['projects', filters],
@@ -91,6 +95,39 @@ const Projects = () => {
     }
   };
 
+  const handleRequestFinalEstimation = async (projectId) => {
+    try {
+      await projectsAPI.requestFinalEstimation(projectId);
+      toast.success('Status zmieniony na "Do wyceny finalnej"');
+      refetch();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Błąd podczas zmiany statusu');
+    }
+  };
+
+  const handleOpenFinalEstimateModal = (project) => {
+    setSelectedProject(project);
+    setFinalEstimateTotal('');
+    setShowFinalEstimateModal(true);
+  };
+
+  const handleSubmitFinalEstimate = async () => {
+    if (!selectedProject || !finalEstimateTotal || parseFloat(finalEstimateTotal) <= 0) {
+      toast.error('Wprowadź poprawną kwotę');
+      return;
+    }
+    try {
+      await projectsAPI.submitFinalEstimate(selectedProject._id, parseFloat(finalEstimateTotal));
+      toast.success('Finalna wycena została zapisana. Status zmieniony na "Do przygotowania oferty finalnej"');
+      setShowFinalEstimateModal(false);
+      setSelectedProject(null);
+      setFinalEstimateTotal('');
+      refetch();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Błąd podczas zapisywania wyceny');
+    }
+  };
+
   const getStatusBadge = (status) => {
     const statusConfig = {
       draft: { label: 'Szkic', color: 'bg-gray-100 text-gray-800' },
@@ -98,6 +135,8 @@ const Projects = () => {
       accepted: { label: 'Zaakceptowany', color: 'bg-emerald-100 text-emerald-800' },
       completed: { label: 'Zakończony', color: 'bg-blue-100 text-blue-800' },
       cancelled: { label: 'Anulowany', color: 'bg-red-100 text-red-800' },
+      to_final_estimation: { label: 'Do wyceny finalnej', color: 'bg-orange-100 text-orange-800' },
+      to_prepare_final_offer: { label: 'Do przygotowania oferty finalnej', color: 'bg-green-100 text-green-800' },
     };
     
     const config = statusConfig[status] || statusConfig.draft;
@@ -170,6 +209,8 @@ const Projects = () => {
               <option value="accepted">{t('projects.status.accepted')}</option>
               <option value="completed">{t('projects.status.completed')}</option>
               <option value="cancelled">{t('projects.status.cancelled')}</option>
+              <option value="to_final_estimation">Do wyceny finalnej</option>
+              <option value="to_prepare_final_offer">Do przygotowania oferty finalnej</option>
             </select>
           </div>
 
@@ -215,8 +256,9 @@ const Projects = () => {
         {data?.projects?.map((project) => {
           const hasPendingFollowUp = project.nextFollowUpDueAt && project.status !== 'accepted' && project.status !== 'cancelled' && (!project.followUps || project.followUps.length < 3);
           const isOverdue = hasPendingFollowUp && new Date(project.nextFollowUpDueAt) <= new Date();
+          const isOrangeStatus = project.status === 'to_final_estimation';
           return (
-          <div key={project._id} className={`card hover:shadow-md transition-shadow duration-200 ${isOverdue ? 'ring-2 ring-red-500' : ''}`}>
+          <div key={project._id} className={`card hover:shadow-md transition-shadow duration-200 ${isOverdue ? 'ring-2 ring-red-500' : ''} ${isOrangeStatus ? 'bg-orange-50 border-orange-200' : ''}`}>
             <div className="flex items-center justify-between">
               <div className="flex-1">
                 <div className="flex items-center justify-between">
@@ -272,6 +314,36 @@ const Projects = () => {
               </div>
               
               <div className="flex items-center space-x-2 ml-4">
+                {/* Przycisk "Do wyceny finalnej" - tylko dla ofert wstępnych */}
+                {project.offerType === 'preliminary' && 
+                 project.status !== 'to_final_estimation' && 
+                 project.status !== 'to_prepare_final_offer' && 
+                 project.status !== 'accepted' && 
+                 project.status !== 'cancelled' && (
+                  <button
+                    onClick={() => handleRequestFinalEstimation(project._id)}
+                    className="p-2 text-gray-400 hover:text-orange-600 group relative"
+                    title="Do wyceny finalnej"
+                  >
+                    <DollarSign className="h-4 w-4" />
+                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
+                      Do wyceny finalnej
+                    </div>
+                  </button>
+                )}
+                {/* Przycisk "Finalna wycena" - tylko gdy status to_final_estimation */}
+                {project.status === 'to_final_estimation' && (
+                  <button
+                    onClick={() => handleOpenFinalEstimateModal(project)}
+                    className="p-2 text-orange-600 hover:text-orange-800 group relative font-medium"
+                    title="Finalna wycena"
+                  >
+                    <DollarSign className="h-4 w-4" />
+                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
+                      Finalna wycena
+                    </div>
+                  </button>
+                )}
                 {project.generatedOfferUrl ? (
                   <a
                     href={`https://oferty.soft-synergy.com${project.generatedOfferUrl}`}
@@ -403,6 +475,73 @@ const Projects = () => {
           </div>
         )}
       </div>
+
+      {/* Modal Finalnej Wyceny */}
+      {showFinalEstimateModal && selectedProject && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">Finalna wycena</h2>
+                <button
+                  onClick={() => {
+                    setShowFinalEstimateModal(false);
+                    setSelectedProject(null);
+                    setFinalEstimateTotal('');
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="form-label">Projekt</label>
+                  <p className="text-sm text-gray-700 font-medium">{selectedProject.name}</p>
+                  <p className="text-xs text-gray-500">Klient: {selectedProject.clientName}</p>
+                </div>
+
+                <div>
+                  <label className="form-label">Całkowita cena (PLN) *</label>
+                  <input
+                    type="number"
+                    value={finalEstimateTotal}
+                    onChange={(e) => setFinalEstimateTotal(e.target.value)}
+                    placeholder="0.00"
+                    min="0"
+                    step="0.01"
+                    className="input-field"
+                    autoFocus
+                  />
+                </div>
+
+                <div className="flex justify-end space-x-4 pt-4 border-t">
+                  <button
+                    onClick={() => {
+                      setShowFinalEstimateModal(false);
+                      setSelectedProject(null);
+                      setFinalEstimateTotal('');
+                    }}
+                    className="btn-secondary"
+                  >
+                    Anuluj
+                  </button>
+                  <button
+                    onClick={handleSubmitFinalEstimate}
+                    disabled={!finalEstimateTotal || parseFloat(finalEstimateTotal) <= 0}
+                    className="btn-primary"
+                  >
+                    Wyślij wycenę
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Pagination */}
       {data?.totalPages > 1 && (
