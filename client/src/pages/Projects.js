@@ -97,10 +97,13 @@ const Projects = () => {
 
   const handleRequestFinalEstimation = async (projectId) => {
     try {
-      await projectsAPI.requestFinalEstimation(projectId);
+      console.log('Wywołuję requestFinalEstimation dla:', projectId);
+      const response = await projectsAPI.requestFinalEstimation(projectId);
+      console.log('Odpowiedź:', response);
       toast.success('Status zmieniony na "Do wyceny finalnej"');
       refetch();
     } catch (error) {
+      console.error('Błąd requestFinalEstimation:', error);
       toast.error(error.response?.data?.message || 'Błąd podczas zmiany statusu');
     }
   };
@@ -117,13 +120,16 @@ const Projects = () => {
       return;
     }
     try {
-      await projectsAPI.submitFinalEstimate(selectedProject._id, parseFloat(finalEstimateTotal));
+      console.log('Wywołuję submitFinalEstimate dla:', selectedProject._id, 'kwota:', finalEstimateTotal);
+      const response = await projectsAPI.submitFinalEstimate(selectedProject._id, parseFloat(finalEstimateTotal));
+      console.log('Odpowiedź:', response);
       toast.success('Finalna wycena została zapisana. Status zmieniony na "Do przygotowania oferty finalnej"');
       setShowFinalEstimateModal(false);
       setSelectedProject(null);
       setFinalEstimateTotal('');
       refetch();
     } catch (error) {
+      console.error('Błąd submitFinalEstimate:', error);
       toast.error(error.response?.data?.message || 'Błąd podczas zapisywania wyceny');
     }
   };
@@ -263,9 +269,16 @@ const Projects = () => {
               <div className="flex-1">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-lg font-medium text-gray-900">
-                      {project.name}
-                    </h3>
+                    <div className="flex items-center space-x-2">
+                      <h3 className="text-lg font-medium text-gray-900">
+                        {project.name}
+                      </h3>
+                      {project.offerType === 'preliminary' && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                          Oferta wstępna
+                        </span>
+                      )}
+                    </div>
                     <p className="text-sm text-gray-500">
                       Klient: {project.clientName}
                     </p>
@@ -311,39 +324,55 @@ const Projects = () => {
                     </div>
                   )}
                 </div>
+
+                {/* DUŻE PRZYCISKI DLA OFERT WSTĘPNYCH */}
+                {project.offerType === 'preliminary' && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    {/* Przycisk "Do wyceny finalnej" - dla ofert wstępnych które nie są jeszcze w workflow */}
+                    {project.status !== 'to_final_estimation' && 
+                     project.status !== 'to_prepare_final_offer' && 
+                     project.status !== 'accepted' && 
+                     project.status !== 'cancelled' && (
+                      <button
+                        onClick={() => {
+                          console.log('Kliknięto "Do wyceny finalnej" dla projektu:', project._id);
+                          handleRequestFinalEstimation(project._id);
+                        }}
+                        className="w-full bg-orange-500 hover:bg-orange-600 text-white font-medium py-3 px-4 rounded-lg flex items-center justify-center space-x-2 transition-colors shadow-md"
+                      >
+                        <DollarSign className="h-5 w-5" />
+                        <span>Do wyceny finalnej</span>
+                      </button>
+                    )}
+                    {/* Przycisk "Finalna wycena" - gdy status to_final_estimation */}
+                    {project.status === 'to_final_estimation' && (
+                      <button
+                        onClick={() => {
+                          console.log('Kliknięto "Finalna wycena" dla projektu:', project._id);
+                          handleOpenFinalEstimateModal(project);
+                        }}
+                        className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center space-x-2 transition-colors shadow-md"
+                      >
+                        <DollarSign className="h-5 w-5" />
+                        <span>Finalna wycena - Wpisz cenę całkowitą</span>
+                      </button>
+                    )}
+                    {/* Info gdy status to_prepare_final_offer */}
+                    {project.status === 'to_prepare_final_offer' && (
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                        <p className="text-sm text-green-800 font-medium">
+                          ✓ Wycena finalna zapisana ({formatCurrency(project.finalEstimateTotal || project.pricing?.total || 0)})
+                        </p>
+                        <p className="text-xs text-green-600 mt-1">
+                          Status: Do przygotowania oferty finalnej
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               
               <div className="flex items-center space-x-2 ml-4">
-                {/* Przycisk "Do wyceny finalnej" - tylko dla ofert wstępnych */}
-                {project.offerType === 'preliminary' && 
-                 project.status !== 'to_final_estimation' && 
-                 project.status !== 'to_prepare_final_offer' && 
-                 project.status !== 'accepted' && 
-                 project.status !== 'cancelled' && (
-                  <button
-                    onClick={() => handleRequestFinalEstimation(project._id)}
-                    className="p-2 text-gray-400 hover:text-orange-600 group relative"
-                    title="Do wyceny finalnej"
-                  >
-                    <DollarSign className="h-4 w-4" />
-                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
-                      Do wyceny finalnej
-                    </div>
-                  </button>
-                )}
-                {/* Przycisk "Finalna wycena" - tylko gdy status to_final_estimation */}
-                {project.status === 'to_final_estimation' && (
-                  <button
-                    onClick={() => handleOpenFinalEstimateModal(project)}
-                    className="p-2 text-orange-600 hover:text-orange-800 group relative font-medium"
-                    title="Finalna wycena"
-                  >
-                    <DollarSign className="h-4 w-4" />
-                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
-                      Finalna wycena
-                    </div>
-                  </button>
-                )}
                 {project.generatedOfferUrl ? (
                   <a
                     href={`https://oferty.soft-synergy.com${project.generatedOfferUrl}`}
