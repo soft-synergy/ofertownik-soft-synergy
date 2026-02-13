@@ -546,7 +546,7 @@ const ProjectForm = () => {
               <input
                 type="text"
                 name="name"
-                value={formData.name}
+                value={formData.name || ''}
                 onChange={handleChange}
                 required
                 className="input-field"
@@ -702,7 +702,7 @@ const ProjectForm = () => {
               <input
                 type="text"
                 name="clientName"
-                value={formData.clientName}
+                value={formData.clientName || ''}
                 onChange={handleChange}
                 required
                 className="input-field"
@@ -715,7 +715,7 @@ const ProjectForm = () => {
               <input
                 type="text"
                 name="clientContact"
-                value={formData.clientContact}
+                value={formData.clientContact || ''}
                 onChange={handleChange}
                 required
                 className="input-field"
@@ -728,7 +728,7 @@ const ProjectForm = () => {
               <input
                 type="email"
                 name="clientEmail"
-                value={formData.clientEmail}
+                value={formData.clientEmail || ''}
                 onChange={handleChange}
                 className="input-field"
                 placeholder="email@firma.pl"
@@ -740,7 +740,7 @@ const ProjectForm = () => {
               <input
                 type="tel"
                 name="clientPhone"
-                value={formData.clientPhone}
+                value={formData.clientPhone || ''}
                 onChange={handleChange}
                 className="input-field"
                 placeholder="+48 123 456 789"
@@ -752,7 +752,7 @@ const ProjectForm = () => {
               <input
                 type="url"
                 name="projectLink"
-                value={formData.projectLink}
+                value={formData.projectLink || ''}
                 onChange={handleChange}
                 className="input-field"
                 placeholder="https://example.com"
@@ -769,7 +769,7 @@ const ProjectForm = () => {
               <label className="form-label">Notatki z rozmowy z klientem</label>
               <textarea
                 name="consultationNotes"
-                value={formData.consultationNotes}
+                value={formData.consultationNotes || ''}
                 onChange={handleChange}
                 rows={6}
                 className="input-field"
@@ -789,7 +789,7 @@ const ProjectForm = () => {
                 <input
                   type="text"
                   name="mainBenefit"
-                  value={formData.mainBenefit}
+                  value={formData.mainBenefit || ''}
                   onChange={handleChange}
                   required
                   className="input-field"
@@ -801,7 +801,7 @@ const ProjectForm = () => {
                 <label className="form-label">Opis projektu *</label>
                 <textarea
                   name="description"
-                  value={formData.description}
+                  value={formData.description || ''}
                   onChange={handleChange}
                   required
                   rows={4}
@@ -849,7 +849,7 @@ const ProjectForm = () => {
                     <label className="form-label">Nazwa modułu</label>
                     <input
                       type="text"
-                      value={module.name}
+                      value={module?.name || ''}
                       onChange={(e) => handleModuleChange(index, 'name', e.target.value)}
                       className="input-field"
                       placeholder="np. Panel administracyjny"
@@ -860,7 +860,7 @@ const ProjectForm = () => {
                     <label className="form-label">Opis</label>
                     <input
                       type="text"
-                      value={module.description}
+                      value={module?.description || ''}
                       onChange={(e) => handleModuleChange(index, 'description', e.target.value)}
                       className="input-field"
                       placeholder="Szczegółowy opis modułu..."
@@ -899,7 +899,7 @@ const ProjectForm = () => {
                 <div key={index} className="flex items-center gap-2">
                   <input
                     type="text"
-                    value={tech}
+                    value={tech || ''}
                     onChange={(e) => handleTechnologyChange('stack', index, e.target.value)}
                     className="input-field flex-1"
                     placeholder="np. React, Node.js, MongoDB, TypeScript"
@@ -937,7 +937,7 @@ const ProjectForm = () => {
                 <div key={index} className="flex items-center gap-2">
                   <input
                     type="text"
-                    value={methodology}
+                    value={methodology || ''}
                     onChange={(e) => handleTechnologyChange('methodologies', index, e.target.value)}
                     className="input-field flex-1"
                     placeholder="np. Agile, Scrum, CI/CD, Test-Driven Development"
@@ -969,7 +969,7 @@ const ProjectForm = () => {
                 <label className="form-label">Faza I: Nazwa</label>
                 <input
                   type="text"
-                  value={formData.timeline.phase1.name}
+                  value={formData.timeline?.phase1?.name || ''}
                   onChange={(e) => handleTimelineChange('phase1', 'name', e.target.value)}
                   className="input-field"
                   placeholder="Faza I: Discovery"
@@ -979,7 +979,7 @@ const ProjectForm = () => {
                 <label className="form-label">Faza I: Czas trwania</label>
                 <input
                   type="text"
-                  value={formData.timeline.phase1.duration}
+                  value={formData.timeline?.phase1?.duration || ''}
                   onChange={(e) => handleTimelineChange('phase1', 'duration', e.target.value)}
                   className="input-field"
                   placeholder="Tydzień 1-2"
@@ -992,7 +992,7 @@ const ProjectForm = () => {
                 <label className="form-label">Faza II: Nazwa</label>
                 <input
                   type="text"
-                  value={formData.timeline.phase2.name}
+                  value={formData.timeline?.phase2?.name || ''}
                   onChange={(e) => handleTimelineChange('phase2', 'name', e.target.value)}
                   className="input-field"
                   placeholder="Faza II: Design & Prototyp"
@@ -1002,7 +1002,7 @@ const ProjectForm = () => {
                 <label className="form-label">Faza II: Czas trwania</label>
                 <input
                   type="text"
-                  value={formData.timeline.phase2.duration}
+                  value={formData.timeline?.phase2?.duration || ''}
                   onChange={(e) => handleTimelineChange('phase2', 'duration', e.target.value)}
                   className="input-field"
                   placeholder="Tydzień 3-4"
@@ -1015,7 +1015,7 @@ const ProjectForm = () => {
                 <label className="form-label">Faza III: Nazwa</label>
                 <input
                   type="text"
-                  value={formData.timeline.phase3.name}
+                  value={formData.timeline?.phase3?.name || ''}
                   onChange={(e) => handleTimelineChange('phase3', 'name', e.target.value)}
                   className="input-field"
                   placeholder="Faza III: Development"
@@ -1025,7 +1025,7 @@ const ProjectForm = () => {
                 <label className="form-label">Faza III: Czas trwania</label>
                 <input
                   type="text"
-                  value={formData.timeline.phase3.duration}
+                  value={formData.timeline?.phase3?.duration || ''}
                   onChange={(e) => handleTimelineChange('phase3', 'duration', e.target.value)}
                   className="input-field"
                   placeholder="Tydzień 5-12"
@@ -1038,7 +1038,7 @@ const ProjectForm = () => {
                 <label className="form-label">Faza IV: Nazwa</label>
                 <input
                   type="text"
-                  value={formData.timeline.phase4.name}
+                  value={formData.timeline?.phase4?.name || ''}
                   onChange={(e) => handleTimelineChange('phase4', 'name', e.target.value)}
                   className="input-field"
                   placeholder="Faza IV: Testy i Wdrożenie"
@@ -1048,7 +1048,7 @@ const ProjectForm = () => {
                 <label className="form-label">Faza IV: Czas trwania</label>
                 <input
                   type="text"
-                  value={formData.timeline.phase4.duration}
+                  value={formData.timeline?.phase4?.duration || ''}
                   onChange={(e) => handleTimelineChange('phase4', 'duration', e.target.value)}
                   className="input-field"
                   placeholder="Tydzień 13-14"
@@ -1068,7 +1068,7 @@ const ProjectForm = () => {
               <label className="form-label">Imię i nazwisko *</label>
               <input
                 type="text"
-                value={formData.projectManager.name}
+                value={formData.projectManager?.name || ''}
                 onChange={(e) => handleManagerChange('name', e.target.value)}
                 required
                 className="input-field"
@@ -1080,7 +1080,7 @@ const ProjectForm = () => {
               <label className="form-label">Stanowisko</label>
               <input
                 type="text"
-                value={formData.projectManager.position}
+                value={formData.projectManager?.position || ''}
                 onChange={(e) => handleManagerChange('position', e.target.value)}
                 className="input-field"
                 placeholder="Senior Project Manager"
@@ -1091,7 +1091,7 @@ const ProjectForm = () => {
               <label className="form-label">Email *</label>
               <input
                 type="email"
-                value={formData.projectManager.email}
+                value={formData.projectManager?.email || ''}
                 onChange={(e) => handleManagerChange('email', e.target.value)}
                 required
                 className="input-field"
@@ -1103,7 +1103,7 @@ const ProjectForm = () => {
               <label className="form-label">Telefon *</label>
               <input
                 type="tel"
-                value={formData.projectManager.phone}
+                value={formData.projectManager?.phone || ''}
                 onChange={(e) => handleManagerChange('phone', e.target.value)}
                 required
                 className="input-field"
@@ -1124,7 +1124,7 @@ const ProjectForm = () => {
                 <label className="form-label">Faza I</label>
                 <input
                   type="number"
-                  value={formData.pricing.phase1}
+                  value={formData.pricing?.phase1 ?? 0}
                   onChange={(e) => handlePricingChange('phase1', e.target.value)}
                   className="input-field"
                   min="0"
@@ -1135,7 +1135,7 @@ const ProjectForm = () => {
                 <label className="form-label">Faza II</label>
                 <input
                   type="number"
-                  value={formData.pricing.phase2}
+                  value={formData.pricing?.phase2 ?? 0}
                   onChange={(e) => handlePricingChange('phase2', e.target.value)}
                   className="input-field"
                   min="0"
@@ -1146,7 +1146,7 @@ const ProjectForm = () => {
                 <label className="form-label">Faza III</label>
                 <input
                   type="number"
-                  value={formData.pricing.phase3}
+                  value={formData.pricing?.phase3 ?? 0}
                   onChange={(e) => handlePricingChange('phase3', e.target.value)}
                   className="input-field"
                   min="0"
@@ -1157,7 +1157,7 @@ const ProjectForm = () => {
                 <label className="form-label">Faza IV</label>
                 <input
                   type="number"
-                  value={formData.pricing.phase4}
+                  value={formData.pricing?.phase4 ?? 0}
                   onChange={(e) => handlePricingChange('phase4', e.target.value)}
                   className="input-field"
                   min="0"
@@ -1249,7 +1249,7 @@ const ProjectForm = () => {
               <label className="form-label">Warunki płatności</label>
               <textarea
                 name="customPaymentTerms"
-                value={formData.customPaymentTerms}
+                value={formData.customPaymentTerms || ''}
                 onChange={handleChange}
                 rows={4}
                 className="input-field"
@@ -1283,7 +1283,7 @@ const ProjectForm = () => {
               <div key={index} className="flex items-center space-x-2">
                 <input
                   type="text"
-                  value={reservation}
+                  value={reservation || ''}
                   onChange={(e) => handleReservationChange(index, e.target.value)}
                   className="input-field flex-1"
                   placeholder="Wprowadź dodatkowe zastrzeżenie..."
