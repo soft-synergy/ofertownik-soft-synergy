@@ -1060,59 +1060,7 @@ const ProjectForm = () => {
         )}
 
         {/* Project Manager - only for final offers */}
-        {formData.offerType === 'final' && (
-        <div className="card">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Opiekun projektu</h2>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label className="form-label">Imię i nazwisko *</label>
-              <input
-                type="text"
-                value={formData.projectManager?.name || ''}
-                onChange={(e) => handleManagerChange('name', e.target.value)}
-                required
-                className="input-field"
-                placeholder="Anna Kowalska"
-              />
-            </div>
-            
-            <div>
-              <label className="form-label">Stanowisko</label>
-              <input
-                type="text"
-                value={formData.projectManager?.position || ''}
-                onChange={(e) => handleManagerChange('position', e.target.value)}
-                className="input-field"
-                placeholder="Senior Project Manager"
-              />
-            </div>
-            
-            <div>
-              <label className="form-label">Email *</label>
-              <input
-                type="email"
-                value={formData.projectManager?.email || ''}
-                onChange={(e) => handleManagerChange('email', e.target.value)}
-                required
-                className="input-field"
-                placeholder="anna.kowalska@softsynergy.pl"
-              />
-            </div>
-            
-            {/* <div>
-              <label className="form-label">Telefon *</label>
-              <input
-                type="tel"
-                value={formData.projectManager?.phone || ''}
-                onChange={(e) => handleManagerChange('phone', e.target.value)}
-                className="input-field"
-                placeholder="+48 123 456 789"
-              />
-            </div> */}
-          </div>
-        </div>
-        )}
-
+      
         {/* Pricing - only for final offers */}
         {formData.offerType === 'final' && (
         <div className="card">
