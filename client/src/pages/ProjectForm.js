@@ -1099,7 +1099,7 @@ const ProjectForm = () => {
               />
             </div>
             
-            <div>
+            {/* <div>
               <label className="form-label">Telefon *</label>
               <input
                 type="tel"
@@ -1108,7 +1108,7 @@ const ProjectForm = () => {
                 className="input-field"
                 placeholder="+48 123 456 789"
               />
-            </div>
+            </div> */}
           </div>
         </div>
         )}
