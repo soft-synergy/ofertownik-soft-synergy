@@ -1104,7 +1104,7 @@ const ProjectForm = () => {
               <input
                 type="tel"
                 value={formData.projectManager.phone}
-                ownChange={(e) => handleManagerChange('phone', e.target.value)}
+                onChange={(e) => handleManagerChange('phone', e.target.value)}
                 required
                 className="input-field"
                 placeholder="+48 123 456 789"
