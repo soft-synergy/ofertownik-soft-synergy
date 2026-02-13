@@ -51,7 +51,7 @@ const ProjectForm = () => {
       name: '',
       position: 'Senior Project Manager',
       email: '',
-      phone: '',
+      phone: '+48 793 868 886',
       description: 'Z ponad 8-letnim doświadczeniem w prowadzeniu złożonych projektów IT, wierzę w transparentną komunikację i partnerskie relacje. Moim zadaniem jest nie tylko nadzór nad harmonogramem, ale przede wszystkim zapewnienie, że finalny produkt w 100% odpowiada Państwa wizji i celom biznesowym. Będę Państwa głównym punktem kontaktowym na każdym etapie współpracy.'
     },
     status: 'draft',
@@ -1105,7 +1105,6 @@ const ProjectForm = () => {
                 type="tel"
                 value={formData.projectManager?.phone || ''}
                 onChange={(e) => handleManagerChange('phone', e.target.value)}
-                required
                 className="input-field"
                 placeholder="+48 123 456 789"
               />
