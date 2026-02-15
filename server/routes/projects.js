@@ -6,6 +6,16 @@ const Activity = require('../models/Activity');
 
 const router = express.Router();
 
+// Opiekun projektu – zawsze Jakub Czajka (bez pola w formularzu)
+const DEFAULT_PROJECT_MANAGER = {
+  name: "Jakub Czajka",
+  position: "Senior Project Manager",
+  email: "jakub.czajka@soft-synergy.com",
+  phone: "+48 793 868 886",
+  avatar: "/generated-offers/jakub czajka.jpeg",
+  description: "Nazywam się Jakub Czajka i pełnię rolę menedżera projektów w Soft Synergy. Specjalizuję się w koordynowaniu zespołów oraz zarządzaniu realizacją nowoczesnych projektów IT. Dbam o sprawną komunikację, terminowość oraz najwyższą jakość dostarczanych rozwiązań. Moim celem jest zapewnienie klientom profesjonalnej obsługi i skutecznej realizacji ich celów biznesowych."
+};
+
 function canEditProject(project, user) {
   if (!project || !user) return false;
   if (user.role === 'admin') return true;
@@ -174,9 +184,6 @@ router.post('/', [
   body('clientEmail').optional({ checkFalsy: true }).isEmail(),
   body('description').if(body('offerType').equals('final')).trim().isLength({ min: 3 }),
   body('mainBenefit').if(body('offerType').equals('final')).trim().isLength({ min: 3 }),
-  body('projectManager.name').if(body('offerType').equals('final')).trim().isLength({ min: 2 }),
-  body('projectManager.email').if(body('offerType').equals('final')).isEmail(),
-  body('projectManager.phone').if(body('offerType').equals('final')).trim().isLength({ min: 6 }),
   body('pricing.total').if(body('offerType').equals('final')).isNumeric().toFloat()
 ], async (req, res) => {
   try {
@@ -193,6 +200,10 @@ router.post('/', [
       createdBy: req.user._id,
       owner: req.user._id
     };
+    // Opiekun projektu zawsze Jakub Czajka – nie z formularza
+    if (projectData.offerType === 'final') {
+      projectData.projectManager = { ...DEFAULT_PROJECT_MANAGER };
+    }
 
     const project = new Project(projectData);
     // Init changelog
@@ -238,9 +249,6 @@ router.put('/:id', [
   body('clientEmail').optional({ checkFalsy: true }).isEmail(),
   body('description').if(body('offerType').equals('final')).trim().isLength({ min: 3 }),
   body('mainBenefit').if(body('offerType').equals('final')).trim().isLength({ min: 3 }),
-  body('projectManager.name').if(body('offerType').equals('final')).trim().isLength({ min: 2 }),
-  body('projectManager.email').if(body('offerType').equals('final')).isEmail(),
-  body('projectManager.phone').if(body('offerType').equals('final')).trim().isLength({ min: 6 }),
   body('pricing.total').if(body('offerType').equals('final')).isNumeric().toFloat()
 ], async (req, res) => {
   try {
@@ -266,6 +274,11 @@ router.put('/:id', [
     // Prevent manual change to accepted status; must go via contract generation
     if (req.body.status === 'accepted') {
       delete req.body.status;
+    }
+
+    // Opiekun projektu zawsze Jakub Czajka – nie z formularza
+    if (req.body.offerType === 'final') {
+      req.body.projectManager = { ...DEFAULT_PROJECT_MANAGER };
     }
 
     const before = project.toObject();
