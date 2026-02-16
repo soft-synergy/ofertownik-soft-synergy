@@ -100,6 +100,24 @@ router.post('/:id/request-final-estimation', auth, async (req, res) => {
       .populate('owner', 'firstName lastName email')
       .populate('teamMembers.user', 'firstName lastName email role avatar');
 
+    // Wyślij email do info@soft-synergy.com o prośbie o wycenę
+    try {
+      const { sendEmail } = require('../utils/emailService');
+      const { quoteRequestTemplate } = require('../utils/emailTemplates');
+      const subject = `💰 Prośba o wycenę finalną: ${project.name}`;
+      const html = quoteRequestTemplate({
+        projectName: project.name,
+        clientName: project.clientName || '-',
+        clientContact: project.clientContact || '-',
+        clientEmail: project.clientEmail || '-',
+        projectId: project._id.toString()
+      });
+      await sendEmail({ to: 'info@soft-synergy.com', subject, html });
+    } catch (emailErr) {
+      console.error('[request-final-estimation] Błąd wysyłki emaila:', emailErr);
+      // nie przerywamy - status projektu został już zmieniony
+    }
+
     return res.json({ message: 'Ustawiono status: Do wyceny finalnej', project: updated });
   } catch (e) {
     console.error('request-final-estimation error:', e);

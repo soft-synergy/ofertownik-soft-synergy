@@ -134,75 +134,19 @@ app.get('/api/health', (req, res) => {
 
 // Simple reminder scheduler for follow-ups (runs every 30 minutes)
 const setupFollowUpReminderScheduler = () => {
-  const nodemailer = require('nodemailer');
   const Project = require('./models/Project');
+  const { getTransporter, sendEmail } = require('./utils/emailService');
+  const { followUpReminderTemplate } = require('./utils/emailTemplates');
 
-  // Configure transport from env or fallback to log-only
-  const transportConfig = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS ? {
-    host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT || '587', 10),
-    secure: process.env.SMTP_SECURE === 'true',
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
-    }
-  } : null;
+  const FOLLOW_UP_RECIPIENT = 'jakub.czajka@soft-synergy.com';
 
-  if (!transportConfig) {
-    console.warn('[SMTP] SMTP not configured - emails will not be sent');
-    console.warn('[SMTP] Required env variables: SMTP_HOST, SMTP_USER, SMTP_PASS');
-    console.warn('[SMTP] Optional env variables: SMTP_PORT (default: 587), SMTP_SECURE (default: false)');
+  const trans = getTransporter();
+  if (trans) {
+    trans.verify().then(() => console.log('[SMTP] Połączenie zweryfikowane'))
+      .catch((err) => console.error('[SMTP] Błąd weryfikacji:', err.message));
   } else {
-    console.log('[SMTP] SMTP configured:', {
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT || '587', 10),
-      secure: process.env.SMTP_SECURE === 'true',
-      user: process.env.SMTP_USER
-    });
+    console.warn('[SMTP] Nie skonfigurowano - ustaw SMTP_HOST, SMTP_USER, SMTP_PASS w .env');
   }
-
-  const transporter = transportConfig ? nodemailer.createTransport(transportConfig) : null;
-  
-  // Verify SMTP connection on startup if configured
-  if (transporter) {
-    transporter.verify().then(() => {
-      console.log('[SMTP] Connection verified successfully');
-    }).catch((err) => {
-      console.error('[SMTP] Connection verification failed:', err);
-    });
-  }
-
-  const sendEmail = async (subject, html, to = 'info@soft-synergy.com') => {
-    if (!transporter) {
-      console.log(`[Reminder] Would send email to ${to}: ${subject}`);
-      console.log(`[Reminder] SMTP not configured - check SMTP_HOST, SMTP_USER, SMTP_PASS in .env`);
-      return;
-    }
-    try {
-      // Verify transporter configuration before sending (same as accept offer endpoint)
-      await transporter.verify();
-      
-      const mailOptions = {
-        from: 'development@soft-synergy.com',
-        to,
-        subject,
-        html
-      };
-      
-      const  info = await transporter.sendMail(mailOptions);
-      console.log(`[Reminder] Email sent successfully from development@soft-synergy.com to ${to}: ${subject}`);
-      console.log(`[Reminder] Message ID: ${info.messageId}`);
-    } catch (emailError) {
-      console.error(`[Reminder] Email sending error to ${to}:`, emailError);
-      console.error(`[Reminder] Error details:`, {
-        message: emailError.message,
-        code: emailError.code,
-        command: emailError.command,
-        response: emailError.response
-      });
-      throw emailError;
-    }
-  };
 
   const runCheck = async () => {
     try {
@@ -222,18 +166,17 @@ const setupFollowUpReminderScheduler = () => {
         if (lastReminder && (now.getTime() - lastReminder.getTime()) < (24 * 60 * 60 * 1000)) continue;
 
         const numSent = Array.isArray(p.followUps) ? p.followUps.length : 0;
-        const subject = `Przypomnienie o dymaniu kolegi w dupe Follow-up #${numSent + 1} dla oferty: ${p.name}`;
-        const html = `
-          <p>Należy wysłać follow-up #${numSent + 1} dla oferty:</p>
-          <ul>
-            <li>Projekt: <strong>${p.name}</strong></li>
-            <li>Klient: ${p.clientName}</li>
-            <li>Termin: ${p.nextFollowUpDueAt ? new Date(p.nextFollowUpDueAt).toLocaleString('pl-PL') : '-'}</li>
-          </ul>
-          <p><a href="https:///ofertownik.soft-synergy.com/projects/${p._id}">Przejdź do projektu</a></p>
-        `;
+        const subject = `⏰ Przypomnienie: follow-up #${numSent + 1} dla oferty ${p.name}`;
+        const dueDate = p.nextFollowUpDueAt ? new Date(p.nextFollowUpDueAt).toLocaleString('pl-PL') : null;
+        const html = followUpReminderTemplate({
+          projectName: p.name,
+          clientName: p.clientName || '-',
+          followUpNumber: numSent + 1,
+          dueDate,
+          projectId: p._id.toString()
+        });
         try {
-          await sendEmail(subject, html);
+          await sendEmail({ to: FOLLOW_UP_RECIPIENT, subject, html });
           p.lastFollowUpReminderAt = now;
           await p.save();
         } catch (e) {
