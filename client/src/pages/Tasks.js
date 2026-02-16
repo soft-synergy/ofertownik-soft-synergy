@@ -384,6 +384,16 @@ export default function Tasks() {
     onError: () => toast.error('Błąd usuwania')
   });
 
+  const toggleDoneMutation = useMutation(
+    ({ id, status }) => tasksAPI.update(id, { status }),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('tasks');
+      },
+      onError: () => toast.error('Nie udało się zaktualizować statusu zadania')
+    }
+  );
+
   const moveDueDateMutation = useMutation(({ id, dueDate }) => tasksAPI.update(id, { dueDate }), {
     onSuccess: () => {
       queryClient.invalidateQueries('tasks');
@@ -424,6 +434,11 @@ export default function Tasks() {
   const openEdit = (task) => {
     setModalTask(task);
     setModalInitialDueDate(null);
+  };
+
+  const handleToggleDone = (task) => {
+    const nextStatus = task.status === 'done' ? 'todo' : 'done';
+    toggleDoneMutation.mutate({ id: task._id, status: nextStatus });
   };
 
   const handleDragEnd = (event) => {
@@ -591,6 +606,9 @@ export default function Tasks() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b">
                   <tr>
+                    <th className="w-10 p-3">
+                      <span className="sr-only">Zrobione</span>
+                    </th>
                     <th className="text-left p-3 font-medium text-gray-700">Tytuł</th>
                     <th className="text-left p-3 font-medium text-gray-700">Przypisany</th>
                     <th className="text-left p-3 font-medium text-gray-700">Projekt</th>
@@ -603,6 +621,14 @@ export default function Tasks() {
                 <tbody className="divide-y">
                   {tasks.map((t) => (
                     <tr key={t._id} className="hover:bg-gray-50">
+                      <td className="p-3 align-middle">
+                        <input
+                          type="checkbox"
+                          checked={t.status === 'done'}
+                          onChange={() => handleToggleDone(t)}
+                          className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        />
+                      </td>
                       <td className="p-3 font-medium">{t.title}</td>
                       <td className="p-3">{t.assignee ? `${t.assignee.firstName} ${t.assignee.lastName}` : '—'}</td>
                       <td className="p-3">{t.project?.name ?? '—'}</td>
