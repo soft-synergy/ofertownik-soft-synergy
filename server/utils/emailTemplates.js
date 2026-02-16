@@ -184,7 +184,153 @@ function objectToInlineStyle(obj) {
   }).join(';');
 }
 
+/**
+ * Szablon: powiadomienie o hostingu – płatność za 3 dni
+ */
+function hostingReminder3DaysBeforeTemplate({ hostings, hostingUrl }) {
+  const rows = hostings.map((h) => `
+    <tr>
+      <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;">
+        <strong style="color:#1e293b;">${escapeHtml(h.domain)}</strong>
+        <div style="font-size:13px;color:#64748b;margin-top:4px;">${escapeHtml(h.clientName)} · ${formatPrice(h.monthlyPrice)} / ${h.billingCycle === 'yearly' ? 'rok' : h.billingCycle === 'quarterly' ? 'kwartał' : 'mies.'}</div>
+      </td>
+      <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:600;color:#1e293b;">${escapeHtml(h.dueDateFormatted)}</td>
+      <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;text-align:right;">
+        <a href="${hostingUrl}" style="color:#2563eb;text-decoration:none;font-weight:500;">Otwórz →</a>
+      </td>
+    </tr>`).join('');
+  return buildHostingEmail({
+    title: 'Za 3 dni – termin płatności hostingu',
+    subtitle: 'Przypomnienie o nadchodzących płatnościach',
+    gradient: '135deg,#f59e0b 0%,#fbbf24 100%',
+    emoji: '📅',
+    tableHeader: ['Domena / Klient', 'Termin płatności', ''],
+    rows,
+    hostings,
+    hostingUrl,
+    ctaText: 'Przejdź do hostingu'
+  });
+}
+
+/**
+ * Szablon: powiadomienie o hostingu – płatność dzisiaj
+ */
+function hostingReminderDueTodayTemplate({ hostings, hostingUrl }) {
+  const rows = hostings.map((h) => `
+    <tr>
+      <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;">
+        <strong style="color:#1e293b;">${escapeHtml(h.domain)}</strong>
+        <div style="font-size:13px;color:#64748b;margin-top:4px;">${escapeHtml(h.clientName)} · ${formatPrice(h.monthlyPrice)}</div>
+      </td>
+      <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;text-align:right;">
+        <a href="${hostingUrl}" style="color:#2563eb;text-decoration:none;font-weight:500;">Otwórz →</a>
+      </td>
+    </tr>`).join('');
+  return buildHostingEmail({
+    title: 'Dzisiaj – termin płatności hostingu',
+    subtitle: 'Płatności z terminem na dziś',
+    gradient: '135deg,#2563eb 0%,#3b82f6 100%',
+    emoji: '⚠️',
+    tableHeader: ['Domena / Klient', ''],
+    rows,
+    hostings,
+    hostingUrl,
+    ctaText: 'Przejdź do hostingu'
+  });
+}
+
+/**
+ * Szablon: powiadomienie o hostingu – brak płatności od 3 dni
+ */
+function hostingReminder3DaysOverdueTemplate({ hostings, hostingUrl }) {
+  const rows = hostings.map((h) => `
+    <tr>
+      <td style="padding:12px 16px;border-bottom:1px solid #fecaca;">
+        <strong style="color:#1e293b;">${escapeHtml(h.domain)}</strong>
+        <div style="font-size:13px;color:#64748b;margin-top:4px;">${escapeHtml(h.clientName)} · termin był: ${escapeHtml(h.dueDateFormatted)}</div>
+      </td>
+      <td style="padding:12px 16px;border-bottom:1px solid #fecaca;text-align:right;">
+        <a href="${hostingUrl}" style="color:#dc2626;text-decoration:none;font-weight:600;">Zarządzaj →</a>
+      </td>
+    </tr>`).join('');
+  return buildHostingEmail({
+    title: 'Brak płatności – 3 dni po terminie',
+    subtitle: 'Wymagana reakcja: skontaktuj się z klientem lub zarejestruj płatność',
+    gradient: '135deg,#dc2626 0%,#ef4444 100%',
+    emoji: '🚨',
+    tableHeader: ['Domena / Klient', ''],
+    rows,
+    hostings,
+    hostingUrl,
+    ctaText: 'Przejdź do hostingu',
+    isOverdue: true
+  });
+}
+
+function formatPrice(amount) {
+  if (amount == null) return '–';
+  return new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN', minimumFractionDigits: 0 }).format(amount);
+}
+
+function buildHostingEmail({ title, subtitle, gradient, emoji, tableHeader, rows, hostingUrl, ctaText, isOverdue }) {
+  const borderColor = isOverdue ? '#fecaca' : '#e2e8f0';
+  const headerBg = `linear-gradient(${gradient})`;
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(title)}</title>
+</head>
+<body style="margin:0;padding:0;font-family:${baseStyles.fontFamily};background-color:${baseStyles.backgroundColor};color:${baseStyles.color};">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f1f5f9;">
+    <tr>
+      <td align="center" style="padding:40px 20px;">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;background:#ffffff;border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,0.08);overflow:hidden;">
+          <tr>
+            <td style="background:${headerBg};padding:32px 36px;text-align:center;">
+              <p style="margin:0 0 8px 0;font-size:32px;">${emoji}</p>
+              <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;letter-spacing:-0.02em;">${escapeHtml(title)}</h1>
+              <p style="margin:10px 0 0 0;color:rgba(255,255,255,0.92);font-size:15px;">${escapeHtml(subtitle)}</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px 36px;">
+              <p style="margin:0 0 20px 0;font-size:16px;line-height:1.6;color:#475569;">Poniżej lista pozycji z Ofertownika wymagających uwagi.</p>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid ${borderColor};border-radius:12px;overflow:hidden;">
+                <thead>
+                  <tr style="background:#f8fafc;">
+                    ${tableHeader.map((th) => `<th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;color:#64748b;text-transform:uppercase;">${escapeHtml(th)}</th>`).join('')}
+                  </tr>
+                </thead>
+                <tbody>
+                  ${rows}
+                </tbody>
+              </table>
+              <p style="margin:24px 0 0 0;text-align:center;">
+                <a href="${hostingUrl}" style="${objectToInlineStyle(buttonPrimary)}">${escapeHtml(ctaText)}</a>
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 36px;background:#f8fafc;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;">
+              Soft Synergy Ofertownik · Powiadomienia hostingu · ${new Date().toLocaleDateString('pl-PL')}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`.trim();
+}
+
 module.exports = {
   followUpReminderTemplate,
-  quoteRequestTemplate
+  quoteRequestTemplate,
+  hostingReminder3DaysBeforeTemplate,
+  hostingReminderDueTodayTemplate,
+  hostingReminder3DaysOverdueTemplate
 };

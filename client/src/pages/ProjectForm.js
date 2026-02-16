@@ -65,6 +65,7 @@ const ProjectForm = () => {
       stack: [],
       methodologies: []
     },
+    technologyExplanation: '',
     projectLink: ''
   });
 
@@ -190,7 +191,8 @@ const ProjectForm = () => {
         technologies: project.technologies || {
           stack: [],
           methodologies: []
-        }
+        },
+        technologyExplanation: project.technologyExplanation || ''
       });
     }
   }, [project]);
@@ -870,6 +872,24 @@ const ProjectForm = () => {
               </div>
             ))}
           </div>
+        </div>
+        )}
+
+        {/* Technologia – wyjaśnienie (tylko dla ofert finalnych) */}
+        {formData.offerType === 'final' && (
+        <div className="card">
+          <h2 className="text-lg font-medium text-gray-900 mb-4">Technologia</h2>
+          <p className="text-sm text-gray-500 mb-4">
+            Opisz wybór technologii: jak będziemy budować rozwiązanie, dlaczego ta technologia, oraz ewentualną alternatywę. Ta treść pojawi się w ofercie w sekcji „Technologia”.
+          </p>
+          <textarea
+            name="technologyExplanation"
+            value={formData.technologyExplanation || ''}
+            onChange={handleChange}
+            rows={5}
+            className="input-field w-full"
+            placeholder="np. Proponujemy stack React + Node.js ze względu na… Alternatywnie można rozważyć…"
+          />
         </div>
         )}
 

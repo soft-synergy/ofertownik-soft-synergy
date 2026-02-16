@@ -126,6 +126,13 @@ const i18n = {
     paymentTerms: 'Warunki Płatności',
     warrantySupport: 'Gwarancja i Wsparcie',
     warrantySupportContent: 'Zapewniamy dodatkową 3‑miesięczną gwarancję na wdrożone rozwiązanie. Pozostałe prawa i obowiązki stron wynikają z przepisów prawa polskiego.',
+    warrantySectionTitle: 'Gwarancja',
+    warrantySectionDescription: 'Szczegółowe warunki gwarancji, zakres odpowiedzialności oraz zasady zgłaszania usterek opisane są w regulaminie gwarancji.',
+    warrantyLinkText: 'Regulamin gwarancji (pełne warunki)',
+    technologySectionTitle: 'Technologia',
+    technologySectionDescription: 'Wyjaśnienie wyboru technologii: jak, dlaczego i ewentualne alternatywy.',
+    contractTemplateTitle: 'Wzór umowy',
+    contractTemplateLinkText: 'Pobierz wzór umowy (PDF)',
     portfolioTitle: 'Nasze Doświadczenie w Praktyce',
     seeMorePortfolio: 'Zobacz więcej portfolio',
     technologiesTitle: 'Technologie i Metodologie',
@@ -169,6 +176,13 @@ const i18n = {
     paymentTerms: 'Payment Terms',
     warrantySupport: 'Warranty and Support',
     warrantySupportContent: 'We provide an additional 3‑month warranty for the implemented solution. All remaining rights and obligations are governed by Polish law.',
+    warrantySectionTitle: 'Warranty',
+    warrantySectionDescription: 'Detailed warranty terms, scope of liability and defect reporting rules are described in the warranty policy.',
+    warrantyLinkText: 'Warranty policy (full terms)',
+    technologySectionTitle: 'Technology',
+    technologySectionDescription: 'Explanation of technology choice: how, why and possible alternatives.',
+    contractTemplateTitle: 'Contract template',
+    contractTemplateLinkText: 'Download contract template (PDF)',
     portfolioTitle: 'Our Experience in Practice',
     seeMorePortfolio: 'See more portfolio',
     technologiesTitle: 'Technologies and Methodologies',
@@ -350,6 +364,9 @@ router.post('/generate/:projectId', auth, async (req, res) => {
         stack: ['React', 'Node.js', 'MongoDB', 'TypeScript', 'Tailwind CSS'],
         methodologies: ['Agile', 'Scrum', 'CI/CD', 'Test-Driven Development']
       },
+      technologyExplanation: project.technologyExplanation || '',
+      warrantyUrl: 'https://soft-synergy.com/gwarancja',
+      contractTemplateUrl: process.env.CONTRACT_TEMPLATE_URL || 'https://soft-synergy.com/wzor-umowy.pdf',
       // Testimonials - 7 professional testimonials
       testimonials: project.testimonials || [
         {
@@ -773,6 +790,9 @@ router.get('/preview/:projectId', auth, async (req, res) => {
         stack: ['React', 'Node.js', 'MongoDB', 'TypeScript', 'Tailwind CSS'],
         methodologies: ['Agile', 'Scrum', 'CI/CD', 'Test-Driven Development']
       },
+      technologyExplanation: project.technologyExplanation || '',
+      warrantyUrl: 'https://soft-synergy.com/gwarancja',
+      contractTemplateUrl: process.env.CONTRACT_TEMPLATE_URL || 'https://soft-synergy.com/wzor-umowy.pdf',
       testimonials: project.testimonials || [
         {
           quote: 'Profesjonalna obsługa, terminowość i wysokiej jakości kod. Polecam!',
@@ -933,6 +953,9 @@ router.post('/generate-pdf/:projectId', auth, async (req, res) => {
         stack: ['React', 'Node.js', 'MongoDB', 'TypeScript', 'Tailwind CSS'],
         methodologies: ['Agile', 'Scrum', 'CI/CD', 'Test-Driven Development']
       },
+      technologyExplanation: project.technologyExplanation || '',
+      warrantyUrl: 'https://soft-synergy.com/gwarancja',
+      contractTemplateUrl: process.env.CONTRACT_TEMPLATE_URL || 'https://soft-synergy.com/wzor-umowy.pdf',
       // Testimonials - 7 professional testimonials
       testimonials: project.testimonials || [
         {

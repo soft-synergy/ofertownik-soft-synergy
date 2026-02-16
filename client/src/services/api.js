@@ -157,6 +157,14 @@ export const activityAPI = {
   recent: () => api.get('/api/activities/recent').then(res => res.data),
 };
 
+export const tasksAPI = {
+  getAll: (params) => api.get('/api/tasks', { params }).then(res => res.data),
+  getById: (id) => api.get(`/api/tasks/${id}`).then(res => res.data),
+  create: (data) => api.post('/api/tasks', data).then(res => res.data),
+  update: (id, data) => api.put(`/api/tasks/${id}`, data).then(res => res.data),
+  delete: (id) => api.delete(`/api/tasks/${id}`).then(res => res.data),
+};
+
 export const clientsAPI = {
   getAll: (params) => api.get('/api/clients', { params }).then(res => res.data),
   getById: (id) => api.get(`/api/clients/${id}`).then(res => res.data),

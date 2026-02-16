@@ -1,0 +1,530 @@
+import React, { useState, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from 'react-query';
+import {
+  format,
+  startOfMonth,
+  endOfMonth,
+  eachDayOfInterval,
+  isSameMonth,
+  isSameDay,
+  addMonths,
+  subMonths,
+  startOfWeek,
+  endOfWeek,
+  isToday,
+  parseISO,
+  setHours,
+  setMinutes
+} from 'date-fns';
+import { pl } from 'date-fns/locale';
+import {
+  Plus,
+  Calendar as CalendarIcon,
+  List,
+  Filter,
+  User,
+  FolderOpen,
+  ChevronLeft,
+  ChevronRight,
+  Edit2,
+  Trash2,
+  X,
+  Check
+} from 'lucide-react';
+import { tasksAPI, authAPI, projectsAPI } from '../services/api';
+import toast from 'react-hot-toast';
+
+const STATUS_LABELS = { todo: 'Do zrobienia', in_progress: 'W toku', done: 'Zrobione', cancelled: 'Anulowane' };
+const PRIORITY_LABELS = { low: 'Niski', normal: 'Normalny', high: 'Wysoki', urgent: 'Pilny' };
+const PRIORITY_COLORS = { low: 'bg-gray-100 text-gray-700', normal: 'bg-blue-100 text-blue-800', high: 'bg-orange-100 text-orange-800', urgent: 'bg-red-100 text-red-800' };
+
+function TaskModal({ task, initialDueDate, users = [], projects = [], onClose, onSaved }) {
+  const queryClient = useQueryClient();
+  const isEdit = !!task?._id;
+  const [form, setForm] = useState({
+    title: task?.title ?? '',
+    description: task?.description ?? '',
+    status: task?.status ?? 'todo',
+    priority: task?.priority ?? 'normal',
+    assignee: task?.assignee?._id ?? task?.assignee ?? '',
+    project: task?.project?._id ?? task?.project ?? '',
+    dueDate: task?.dueDate ? format(parseISO(task.dueDate), 'yyyy-MM-dd') : (initialDueDate ? format(initialDueDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd')),
+    dueTimeMinutes: task?.dueTimeMinutes ?? '',
+    durationMinutes: task?.durationMinutes ?? 60
+  });
+
+  const createMutation = useMutation((data) => tasksAPI.create(data), {
+    onSuccess: () => {
+      queryClient.invalidateQueries('tasks');
+      toast.success('Zadanie dodane');
+      onSaved();
+      onClose();
+    },
+    onError: (e) => toast.error(e.response?.data?.message || 'Błąd zapisu')
+  });
+  const updateMutation = useMutation(({ id, data }) => tasksAPI.update(id, data), {
+    onSuccess: () => {
+      queryClient.invalidateQueries('tasks');
+      toast.success('Zadanie zaktualizowane');
+      onSaved();
+      onClose();
+    },
+    onError: (e) => toast.error(e.response?.data?.message || 'Błąd zapisu')
+  });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!form.title.trim()) {
+      toast.error('Podaj tytuł');
+      return;
+    }
+    const payload = {
+      ...form,
+      assignee: form.assignee || null,
+      project: form.project || null,
+      dueTimeMinutes: form.dueTimeMinutes === '' ? null : Number(form.dueTimeMinutes),
+      durationMinutes: Number(form.durationMinutes) || 60
+    };
+    if (isEdit) {
+      updateMutation.mutate({ id: task._id, data: payload });
+    } else {
+      createMutation.mutate(payload);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="p-6 border-b flex justify-between items-center">
+          <h2 className="text-xl font-semibold">{isEdit ? 'Edytuj zadanie' : 'Nowe zadanie'}</h2>
+          <button type="button" onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Tytuł *</label>
+            <input
+              type="text"
+              value={form.title}
+              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+              className="input-field w-full"
+              placeholder="Nazwa zadania"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Opis</label>
+            <textarea
+              value={form.description}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              className="input-field w-full"
+              rows={2}
+              placeholder="Opis (opcjonalnie)"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+              <select
+                value={form.status}
+                onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+                className="input-field w-full"
+              >
+                {Object.entries(STATUS_LABELS).map(([k, v]) => (
+                  <option key={k} value={k}>{v}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Priorytet</label>
+              <select
+                value={form.priority}
+                onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}
+                className="input-field w-full"
+              >
+                {Object.entries(PRIORITY_LABELS).map(([k, v]) => (
+                  <option key={k} value={k}>{v}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Przypisany do</label>
+            <select
+              value={form.assignee}
+              onChange={(e) => setForm((f) => ({ ...f, assignee: e.target.value }))}
+              className="input-field w-full"
+            >
+              <option value="">— Nie przypisany —</option>
+              {users.map((u) => (
+                <option key={u._id} value={u._id}>{u.firstName} {u.lastName}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Projekt</label>
+            <select
+              value={form.project}
+              onChange={(e) => setForm((f) => ({ ...f, project: e.target.value }))}
+              className="input-field w-full"
+            >
+              <option value="">— Brak projektu —</option>
+              {projects.map((p) => (
+                <option key={p._id} value={p._id}>{p.name} {p.clientName ? `(${p.clientName})` : ''}</option>
+              ))}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Termin *</label>
+              <input
+                type="date"
+                value={form.dueDate}
+                onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))}
+                className="input-field w-full"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Godzina (opcjonalnie)</label>
+              <input
+                type="number"
+                min={0}
+                max={1439}
+                placeholder="minuty od północy (0–1439)"
+                value={form.dueTimeMinutes === '' ? '' : form.dueTimeMinutes}
+                onChange={(e) => setForm((f) => ({ ...f, dueTimeMinutes: e.target.value === '' ? '' : e.target.value }))}
+                className="input-field w-full"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-4">
+            <button type="button" onClick={onClose} className="btn-secondary">Anuluj</button>
+            <button type="submit" className="btn-primary" disabled={createMutation.isLoading || updateMutation.isLoading}>
+              {isEdit ? 'Zapisz' : 'Dodaj'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+export default function Tasks() {
+  const queryClient = useQueryClient();
+  const [view, setView] = useState('calendar'); // 'list' | 'calendar'
+  const [month, setMonth] = useState(new Date());
+  const [filters, setFilters] = useState({
+    assignee: '',
+    project: '',
+    status: '',
+    priority: '',
+    dateFrom: '',
+    dateTo: ''
+  });
+  const [modalTask, setModalTask] = useState(null);
+  const [modalInitialDueDate, setModalInitialDueDate] = useState(null);
+  const [showFilters, setShowFilters] = useState(false);
+
+  const params = useMemo(() => {
+    const p = {};
+    if (filters.assignee) p.assignee = filters.assignee;
+    if (filters.project) p.project = filters.project;
+    if (filters.status) p.status = filters.status;
+    if (filters.priority) p.priority = filters.priority;
+    if (filters.dateFrom) p.dateFrom = filters.dateFrom;
+    if (filters.dateTo) p.dateTo = filters.dateTo;
+    if (view === 'calendar') {
+      const start = startOfMonth(month);
+      const end = endOfMonth(month);
+      p.dateFrom = format(start, 'yyyy-MM-dd');
+      p.dateTo = format(end, 'yyyy-MM-dd');
+    }
+    return p;
+  }, [filters, view, month]);
+
+  const { data: tasks = [], isLoading } = useQuery(['tasks', params], () => tasksAPI.getAll(params));
+  const { data: users = [] } = useQuery('users', authAPI.listUsers);
+  const { data: projectsData } = useQuery(['projects', { limit: 500 }], () => projectsAPI.getAll({ limit: 500 }));
+  const projects = projectsData?.projects ?? [];
+
+  const deleteMutation = useMutation((id) => tasksAPI.delete(id), {
+    onSuccess: () => {
+      queryClient.invalidateQueries('tasks');
+      toast.success('Zadanie usunięte');
+    },
+    onError: () => toast.error('Błąd usuwania')
+  });
+
+  const calendarDays = useMemo(() => {
+    const start = startOfWeek(startOfMonth(month), { weekStartsOn: 1 });
+    const end = endOfWeek(endOfMonth(month), { weekStartsOn: 1 });
+    return eachDayOfInterval({ start, end });
+  }, [month]);
+
+  const tasksByDate = useMemo(() => {
+    const map = {};
+    tasks.forEach((t) => {
+      const d = t.dueDate ? format(parseISO(t.dueDate), 'yyyy-MM-dd') : null;
+      if (d) {
+        if (!map[d]) map[d] = [];
+        map[d].push(t);
+      }
+    });
+    Object.keys(map).forEach((d) => map[d].sort((a, b) => (a.dueTimeMinutes ?? 0) - (b.dueTimeMinutes ?? 0)));
+    return map;
+  }, [tasks]);
+
+  const openCreate = (dueDate) => {
+    setModalTask(null);
+    setModalInitialDueDate(dueDate || new Date());
+  };
+  const openEdit = (task) => {
+    setModalTask(task);
+    setModalInitialDueDate(null);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <h1 className="text-2xl font-bold text-gray-900">Zadania</h1>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setView('list')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${view === 'list' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+          >
+            <List className="h-4 w-4" /> Lista
+          </button>
+          <button
+            type="button"
+            onClick={() => setView('calendar')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${view === 'calendar' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+          >
+            <CalendarIcon className="h-4 w-4" /> Kalendarz
+          </button>
+          <button onClick={() => openCreate()} className="btn-primary flex items-center gap-2">
+            <Plus className="h-4 w-4" /> Nowe zadanie
+          </button>
+        </div>
+      </div>
+
+      {/* Filtry */}
+      <div className="card">
+        <button
+          type="button"
+          onClick={() => setShowFilters((s) => !s)}
+          className="flex items-center gap-2 text-sm font-medium text-gray-700"
+        >
+          <Filter className="h-4 w-4" /> Filtry
+        </button>
+        {showFilters && (
+          <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Przypisany</label>
+              <select
+                value={filters.assignee}
+                onChange={(e) => setFilters((f) => ({ ...f, assignee: e.target.value }))}
+                className="input-field w-full text-sm"
+              >
+                <option value="">Wszyscy</option>
+                <option value="me">Moje</option>
+                {users.map((u) => (
+                  <option key={u._id} value={u._id}>{u.firstName} {u.lastName}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Projekt</label>
+              <select
+                value={filters.project}
+                onChange={(e) => setFilters((f) => ({ ...f, project: e.target.value }))}
+                className="input-field w-full text-sm"
+              >
+                <option value="">Wszystkie</option>
+                {projects.map((p) => (
+                  <option key={p._id} value={p._id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
+              <select
+                value={filters.status}
+                onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
+                className="input-field w-full text-sm"
+              >
+                <option value="">Wszystkie</option>
+                {Object.entries(STATUS_LABELS).map(([k, v]) => (
+                  <option key={k} value={k}>{v}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Priorytet</label>
+              <select
+                value={filters.priority}
+                onChange={(e) => setFilters((f) => ({ ...f, priority: e.target.value }))}
+                className="input-field w-full text-sm"
+              >
+                <option value="">Wszystkie</option>
+                {Object.entries(PRIORITY_LABELS).map(([k, v]) => (
+                  <option key={k} value={k}>{v}</option>
+                ))}
+              </select>
+            </div>
+            {view === 'list' && (
+              <>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Od</label>
+                  <input
+                    type="date"
+                    value={filters.dateFrom}
+                    onChange={(e) => setFilters((f) => ({ ...f, dateFrom: e.target.value }))}
+                    className="input-field w-full text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Do</label>
+                  <input
+                    type="date"
+                    value={filters.dateTo}
+                    onChange={(e) => setFilters((f) => ({ ...f, dateTo: e.target.value }))}
+                    className="input-field w-full text-sm"
+                  />
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {view === 'list' && (
+        <div className="card overflow-hidden">
+          {isLoading ? (
+            <div className="py-12 text-center text-gray-500">Ładowanie…</div>
+          ) : tasks.length === 0 ? (
+            <div className="py-12 text-center text-gray-500">Brak zadań dla wybranych filtrów.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b">
+                  <tr>
+                    <th className="text-left p-3 font-medium text-gray-700">Tytuł</th>
+                    <th className="text-left p-3 font-medium text-gray-700">Przypisany</th>
+                    <th className="text-left p-3 font-medium text-gray-700">Projekt</th>
+                    <th className="text-left p-3 font-medium text-gray-700">Termin</th>
+                    <th className="text-left p-3 font-medium text-gray-700">Status</th>
+                    <th className="text-left p-3 font-medium text-gray-700">Priorytet</th>
+                    <th className="w-20 p-3" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {tasks.map((t) => (
+                    <tr key={t._id} className="hover:bg-gray-50">
+                      <td className="p-3 font-medium">{t.title}</td>
+                      <td className="p-3">{t.assignee ? `${t.assignee.firstName} ${t.assignee.lastName}` : '—'}</td>
+                      <td className="p-3">{t.project?.name ?? '—'}</td>
+                      <td className="p-3">{t.dueDate ? format(parseISO(t.dueDate), 'd.MM.yyyy', { locale: pl }) : '—'}</td>
+                      <td className="p-3">{STATUS_LABELS[t.status] ?? t.status}</td>
+                      <td className="p-3">
+                        <span className={`px-2 py-0.5 rounded text-xs ${PRIORITY_COLORS[t.priority] ?? ''}`}>
+                          {PRIORITY_LABELS[t.priority] ?? t.priority}
+                        </span>
+                      </td>
+                      <td className="p-3 flex items-center gap-1">
+                        <button type="button" onClick={() => openEdit(t)} className="p-1.5 text-gray-500 hover:text-primary-600 rounded">
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                        <button type="button" onClick={() => deleteMutation.mutate(t._id)} className="p-1.5 text-gray-500 hover:text-red-600 rounded">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {view === 'calendar' && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setMonth((m) => subMonths(m, 1))} className="p-2 hover:bg-gray-100 rounded-lg">
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <h2 className="text-lg font-semibold capitalize">{format(month, 'LLLL yyyy', { locale: pl })}</h2>
+              <button type="button" onClick={() => setMonth((m) => addMonths(m, 1))} className="p-2 hover:bg-gray-100 rounded-lg">
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            </div>
+            <button type="button" onClick={() => openCreate(month)} className="text-sm text-primary-600 hover:underline">
+              Dodaj zadanie w tym miesiącu
+            </button>
+          </div>
+          <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-lg overflow-hidden">
+            {['Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'Sb', 'Nd'].map((day) => (
+              <div key={day} className="bg-gray-50 p-2 text-center text-xs font-medium text-gray-600">
+                {day}
+              </div>
+            ))}
+            {calendarDays.map((day) => {
+              const key = format(day, 'yyyy-MM-dd');
+              const dayTasks = tasksByDate[key] ?? [];
+              const currentMonth = isSameMonth(day, month);
+              return (
+                <div
+                  key={key}
+                  className={`min-h-[100px] p-2 flex flex-col ${currentMonth ? 'bg-white' : 'bg-gray-50'} ${isToday(day) ? 'ring-1 ring-primary-500 ring-inset' : ''}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className={`text-sm ${currentMonth ? 'text-gray-900' : 'text-gray-400'}`}>{format(day, 'd')}</span>
+                    {currentMonth && (
+                      <button
+                        type="button"
+                        onClick={() => openCreate(day)}
+                        className="opacity-0 hover:opacity-100 p-0.5 rounded text-primary-600 hover:bg-primary-50"
+                        title="Dodaj zadanie"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  <div className="mt-1 space-y-1 flex-1 overflow-y-auto">
+                    {dayTasks.map((t) => (
+                      <button
+                        key={t._id}
+                        type="button"
+                        onClick={() => openEdit(t)}
+                        className={`w-full text-left px-2 py-1 rounded text-xs truncate block ${t.status === 'done' ? 'bg-green-100 text-green-800 line-through' : 'bg-primary-50 text-primary-900 hover:bg-primary-100'} ${PRIORITY_COLORS[t.priority] ? '' : ''}`}
+                        title={t.title}
+                      >
+                        <span className={`px-1 rounded mr-1 ${PRIORITY_COLORS[t.priority] ?? 'bg-gray-200'}`}>{PRIORITY_LABELS[t.priority]?.[0] ?? ''}</span>
+                        {t.title}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {(modalTask !== undefined || modalInitialDueDate !== undefined) && (
+        <TaskModal
+          task={modalTask}
+          initialDueDate={modalInitialDueDate}
+          users={users}
+          projects={projects}
+          onClose={() => { setModalTask(undefined); setModalInitialDueDate(undefined); }}
+          onSaved={() => {}}
+        />
+      )}
+    </div>
+  );
+}

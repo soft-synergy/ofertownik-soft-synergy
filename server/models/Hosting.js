@@ -70,7 +70,7 @@ const hostingSchema = new mongoose.Schema({
   }],
   reminders: [{
     sentAt: { type: Date, default: Date.now },
-    type: { type: String, enum: ['payment_due', 'overdue', 'suspension_warning'] },
+    type: { type: String, enum: ['payment_due', 'overdue', 'suspension_warning', 'hosting_3d_before', 'hosting_due_today', 'hosting_3d_overdue'] },
     notes: { type: String, default: '' }
   }],
   suspendedAt: {

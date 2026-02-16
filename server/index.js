@@ -15,6 +15,7 @@ const clientsRoutes = require('./routes/clients');
 const clientPortalRoutes = require('./routes/clientPortal');
 const sslRoutes = require('./routes/ssl');
 const waitlistRoutes = require('./routes/waitlist');
+const tasksRoutes = require('./routes/tasks');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -108,6 +109,7 @@ app.use('/api/clients', clientsRoutes);
 app.use('/api/client-portal', clientPortalRoutes);
 app.use('/api/ssl', sslRoutes);
 app.use('/api/waitlist', waitlistRoutes);
+app.use('/api/tasks', tasksRoutes);
 
 // Activities endpoint (recent)
 const Activity = require('./models/Activity');
@@ -191,6 +193,163 @@ const setupFollowUpReminderScheduler = () => {
   // initial delay then interval
   setTimeout(runCheck, 10 * 1000);
   setInterval(runCheck, 30 * 60 * 1000);
+};
+
+// Hosting payment notifications → info@soft-synergy.com (3 days before, due today, 3 days overdue)
+const setupHostingNotificationScheduler = () => {
+  const Hosting = require('./models/Hosting');
+  const { sendEmail } = require('./utils/emailService');
+  const {
+    hostingReminder3DaysBeforeTemplate,
+    hostingReminderDueTodayTemplate,
+    hostingReminder3DaysOverdueTemplate
+  } = require('./utils/emailTemplates');
+
+  const HOSTING_RECIPIENT = 'info@soft-synergy.com';
+  const APP_URL = process.env.APP_URL || 'https://ofertownik.soft-synergy.com';
+  const HOSTING_LIST_URL = `${APP_URL}/hosting`;
+
+  const toDateKey = (d) => {
+    const x = new Date(d);
+    return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+  };
+  const startOfDay = (d) => {
+    const x = new Date(d);
+    return new Date(x.getFullYear(), x.getMonth(), x.getDate(), 0, 0, 0, 0);
+  };
+  const endOfDay = (d) => {
+    const x = new Date(d);
+    return new Date(x.getFullYear(), x.getMonth(), x.getDate(), 23, 59, 59, 999);
+  };
+  const addDays = (d, n) => {
+    const x = new Date(d);
+    x.setDate(x.getDate() + n);
+    return x;
+  };
+
+  const runHostingCheck = async () => {
+    try {
+      const now = new Date();
+      const todayStart = startOfDay(now);
+      const todayEnd = endOfDay(now);
+      const in3DaysStart = startOfDay(addDays(now, 3));
+      const in3DaysEnd = endOfDay(addDays(now, 3));
+      const threeDaysAgoStart = startOfDay(addDays(now, -3));
+      const threeDaysAgoEnd = endOfDay(addDays(now, -3));
+
+      const formatDate = (date) => new Date(date).toLocaleDateString('pl-PL', { day: 'numeric', month: 'long', year: 'numeric' });
+
+      // 1) Za 3 dni – nextPaymentDate = today + 3
+      const dueIn3Days = await Hosting.find({
+        status: { $in: ['active', 'overdue'] },
+        nextPaymentDate: { $gte: in3DaysStart, $lte: in3DaysEnd }
+      }).lean();
+
+      const toNotify3dBefore = dueIn3Days.filter((h) => {
+        const key = toDateKey(h.nextPaymentDate);
+        const sent = (h.reminders || []).some((r) => r.type === 'hosting_3d_before' && r.notes === key);
+        return !sent;
+      });
+
+      if (toNotify3dBefore.length > 0) {
+        const hostingsForEmail = toNotify3dBefore.map((h) => ({
+          domain: h.domain,
+          clientName: h.clientName,
+          monthlyPrice: h.monthlyPrice,
+          billingCycle: h.billingCycle,
+          dueDateFormatted: formatDate(h.nextPaymentDate)
+        }));
+        const html = hostingReminder3DaysBeforeTemplate({ hostings: hostingsForEmail, hostingUrl: HOSTING_LIST_URL });
+        await sendEmail({
+          to: HOSTING_RECIPIENT,
+          subject: `📅 Hosting: za 3 dni płatność (${toNotify3dBefore.length} ${toNotify3dBefore.length === 1 ? 'pozycja' : 'pozycje'})`,
+          html
+        });
+        for (const h of toNotify3dBefore) {
+          await Hosting.findByIdAndUpdate(h._id, {
+            $push: { reminders: { type: 'hosting_3d_before', notes: toDateKey(h.nextPaymentDate), sentAt: new Date() } }
+          });
+        }
+        console.log(`[Hosting notifications] Wysłano "za 3 dni" do ${HOSTING_RECIPIENT} (${toNotify3dBefore.length} pozycji)`);
+      }
+
+      // 2) Dzisiaj – nextPaymentDate = today
+      const dueToday = await Hosting.find({
+        status: { $in: ['active', 'overdue'] },
+        nextPaymentDate: { $gte: todayStart, $lte: todayEnd }
+      }).lean();
+
+      const toNotifyDueToday = dueToday.filter((h) => {
+        const key = toDateKey(h.nextPaymentDate);
+        const sent = (h.reminders || []).some((r) => r.type === 'hosting_due_today' && r.notes === key);
+        return !sent;
+      });
+
+      if (toNotifyDueToday.length > 0) {
+        const hostingsForEmail = toNotifyDueToday.map((h) => ({
+          domain: h.domain,
+          clientName: h.clientName,
+          monthlyPrice: h.monthlyPrice,
+          dueDateFormatted: formatDate(h.nextPaymentDate)
+        }));
+        const html = hostingReminderDueTodayTemplate({ hostings: hostingsForEmail, hostingUrl: HOSTING_LIST_URL });
+        await sendEmail({
+          to: HOSTING_RECIPIENT,
+          subject: `⚠️ Hosting: płatność dzisiaj (${toNotifyDueToday.length} ${toNotifyDueToday.length === 1 ? 'pozycja' : 'pozycje'})`,
+          html
+        });
+        for (const h of toNotifyDueToday) {
+          await Hosting.findByIdAndUpdate(h._id, {
+            $push: { reminders: { type: 'hosting_due_today', notes: toDateKey(h.nextPaymentDate), sentAt: new Date() } }
+          });
+        }
+        console.log(`[Hosting notifications] Wysłano "dzisiaj" do ${HOSTING_RECIPIENT} (${toNotifyDueToday.length} pozycji)`);
+      }
+
+      // 3) 3 dni po terminie, brak płatności – nextPaymentDate = 3 days ago, brak wpłaty
+      const overdue3dAgo = await Hosting.find({
+        status: { $in: ['active', 'overdue'] },
+        nextPaymentDate: { $gte: threeDaysAgoStart, $lte: threeDaysAgoEnd }
+      }).lean();
+
+      const toNotifyOverdue = overdue3dAgo.filter((h) => {
+        const nextPay = h.nextPaymentDate ? new Date(h.nextPaymentDate) : null;
+        const lastPay = h.lastPaymentDate ? new Date(h.lastPaymentDate) : null;
+        const noPayment = !lastPay || (nextPay && lastPay < nextPay);
+        const key = toDateKey(h.nextPaymentDate);
+        const sent = (h.reminders || []).some((r) => r.type === 'hosting_3d_overdue' && r.notes === key);
+        return noPayment && !sent;
+      });
+
+      if (toNotifyOverdue.length > 0) {
+        const hostingsForEmail = toNotifyOverdue.map((h) => ({
+          domain: h.domain,
+          clientName: h.clientName,
+          dueDateFormatted: formatDate(h.nextPaymentDate)
+        }));
+        const html = hostingReminder3DaysOverdueTemplate({ hostings: hostingsForEmail, hostingUrl: HOSTING_LIST_URL });
+        await sendEmail({
+          to: HOSTING_RECIPIENT,
+          subject: `🚨 Hosting: brak płatności od 3 dni (${toNotifyOverdue.length} ${toNotifyOverdue.length === 1 ? 'pozycja' : 'pozycje'})`,
+          html
+        });
+        for (const h of toNotifyOverdue) {
+          await Hosting.findByIdAndUpdate(h._id, {
+            $push: { reminders: { type: 'hosting_3d_overdue', notes: toDateKey(h.nextPaymentDate), sentAt: new Date() } }
+          });
+        }
+        console.log(`[Hosting notifications] Wysłano "3 dni po terminie" do ${HOSTING_RECIPIENT} (${toNotifyOverdue.length} pozycji)`);
+      }
+    } catch (e) {
+      console.error('[Hosting notifications] Błąd:', e);
+    }
+  };
+
+  // Uruchom raz dziennie o 9:00 (względem startu serwera: pierwsze po 60 s, potem co 24 h)
+  const runInOneMinute = 60 * 1000;
+  const oneDay = 24 * 60 * 60 * 1000;
+  setTimeout(runHostingCheck, runInOneMinute);
+  setInterval(runHostingCheck, oneDay);
 };
 
 // Test uploads directory
@@ -280,6 +439,12 @@ mongoose.connect(process.env.MONGODB_URI, {
     console.log('⏰ Harmonogram przypomnień follow-up uruchomiony');
   } catch (e) {
     console.error('Nie udało się uruchomić harmonogramu follow-up:', e);
+  }
+  try {
+    setupHostingNotificationScheduler();
+    console.log('📧 Powiadomienia hostingu (info@) uruchomione – co 24 h');
+  } catch (e) {
+    console.error('Nie udało się uruchomić powiadomień hostingu:', e);
   }
   // Start hosting uptime monitor (every 5 minutes)
   try {

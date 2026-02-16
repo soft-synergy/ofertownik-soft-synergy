@@ -275,6 +275,11 @@ const projectSchema = new mongoose.Schema({
       trim: true
     }]
   },
+  technologyExplanation: {
+    type: String,
+    default: '',
+    trim: true
+  },
   teamMembers: [{
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     role: { type: String, default: 'member' }

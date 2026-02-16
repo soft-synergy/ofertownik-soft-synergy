@@ -9,7 +9,8 @@ import {
   Users, 
   Activity,
   Server,
-  LogOut
+  LogOut,
+  CheckSquare
 } from 'lucide-react';
 
 const Layout = () => {
@@ -25,6 +26,7 @@ const Layout = () => {
   const navItems = [
     { path: '/dashboard', label: t('nav.dashboard'), icon: LayoutDashboard },
     { path: '/projects', label: t('nav.projects'), icon: FolderOpen },
+    { path: '/tasks', label: 'Zadania', icon: CheckSquare },
     { path: '/portfolio', label: t('nav.portfolio'), icon: Briefcase },
     { path: '/activity', label: 'Aktywność', icon: Activity },
   ];

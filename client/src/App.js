@@ -17,6 +17,7 @@ import Activity from './pages/Activity';
 import Hosting from './pages/Hosting';
 import Clients from './pages/Clients';
 import ClientPortal from './pages/ClientPortal';
+import Tasks from './pages/Tasks';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import AuthLayout from './components/AuthLayout';
@@ -53,6 +54,7 @@ function AppContent() {
           <Route path="portfolio/new" element={<PortfolioForm />} />
           <Route path="portfolio/:id/edit" element={<PortfolioForm />} />
           <Route path="employees" element={<Employees />} />
+          <Route path="tasks" element={<Tasks />} />
           <Route path="activity" element={<Activity />} />
           <Route path="hosting" element={<Hosting />} />
           <Route path="clients" element={<Clients />} />
