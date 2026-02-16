@@ -1,10 +1,8 @@
 import React from 'react';
 import { useQuery } from 'react-query';
 import { activityAPI } from '../services/api';
-import { useI18n } from '../contexts/I18nContext';
 
 const Activity = () => {
-  const { t } = useI18n();
   const { data: items = [], isLoading } = useQuery('recentActivities', activityAPI.recent);
 
   if (isLoading) {

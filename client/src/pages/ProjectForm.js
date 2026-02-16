@@ -238,16 +238,6 @@ const ProjectForm = () => {
     }));
   };
 
-  const handleManagerChange = (field, value) => {
-    setFormData(prev => ({
-      ...prev,
-      projectManager: {
-        ...prev.projectManager,
-        [field]: value
-      }
-    }));
-  };
-
   const handleTimelineChange = (phase, field, value) => {
     setFormData(prev => ({
       ...prev,

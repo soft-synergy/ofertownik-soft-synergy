@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const Hosting = require('../models/Hosting');
+const Task = require('../models/Task');
 const { auth, requireRole } = require('../middleware/auth');
 const Activity = require('../models/Activity');
 const HostingMonitor = require('../models/HostingMonitor');
@@ -10,6 +11,59 @@ const sslMonitor = require('../services/sslMonitor');
 const { Parser } = require('json2csv');
 
 const router = express.Router();
+
+/**
+ * Ensure there is a task representing the next hosting payment date.
+ * This makes hosting payments visible in the Tasks calendar (month/week).
+ */
+async function upsertHostingPaymentTask(hosting, userId) {
+  if (!hosting?._id || !hosting?.nextPaymentDate) return null;
+  const title = `Hosting: płatność – ${hosting.domain}`;
+  const descParts = [
+    hosting.clientName ? `Klient: ${hosting.clientName}` : null,
+    hosting.monthlyPrice != null ? `Kwota: ${hosting.monthlyPrice} PLN / ${hosting.billingCycle}` : null
+  ].filter(Boolean);
+  const description = descParts.join('\n');
+
+  const existing = await Task.findOne({ 'source.kind': 'hosting', 'source.refId': hosting._id });
+  if (existing) {
+    existing.title = title;
+    existing.description = description;
+    existing.dueDate = new Date(hosting.nextPaymentDate);
+    existing.dueTimeMinutes = 540; // 09:00
+    existing.durationMinutes = existing.durationMinutes || 30;
+    existing.priority = existing.priority || 'normal';
+    // If it was previously marked done, reopen for the new due date
+    if (existing.status === 'done') {
+      existing.status = 'todo';
+      existing.completedAt = null;
+    }
+    if (!existing.source) existing.source = { kind: 'hosting', refId: hosting._id };
+    await existing.save();
+    return existing;
+  }
+
+  const t = new Task({
+    title,
+    description,
+    status: 'todo',
+    priority: 'normal',
+    assignee: null,
+    project: null,
+    dueDate: new Date(hosting.nextPaymentDate),
+    dueTimeMinutes: 540, // 09:00
+    durationMinutes: 30,
+    createdBy: userId,
+    source: { kind: 'hosting', refId: hosting._id }
+  });
+  await t.save();
+  return t;
+}
+
+async function deleteHostingPaymentTask(hostingId) {
+  if (!hostingId) return;
+  await Task.deleteOne({ 'source.kind': 'hosting', 'source.refId': hostingId });
+}
 
 // Wszystkie routes wymagają autoryzacji i roli admin
 router.use(auth);
@@ -171,6 +225,13 @@ router.post('/', [
     const hosting = new Hosting(hostingData);
     await hosting.save();
 
+    // Create/Update calendar task for next payment date
+    try {
+      await upsertHostingPaymentTask(hosting, req.user._id);
+    } catch (e) {
+      console.error('[Hosting->Tasks] Upsert task failed:', e.message);
+    }
+
     // Log activity
     try {
       await Activity.create({
@@ -222,6 +283,13 @@ router.put('/:id', [
 
     Object.assign(hosting, req.body);
     await hosting.save();
+
+    // Keep calendar task in sync
+    try {
+      await upsertHostingPaymentTask(hosting, req.user._id);
+    } catch (e) {
+      console.error('[Hosting->Tasks] Upsert task failed:', e.message);
+    }
 
     // Log activity
     try {
@@ -303,6 +371,13 @@ router.post('/:id/payment', [
     }
 
     await hosting.save();
+
+    // Update calendar task due date
+    try {
+      await upsertHostingPaymentTask(hosting, req.user._id);
+    } catch (e) {
+      console.error('[Hosting->Tasks] Upsert task failed:', e.message);
+    }
 
     // Log activity
     try {
@@ -398,6 +473,14 @@ router.put('/:id/status', [
 
     await hosting.save();
 
+    // If hosting cancelled, remove linked task; otherwise keep in sync
+    try {
+      if (hosting.status === 'cancelled') await deleteHostingPaymentTask(hosting._id);
+      else await upsertHostingPaymentTask(hosting, req.user._id);
+    } catch (e) {
+      console.error('[Hosting->Tasks] Sync task failed:', e.message);
+    }
+
     // Log activity
     try {
       await Activity.create({
@@ -428,6 +511,13 @@ router.delete('/:id', async (req, res) => {
     }
 
     await Hosting.findByIdAndDelete(req.params.id);
+
+    // Remove linked calendar task
+    try {
+      await deleteHostingPaymentTask(hosting._id);
+    } catch (e) {
+      console.error('[Hosting->Tasks] Delete task failed:', e.message);
+    }
 
     // Log activity
     try {

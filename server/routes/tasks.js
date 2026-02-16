@@ -8,8 +8,13 @@ const router = express.Router();
 // List tasks with filters
 router.get('/', auth, async (req, res) => {
   try {
-    const { assignee, project, status, priority, dateFrom, dateTo, limit = 200 } = req.query;
+    const { assignee, project, status, priority, dateFrom, dateTo, limit = 200, includeTemplates } = req.query;
     const query = {};
+
+    // Hide recurring templates by default (they are "meta" tasks)
+    if (includeTemplates !== 'true') {
+      query.isRecurrenceTemplate = { $ne: true };
+    }
 
     if (assignee === 'me') {
       query.assignee = req.user._id;
@@ -75,11 +80,12 @@ router.get('/:id', auth, async (req, res) => {
 // Create task
 router.post('/', auth, async (req, res) => {
   try {
-    const { title, description, status, priority, assignee, project, dueDate, dueTimeMinutes, durationMinutes } = req.body;
+    const { title, description, status, priority, assignee, project, dueDate, dueTimeMinutes, durationMinutes, recurrence } = req.body;
     if (!title || !dueDate) {
       return res.status(400).json({ message: 'Tytuł i termin są wymagane' });
     }
-    const task = new Task({
+
+    const basePayload = {
       title,
       description: description || '',
       status: status || 'todo',
@@ -90,14 +96,108 @@ router.post('/', auth, async (req, res) => {
       dueTimeMinutes: dueTimeMinutes != null ? dueTimeMinutes : null,
       durationMinutes: durationMinutes != null ? durationMinutes : 60,
       createdBy: req.user._id
-    });
+    };
+
+    const recurrenceEnabled = !!recurrence?.enabled;
+    if (recurrenceEnabled) {
+      const frequency = recurrence?.frequency;
+      const interval = Number(recurrence?.interval ?? 1) || 1;
+      const untilDate = recurrence?.untilDate ? new Date(recurrence.untilDate) : null;
+      if (!['daily', 'weekly', 'monthly'].includes(frequency)) {
+        return res.status(400).json({ message: 'Nieprawidłowa częstotliwość powtarzania' });
+      }
+      if (interval < 1 || interval > 365) {
+        return res.status(400).json({ message: 'Nieprawidłowy interwał powtarzania' });
+      }
+
+      // 1) Create hidden template
+      const template = new Task({
+        ...basePayload,
+        isRecurrenceTemplate: true,
+        recurrence: {
+          enabled: true,
+          frequency,
+          interval,
+          untilDate: untilDate && !Number.isNaN(untilDate.getTime()) ? untilDate : null
+        }
+      });
+      await template.save();
+
+      // 2) Create visible first instance (same due date)
+      const firstInstance = new Task({
+        ...basePayload,
+        isRecurrenceTemplate: false,
+        recurrenceParent: template._id,
+        recurrence: { enabled: false, frequency: null, interval: 1, untilDate: null }
+      });
+      await firstInstance.save();
+
+      // 3) Pre-generate instances for the next ~60 days (or untilDate)
+      const horizon = new Date();
+      horizon.setDate(horizon.getDate() + 60);
+      const effectiveUntil = template.recurrence.untilDate && template.recurrence.untilDate < horizon ? template.recurrence.untilDate : horizon;
+
+      const addDays = (d, n) => {
+        const x = new Date(d);
+        x.setDate(x.getDate() + n);
+        return x;
+      };
+      const addMonths = (d, n) => {
+        const x = new Date(d);
+        x.setMonth(x.getMonth() + n);
+        return x;
+      };
+      const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+      const endOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+
+      let cursor = new Date(basePayload.dueDate);
+      // advance once because first instance exists
+      if (frequency === 'daily') cursor = addDays(cursor, interval);
+      if (frequency === 'weekly') cursor = addDays(cursor, 7 * interval);
+      if (frequency === 'monthly') cursor = addMonths(cursor, interval);
+
+      const toCreate = [];
+      while (cursor <= effectiveUntil) {
+        const dayStart = startOfDay(cursor);
+        const dayEnd = endOfDay(cursor);
+        // eslint-disable-next-line no-await-in-loop
+        const exists = await Task.findOne({
+          recurrenceParent: template._id,
+          dueDate: { $gte: dayStart, $lte: dayEnd }
+        }).select('_id').lean();
+        if (!exists) {
+          toCreate.push({
+            ...basePayload,
+            dueDate: new Date(cursor),
+            isRecurrenceTemplate: false,
+            recurrenceParent: template._id,
+            recurrence: { enabled: false, frequency: null, interval: 1, untilDate: null }
+          });
+        }
+        if (frequency === 'daily') cursor = addDays(cursor, interval);
+        else if (frequency === 'weekly') cursor = addDays(cursor, 7 * interval);
+        else cursor = addMonths(cursor, interval);
+      }
+      if (toCreate.length > 0) {
+        await Task.insertMany(toCreate);
+      }
+
+      await firstInstance.populate([
+        { path: 'assignee', select: 'firstName lastName email' },
+        { path: 'project', select: 'name clientName status' },
+        { path: 'createdBy', select: 'firstName lastName' }
+      ]);
+      return res.status(201).json(firstInstance);
+    }
+
+    const task = new Task(basePayload);
     await task.save();
     await task.populate([
       { path: 'assignee', select: 'firstName lastName email' },
       { path: 'project', select: 'name clientName status' },
       { path: 'createdBy', select: 'firstName lastName' }
     ]);
-    res.status(201).json(task);
+    return res.status(201).json(task);
   } catch (error) {
     console.error('Create task error:', error);
     res.status(500).json({ message: 'Błąd podczas tworzenia zadania' });
@@ -111,6 +211,7 @@ router.put('/:id', auth, async (req, res) => {
     if (!task) {
       return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
     }
+    const prevStatus = task.status;
     const { title, description, status, priority, assignee, project, dueDate, dueTimeMinutes, durationMinutes } = req.body;
     if (title != null) task.title = title;
     if (description != null) task.description = description;
@@ -121,11 +222,13 @@ router.put('/:id', auth, async (req, res) => {
     if (dueDate != null) task.dueDate = new Date(dueDate);
     if (dueTimeMinutes !== undefined) task.dueTimeMinutes = dueTimeMinutes;
     if (durationMinutes != null) task.durationMinutes = durationMinutes;
-    if (status === 'done' && task.status !== 'done') {
-      task.completedAt = new Date();
-    }
-    if (status !== 'done') {
-      task.completedAt = null;
+    if (status != null) {
+      if (status === 'done' && prevStatus !== 'done') {
+        task.completedAt = new Date();
+      }
+      if (status !== 'done') {
+        task.completedAt = null;
+      }
     }
     await task.save();
     await task.populate([

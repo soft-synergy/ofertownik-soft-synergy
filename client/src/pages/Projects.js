@@ -577,7 +577,6 @@ const Projects = () => {
         <div className="flex items-center justify-between">
           {(() => {
             const currentPage = Number(data.currentPage || 1);
-            const totalPages = Number(data.totalPages || 1);
             const total = Number(data.total || 0);
             const start = ((currentPage - 1) * 10) + 1;
             const end = Math.min(currentPage * 10, total);

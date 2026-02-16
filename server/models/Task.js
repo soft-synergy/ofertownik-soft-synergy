@@ -31,6 +31,14 @@ const taskSchema = new mongoose.Schema({
     ref: 'Project',
     default: null
   },
+  /**
+   * Optional: source entity that created/owns this task (e.g. hosting payment).
+   * Used for automatic sync (upsert) with other modules.
+   */
+  source: {
+    kind: { type: String, enum: ['hosting'], default: null },
+    refId: { type: mongoose.Schema.Types.ObjectId, default: null }
+  },
   dueDate: {
     type: Date,
     required: true
@@ -48,6 +56,28 @@ const taskSchema = new mongoose.Schema({
     default: 60,
     min: 1
   },
+  /**
+   * Recurring tasks support:
+   * - Template tasks are hidden from default task lists (isRecurrenceTemplate=true)
+   * - Instances have recurrenceParent pointing to the template task
+   */
+  isRecurrenceTemplate: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  recurrenceParent: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Task',
+    default: null,
+    index: true
+  },
+  recurrence: {
+    enabled: { type: Boolean, default: false },
+    frequency: { type: String, enum: ['daily', 'weekly', 'monthly'], default: null },
+    interval: { type: Number, default: 1, min: 1 },
+    untilDate: { type: Date, default: null }
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -64,5 +94,6 @@ const taskSchema = new mongoose.Schema({
 taskSchema.index({ assignee: 1, dueDate: 1 });
 taskSchema.index({ project: 1, dueDate: 1 });
 taskSchema.index({ status: 1, dueDate: 1 });
+taskSchema.index({ 'source.kind': 1, 'source.refId': 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('Task', taskSchema);

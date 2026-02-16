@@ -2,7 +2,7 @@ import React from 'react';
 import { calls, recordings } from '../services/ccm';
 
 export default function EmployeeApp() {
-  const [currentLead, setCurrentLead] = React.useState(null);
+  const [currentLead] = React.useState(null);
   const [notes, setNotes] = React.useState('');
   const [myRecs, setMyRecs] = React.useState({ recordings: [] });
 

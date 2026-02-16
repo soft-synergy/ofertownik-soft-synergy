@@ -6,30 +6,29 @@ import {
   endOfMonth,
   eachDayOfInterval,
   isSameMonth,
-  isSameDay,
   addMonths,
   subMonths,
   startOfWeek,
   endOfWeek,
+  addWeeks,
+  subWeeks,
   isToday,
   parseISO,
-  setHours,
-  setMinutes
 } from 'date-fns';
 import { pl } from 'date-fns/locale';
+import { DndContext, useDraggable, useDroppable } from '@dnd-kit/core';
+import { CSS } from '@dnd-kit/utilities';
 import {
   Plus,
   Calendar as CalendarIcon,
   List,
   Filter,
-  User,
-  FolderOpen,
   ChevronLeft,
   ChevronRight,
   Edit2,
   Trash2,
   X,
-  Check
+  GripVertical
 } from 'lucide-react';
 import { tasksAPI, authAPI, projectsAPI } from '../services/api';
 import toast from 'react-hot-toast';
@@ -37,6 +36,57 @@ import toast from 'react-hot-toast';
 const STATUS_LABELS = { todo: 'Do zrobienia', in_progress: 'W toku', done: 'Zrobione', cancelled: 'Anulowane' };
 const PRIORITY_LABELS = { low: 'Niski', normal: 'Normalny', high: 'Wysoki', urgent: 'Pilny' };
 const PRIORITY_COLORS = { low: 'bg-gray-100 text-gray-700', normal: 'bg-blue-100 text-blue-800', high: 'bg-orange-100 text-orange-800', urgent: 'bg-red-100 text-red-800' };
+
+function DraggableTaskChip({ task, onOpen }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useDraggable({
+    id: task._id,
+    data: { taskId: task._id }
+  });
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`w-full px-2 py-1 rounded text-xs truncate flex items-center gap-1 ${
+        task.status === 'done'
+          ? 'bg-green-100 text-green-800 line-through'
+          : 'bg-primary-50 text-primary-900 hover:bg-primary-100'
+      }`}
+      title={task.title}
+    >
+      <button
+        type="button"
+        className="shrink-0 text-gray-500 hover:text-gray-700 cursor-grab active:cursor-grabbing"
+        {...listeners}
+        {...attributes}
+        aria-label="Przeciągnij zadanie"
+        title="Przeciągnij"
+      >
+        <GripVertical className="h-3.5 w-3.5" />
+      </button>
+      <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left truncate">
+        <span className={`px-1 rounded mr-1 ${PRIORITY_COLORS[task.priority] ?? 'bg-gray-200'}`}>
+          {PRIORITY_LABELS[task.priority]?.[0] ?? ''}
+        </span>
+        {task.title}
+      </button>
+    </div>
+  );
+}
+
+function DroppableDayCell({ id, className, children }) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  return (
+    <div ref={setNodeRef} className={`${className} ${isOver ? 'bg-primary-50' : ''}`}>
+      {children}
+    </div>
+  );
+}
 
 function TaskModal({ task, initialDueDate, users = [], projects = [], onClose, onSaved }) {
   const queryClient = useQueryClient();
@@ -50,7 +100,11 @@ function TaskModal({ task, initialDueDate, users = [], projects = [], onClose, o
     project: task?.project?._id ?? task?.project ?? '',
     dueDate: task?.dueDate ? format(parseISO(task.dueDate), 'yyyy-MM-dd') : (initialDueDate ? format(initialDueDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd')),
     dueTimeMinutes: task?.dueTimeMinutes ?? '',
-    durationMinutes: task?.durationMinutes ?? 60
+    durationMinutes: task?.durationMinutes ?? 60,
+    recurrenceEnabled: false,
+    recurrenceFrequency: 'weekly',
+    recurrenceInterval: 1,
+    recurrenceUntilDate: ''
   });
 
   const createMutation = useMutation((data) => tasksAPI.create(data), {
@@ -79,11 +133,23 @@ function TaskModal({ task, initialDueDate, users = [], projects = [], onClose, o
       return;
     }
     const payload = {
-      ...form,
+      title: form.title,
+      description: form.description,
+      status: form.status,
+      priority: form.priority,
       assignee: form.assignee || null,
       project: form.project || null,
+      dueDate: form.dueDate,
       dueTimeMinutes: form.dueTimeMinutes === '' ? null : Number(form.dueTimeMinutes),
-      durationMinutes: Number(form.durationMinutes) || 60
+      durationMinutes: Number(form.durationMinutes) || 60,
+      ...(form.recurrenceEnabled && !isEdit ? {
+        recurrence: {
+          enabled: true,
+          frequency: form.recurrenceFrequency,
+          interval: Number(form.recurrenceInterval) || 1,
+          untilDate: form.recurrenceUntilDate || null
+        }
+      } : {})
     };
     if (isEdit) {
       updateMutation.mutate({ id: task._id, data: payload });
@@ -199,6 +265,58 @@ function TaskModal({ task, initialDueDate, users = [], projects = [], onClose, o
               />
             </div>
           </div>
+
+          {!isEdit && (
+            <div className="border rounded-lg p-3">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={form.recurrenceEnabled}
+                  onChange={(e) => setForm((f) => ({ ...f, recurrenceEnabled: e.target.checked }))}
+                />
+                Powtarzaj zadanie
+              </label>
+              {form.recurrenceEnabled && (
+                <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Częstotliwość</label>
+                    <select
+                      value={form.recurrenceFrequency}
+                      onChange={(e) => setForm((f) => ({ ...f, recurrenceFrequency: e.target.value }))}
+                      className="input-field w-full text-sm"
+                    >
+                      <option value="daily">Codziennie</option>
+                      <option value="weekly">Co tydzień</option>
+                      <option value="monthly">Co miesiąc</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Co ile</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={365}
+                      value={form.recurrenceInterval}
+                      onChange={(e) => setForm((f) => ({ ...f, recurrenceInterval: e.target.value }))}
+                      className="input-field w-full text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Do kiedy (opcjonalnie)</label>
+                    <input
+                      type="date"
+                      value={form.recurrenceUntilDate}
+                      onChange={(e) => setForm((f) => ({ ...f, recurrenceUntilDate: e.target.value }))}
+                      className="input-field w-full text-sm"
+                    />
+                  </div>
+                  <div className="sm:col-span-3 text-xs text-gray-500">
+                    Utworzymy kolejne wystąpienia automatycznie (na kilka tygodni do przodu).
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           <div className="flex justify-end gap-2 pt-4">
             <button type="button" onClick={onClose} className="btn-secondary">Anuluj</button>
             <button type="submit" className="btn-primary" disabled={createMutation.isLoading || updateMutation.isLoading}>
@@ -215,6 +333,8 @@ export default function Tasks() {
   const queryClient = useQueryClient();
   const [view, setView] = useState('calendar'); // 'list' | 'calendar'
   const [month, setMonth] = useState(new Date());
+  const [week, setWeek] = useState(new Date());
+  const [calendarMode, setCalendarMode] = useState('month'); // 'month' | 'week'
   const [filters, setFilters] = useState({
     assignee: '',
     project: '',
@@ -227,6 +347,15 @@ export default function Tasks() {
   const [modalInitialDueDate, setModalInitialDueDate] = useState(null);
   const [showFilters, setShowFilters] = useState(false);
 
+  const calendarRange = useMemo(() => {
+    if (calendarMode === 'week') {
+      const start = startOfWeek(week, { weekStartsOn: 1 });
+      const end = endOfWeek(week, { weekStartsOn: 1 });
+      return { start, end };
+    }
+    return { start: startOfMonth(month), end: endOfMonth(month) };
+  }, [calendarMode, month, week]);
+
   const params = useMemo(() => {
     const p = {};
     if (filters.assignee) p.assignee = filters.assignee;
@@ -236,13 +365,11 @@ export default function Tasks() {
     if (filters.dateFrom) p.dateFrom = filters.dateFrom;
     if (filters.dateTo) p.dateTo = filters.dateTo;
     if (view === 'calendar') {
-      const start = startOfMonth(month);
-      const end = endOfMonth(month);
-      p.dateFrom = format(start, 'yyyy-MM-dd');
-      p.dateTo = format(end, 'yyyy-MM-dd');
+      p.dateFrom = format(calendarRange.start, 'yyyy-MM-dd');
+      p.dateTo = format(calendarRange.end, 'yyyy-MM-dd');
     }
     return p;
-  }, [filters, view, month]);
+  }, [filters, view, calendarRange]);
 
   const { data: tasks = [], isLoading } = useQuery(['tasks', params], () => tasksAPI.getAll(params));
   const { data: users = [] } = useQuery('users', authAPI.listUsers);
@@ -257,11 +384,25 @@ export default function Tasks() {
     onError: () => toast.error('Błąd usuwania')
   });
 
+  const moveDueDateMutation = useMutation(({ id, dueDate }) => tasksAPI.update(id, { dueDate }), {
+    onSuccess: () => {
+      queryClient.invalidateQueries('tasks');
+      toast.success('Zmieniono termin zadania');
+    },
+    onError: () => toast.error('Nie udało się przenieść zadania')
+  });
+
   const calendarDays = useMemo(() => {
     const start = startOfWeek(startOfMonth(month), { weekStartsOn: 1 });
     const end = endOfWeek(endOfMonth(month), { weekStartsOn: 1 });
     return eachDayOfInterval({ start, end });
   }, [month]);
+
+  const weekDays = useMemo(() => {
+    const start = startOfWeek(week, { weekStartsOn: 1 });
+    const end = endOfWeek(week, { weekStartsOn: 1 });
+    return eachDayOfInterval({ start, end });
+  }, [week]);
 
   const tasksByDate = useMemo(() => {
     const map = {};
@@ -285,6 +426,25 @@ export default function Tasks() {
     setModalInitialDueDate(null);
   };
 
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+    if (!over) return;
+    const activeId = active?.id;
+    const overId = over?.id;
+    if (!activeId || !overId) return;
+
+    const overStr = String(overId);
+    if (!overStr.startsWith('day:')) return;
+    const targetDateKey = overStr.slice('day:'.length);
+
+    const task = tasks.find((t) => t._id === activeId);
+    const currentDateKey = task?.dueDate ? format(parseISO(task.dueDate), 'yyyy-MM-dd') : null;
+    if (!task || !currentDateKey) return;
+    if (targetDateKey === currentDateKey) return;
+
+    moveDueDateMutation.mutate({ id: task._id, dueDate: targetDateKey });
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -304,6 +464,26 @@ export default function Tasks() {
           >
             <CalendarIcon className="h-4 w-4" /> Kalendarz
           </button>
+          {view === 'calendar' && (
+            <div className="hidden sm:flex items-center gap-1 ml-1">
+              <button
+                type="button"
+                onClick={() => setCalendarMode('month')}
+                className={`px-3 py-2 rounded-lg text-sm font-medium ${calendarMode === 'month' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                title="Widok miesiąca"
+              >
+                Miesiąc
+              </button>
+              <button
+                type="button"
+                onClick={() => setCalendarMode('week')}
+                className={`px-3 py-2 rounded-lg text-sm font-medium ${calendarMode === 'week' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                title="Widok tygodnia"
+              >
+                Tydzień
+              </button>
+            </div>
+          )}
           <button onClick={() => openCreate()} className="btn-primary flex items-center gap-2">
             <Plus className="h-4 w-4" /> Nowe zadanie
           </button>
@@ -452,76 +632,134 @@ export default function Tasks() {
 
       {view === 'calendar' && (
         <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={() => setMonth((m) => subMonths(m, 1))} className="p-2 hover:bg-gray-100 rounded-lg">
-                <ChevronLeft className="h-5 w-5" />
-              </button>
-              <h2 className="text-lg font-semibold capitalize">{format(month, 'LLLL yyyy', { locale: pl })}</h2>
-              <button type="button" onClick={() => setMonth((m) => addMonths(m, 1))} className="p-2 hover:bg-gray-100 rounded-lg">
-                <ChevronRight className="h-5 w-5" />
-              </button>
-            </div>
-            <button type="button" onClick={() => openCreate(month)} className="text-sm text-primary-600 hover:underline">
-              Dodaj zadanie w tym miesiącu
-            </button>
-          </div>
-          <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-lg overflow-hidden">
-            {['Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'Sb', 'Nd'].map((day) => (
-              <div key={day} className="bg-gray-50 p-2 text-center text-xs font-medium text-gray-600">
-                {day}
-              </div>
-            ))}
-            {calendarDays.map((day) => {
-              const key = format(day, 'yyyy-MM-dd');
-              const dayTasks = tasksByDate[key] ?? [];
-              const currentMonth = isSameMonth(day, month);
-              return (
-                <div
-                  key={key}
-                  className={`min-h-[100px] p-2 flex flex-col ${currentMonth ? 'bg-white' : 'bg-gray-50'} ${isToday(day) ? 'ring-1 ring-primary-500 ring-inset' : ''}`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className={`text-sm ${currentMonth ? 'text-gray-900' : 'text-gray-400'}`}>{format(day, 'd')}</span>
-                    {currentMonth && (
-                      <button
-                        type="button"
-                        onClick={() => openCreate(day)}
-                        className="opacity-0 hover:opacity-100 p-0.5 rounded text-primary-600 hover:bg-primary-50"
-                        title="Dodaj zadanie"
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                      </button>
-                    )}
+          <DndContext onDragEnd={handleDragEnd}>
+            {calendarMode === 'month' && (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => setMonth((m) => subMonths(m, 1))} className="p-2 hover:bg-gray-100 rounded-lg">
+                      <ChevronLeft className="h-5 w-5" />
+                    </button>
+                    <h2 className="text-lg font-semibold capitalize">{format(month, 'LLLL yyyy', { locale: pl })}</h2>
+                    <button type="button" onClick={() => setMonth((m) => addMonths(m, 1))} className="p-2 hover:bg-gray-100 rounded-lg">
+                      <ChevronRight className="h-5 w-5" />
+                    </button>
                   </div>
-                  <div className="mt-1 space-y-1 flex-1 overflow-y-auto">
-                    {dayTasks.map((t) => (
-                      <button
-                        key={t._id}
-                        type="button"
-                        onClick={() => openEdit(t)}
-                        className={`w-full text-left px-2 py-1 rounded text-xs truncate block ${t.status === 'done' ? 'bg-green-100 text-green-800 line-through' : 'bg-primary-50 text-primary-900 hover:bg-primary-100'} ${PRIORITY_COLORS[t.priority] ? '' : ''}`}
-                        title={t.title}
-                      >
-                        <span className={`px-1 rounded mr-1 ${PRIORITY_COLORS[t.priority] ?? 'bg-gray-200'}`}>{PRIORITY_LABELS[t.priority]?.[0] ?? ''}</span>
-                        {t.title}
-                      </button>
-                    ))}
+                  <div className="flex items-center gap-3">
+                    <span className="hidden md:block text-xs text-gray-500">Przeciągnij zadanie na inny dzień</span>
+                    <button type="button" onClick={() => openCreate(month)} className="text-sm text-primary-600 hover:underline">
+                      Dodaj zadanie w tym miesiącu
+                    </button>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+                <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-lg overflow-hidden">
+                  {['Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'Sb', 'Nd'].map((day) => (
+                    <div key={day} className="bg-gray-50 p-2 text-center text-xs font-medium text-gray-600">
+                      {day}
+                    </div>
+                  ))}
+                  {calendarDays.map((day) => {
+                    const key = format(day, 'yyyy-MM-dd');
+                    const dayTasks = tasksByDate[key] ?? [];
+                    const currentMonth = isSameMonth(day, month);
+                    return (
+                      <DroppableDayCell
+                        key={key}
+                        id={`day:${key}`}
+                        className={`min-h-[110px] p-2 flex flex-col ${currentMonth ? 'bg-white' : 'bg-gray-50'} ${isToday(day) ? 'ring-1 ring-primary-500 ring-inset' : ''}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className={`text-sm ${currentMonth ? 'text-gray-900' : 'text-gray-400'}`}>{format(day, 'd')}</span>
+                          {currentMonth && (
+                            <button
+                              type="button"
+                              onClick={() => openCreate(day)}
+                              className="opacity-0 hover:opacity-100 p-0.5 rounded text-primary-600 hover:bg-primary-50"
+                              title="Dodaj zadanie"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+                        <div className="mt-1 space-y-1 flex-1 overflow-y-auto">
+                          {dayTasks.map((t) => (
+                            <DraggableTaskChip key={t._id} task={t} onOpen={() => openEdit(t)} />
+                          ))}
+                        </div>
+                      </DroppableDayCell>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
+            {calendarMode === 'week' && (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => setWeek((w) => subWeeks(w, 1))} className="p-2 hover:bg-gray-100 rounded-lg">
+                      <ChevronLeft className="h-5 w-5" />
+                    </button>
+                    <h2 className="text-lg font-semibold">
+                      {format(startOfWeek(week, { weekStartsOn: 1 }), 'd MMM', { locale: pl })}–{format(endOfWeek(week, { weekStartsOn: 1 }), 'd MMM yyyy', { locale: pl })}
+                    </h2>
+                    <button type="button" onClick={() => setWeek((w) => addWeeks(w, 1))} className="p-2 hover:bg-gray-100 rounded-lg">
+                      <ChevronRight className="h-5 w-5" />
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="hidden md:block text-xs text-gray-500">Przeciągnij zadanie na inny dzień</span>
+                    <button type="button" onClick={() => openCreate(new Date())} className="text-sm text-primary-600 hover:underline">
+                      Dodaj zadanie
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-lg overflow-hidden">
+                  {weekDays.map((day) => {
+                    const key = format(day, 'yyyy-MM-dd');
+                    const dayTasks = tasksByDate[key] ?? [];
+                    return (
+                      <DroppableDayCell
+                        key={key}
+                        id={`day:${key}`}
+                        className={`min-h-[160px] p-2 flex flex-col bg-white ${isToday(day) ? 'ring-1 ring-primary-500 ring-inset' : ''}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex flex-col">
+                            <span className="text-xs text-gray-500 capitalize">{format(day, 'EEE', { locale: pl })}</span>
+                            <span className="text-sm text-gray-900 font-medium">{format(day, 'd MMM', { locale: pl })}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => openCreate(day)}
+                            className="p-0.5 rounded text-primary-600 hover:bg-primary-50"
+                            title="Dodaj zadanie"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                        <div className="mt-2 space-y-1 flex-1 overflow-y-auto">
+                          {dayTasks.map((t) => (
+                            <DraggableTaskChip key={t._id} task={t} onOpen={() => openEdit(t)} />
+                          ))}
+                        </div>
+                      </DroppableDayCell>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </DndContext>
         </div>
       )}
 
-      {(modalTask !== undefined || modalInitialDueDate !== undefined) && (
+      {(modalTask !== null || modalInitialDueDate !== null) && (
         <TaskModal
           task={modalTask}
           initialDueDate={modalInitialDueDate}
           users={users}
           projects={projects}
-          onClose={() => { setModalTask(undefined); setModalInitialDueDate(undefined); }}
+          onClose={() => { setModalTask(null); setModalInitialDueDate(null); }}
           onSaved={() => {}}
         />
       )}
