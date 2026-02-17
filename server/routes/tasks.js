@@ -2,6 +2,7 @@ const express = require('express');
 const Task = require('../models/Task');
 const Project = require('../models/Project');
 const { auth } = require('../middleware/auth');
+const { createNextRecurrenceInstance } = require('../utils/recurringTasks');
 
 const router = express.Router();
 
@@ -60,13 +61,14 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-// Get one task
+// Get one task (with updates for modal)
 router.get('/:id', auth, async (req, res) => {
   try {
     const task = await Task.findById(req.params.id)
       .populate('assignee', 'firstName lastName email')
       .populate('project', 'name clientName status')
-      .populate('createdBy', 'firstName lastName');
+      .populate('createdBy', 'firstName lastName')
+      .populate('updates.author', 'firstName lastName');
     if (!task) {
       return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
     }
@@ -74,6 +76,32 @@ router.get('/:id', auth, async (req, res) => {
   } catch (error) {
     console.error('Get task error:', error);
     res.status(500).json({ message: 'Błąd podczas pobierania zadania' });
+  }
+});
+
+// Add update to task
+router.post('/:id/updates', auth, async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+    if (!task) {
+      return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
+    }
+    const text = (req.body.text || '').trim();
+    if (!text) {
+      return res.status(400).json({ message: 'Treść update\'u jest wymagana' });
+    }
+    task.updates = task.updates || [];
+    task.updates.push({
+      text,
+      author: req.user._id,
+      createdAt: new Date()
+    });
+    await task.save();
+    await task.populate('updates.author', 'firstName lastName');
+    res.status(201).json(task);
+  } catch (error) {
+    console.error('Add task update error:', error);
+    res.status(500).json({ message: 'Błąd podczas dodawania update\'u' });
   }
 });
 
@@ -123,7 +151,7 @@ router.post('/', auth, async (req, res) => {
       });
       await template.save();
 
-      // 2) Create visible first instance (same due date)
+      // 2) Create only the first visible instance. Next instances are created when this one is marked done (or by scheduler).
       const firstInstance = new Task({
         ...basePayload,
         isRecurrenceTemplate: false,
@@ -131,56 +159,6 @@ router.post('/', auth, async (req, res) => {
         recurrence: { enabled: false, frequency: null, interval: 1, untilDate: null }
       });
       await firstInstance.save();
-
-      // 3) Pre-generate instances for the next ~60 days (or untilDate)
-      const horizon = new Date();
-      horizon.setDate(horizon.getDate() + 60);
-      const effectiveUntil = template.recurrence.untilDate && template.recurrence.untilDate < horizon ? template.recurrence.untilDate : horizon;
-
-      const addDays = (d, n) => {
-        const x = new Date(d);
-        x.setDate(x.getDate() + n);
-        return x;
-      };
-      const addMonths = (d, n) => {
-        const x = new Date(d);
-        x.setMonth(x.getMonth() + n);
-        return x;
-      };
-      const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
-      const endOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
-
-      let cursor = new Date(basePayload.dueDate);
-      // advance once because first instance exists
-      if (frequency === 'daily') cursor = addDays(cursor, interval);
-      if (frequency === 'weekly') cursor = addDays(cursor, 7 * interval);
-      if (frequency === 'monthly') cursor = addMonths(cursor, interval);
-
-      const toCreate = [];
-      while (cursor <= effectiveUntil) {
-        const dayStart = startOfDay(cursor);
-        const dayEnd = endOfDay(cursor);
-        // eslint-disable-next-line no-await-in-loop
-        const exists = await Task.findOne({
-          recurrenceParent: template._id,
-          dueDate: { $gte: dayStart, $lte: dayEnd }
-        }).select('_id').lean();
-        if (!exists) {
-          toCreate.push({
-            ...basePayload,
-            dueDate: new Date(cursor),
-            isRecurrenceTemplate: false,
-            recurrenceParent: template._id,
-            recurrence: { enabled: false, frequency: null, interval: 1, untilDate: null }
-          });
-        }
-        if (frequency === 'daily') cursor = addDays(cursor, interval);
-        else if (frequency === 'weekly') cursor = addDays(cursor, 7 * interval);
-        else cursor = addMonths(cursor, interval);
-      }
-      if (toCreate.length > 0) {
-        await Task.insertMany(toCreate);
-      }
 
       await firstInstance.populate([
         { path: 'assignee', select: 'firstName lastName email' },
@@ -225,6 +203,13 @@ router.put('/:id', auth, async (req, res) => {
     if (status != null) {
       if (status === 'done' && prevStatus !== 'done') {
         task.completedAt = new Date();
+        if (task.recurrenceParent) {
+          try {
+            await createNextRecurrenceInstance(task.recurrenceParent);
+          } catch (e) {
+            console.error('Create next recurrence instance:', e.message);
+          }
+        }
       }
       if (status !== 'done') {
         task.completedAt = null;

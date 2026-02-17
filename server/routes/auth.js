@@ -135,20 +135,52 @@ router.post('/register', [
 // Get current user
 router.get('/me', auth, async (req, res) => {
   try {
+    const user = await User.findById(req.user._id).select('email firstName lastName role avatar lastLogin settings').lean();
+    if (!user) {
+      return res.status(404).json({ message: 'Użytkownik nie znaleziony' });
+    }
     res.json({
       user: {
-        id: req.user._id,
-        email: req.user.email,
-        firstName: req.user.firstName,
-        lastName: req.user.lastName,
-        fullName: req.user.fullName,
-        role: req.user.role,
-        avatar: req.user.avatar,
-        lastLogin: req.user.lastLogin
+        id: user._id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        fullName: `${user.firstName} ${user.lastName}`,
+        role: user.role,
+        avatar: user.avatar,
+        lastLogin: user.lastLogin,
+        settings: user.settings || {}
       }
     });
   } catch (error) {
     console.error('Get user error:', error);
+    res.status(500).json({ message: 'Błąd serwera' });
+  }
+});
+
+// Update current user settings (e.g. tasks filters). Merges into existing settings.
+router.patch('/me/settings', auth, async (req, res) => {
+  try {
+    const updates = req.body;
+    if (typeof updates !== 'object' || updates === null) {
+      return res.status(400).json({ message: 'Nieprawidłowy format ustawień' });
+    }
+    const setKeys = {};
+    if (typeof updates.tasksFilters === 'object' && updates.tasksFilters !== null) {
+      setKeys['settings.tasksFilters'] = updates.tasksFilters;
+    }
+    if (Object.keys(setKeys).length === 0) {
+      const user = await User.findById(req.user._id).select('settings').lean();
+      return res.json({ settings: user.settings || {} });
+    }
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { $set: setKeys },
+      { new: true }
+    ).select('settings').lean();
+    res.json({ settings: user.settings || {} });
+  } catch (error) {
+    console.error('Update settings error:', error);
     res.status(500).json({ message: 'Błąd serwera' });
   }
 });

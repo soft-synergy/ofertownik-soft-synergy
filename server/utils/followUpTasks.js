@@ -1,13 +1,59 @@
 /**
  * Sync follow-up due dates to Task list so they appear in the Tasks calendar.
- * One task per project: "Follow-up #N – [project name]" with dueDate = project.nextFollowUpDueAt.
+ * When a follow-up is completed: current task stays on its day as done, a new task is created for the next follow-up.
  */
 const Task = require('../models/Task');
 const Project = require('../models/Project');
 
 /**
- * Ensure there is exactly one task for the next follow-up of this project.
- * If nextFollowUpDueAt is null, remove any existing follow-up task.
+ * When user just added a follow-up: mark the current follow-up task as done (keep dueDate), create a new task for the next follow-up.
+ */
+async function completeCurrentAndCreateNextFollowUpTask(project, userId) {
+  if (!project?._id) return null;
+  const projectId = project._id;
+  const numSent = Array.isArray(project.followUps) ? project.followUps.length : 0;
+  const nextDue = project.nextFollowUpDueAt ? new Date(project.nextFollowUpDueAt) : null;
+
+  const existing = await Task.findOne({ 'source.kind': 'followup', 'source.refId': projectId });
+  if (existing) {
+    existing.status = 'done';
+    existing.completedAt = existing.completedAt || new Date();
+    await existing.save();
+  }
+
+  if (!nextDue || numSent >= 3) return existing || null;
+
+  const title = `Follow-up #${numSent + 1} – ${project.name || 'Projekt'}`;
+  const description = project.clientName ? `Klient: ${project.clientName}` : '';
+  let createdBy = userId || project.owner || project.createdBy;
+  if (!createdBy) {
+    const User = require('../models/User');
+    const admin = await User.findOne({ role: 'admin', isActive: true }).select('_id').lean();
+    createdBy = admin?._id;
+  }
+  if (!createdBy) return existing || null;
+
+  const t = new Task({
+    title,
+    description,
+    status: 'todo',
+    priority: 'normal',
+    assignee: project.owner || project.createdBy || null,
+    project: projectId,
+    dueDate: nextDue,
+    dueTimeMinutes: 540,
+    durationMinutes: 30,
+    createdBy,
+    source: { kind: 'followup', refId: projectId }
+  });
+  await t.save();
+  return t;
+}
+
+/**
+ * Ensure there is exactly one *active* (non-done) task for the next follow-up of this project.
+ * If nextFollowUpDueAt is null, remove any existing follow-up tasks that are todo.
+ * Does not touch completed follow-up tasks (they stay on their day as done).
  */
 async function upsertFollowUpTask(project, userId) {
   if (!project?._id) return null;
@@ -16,23 +62,19 @@ async function upsertFollowUpTask(project, userId) {
   const nextDue = project.nextFollowUpDueAt ? new Date(project.nextFollowUpDueAt) : null;
 
   if (!nextDue || numSent >= 3) {
-    await Task.deleteOne({ 'source.kind': 'followup', 'source.refId': projectId });
+    await Task.deleteMany({ 'source.kind': 'followup', 'source.refId': projectId, status: { $ne: 'done' } });
     return null;
   }
 
   const title = `Follow-up #${numSent + 1} – ${project.name || 'Projekt'}`;
   const description = project.clientName ? `Klient: ${project.clientName}` : '';
 
-  const existing = await Task.findOne({ 'source.kind': 'followup', 'source.refId': projectId });
+  const existing = await Task.findOne({ 'source.kind': 'followup', 'source.refId': projectId, status: { $ne: 'done' } });
   if (existing) {
     existing.title = title;
     existing.description = description;
     existing.dueDate = nextDue;
     existing.project = projectId;
-    if (existing.status === 'done') {
-      existing.status = 'todo';
-      existing.completedAt = null;
-    }
     if (!existing.source) existing.source = { kind: 'followup', refId: projectId };
     await existing.save();
     return existing;
@@ -68,7 +110,7 @@ async function upsertFollowUpTask(project, userId) {
  */
 async function deleteFollowUpTask(projectId) {
   if (!projectId) return;
-  await Task.deleteOne({ 'source.kind': 'followup', 'source.refId': projectId });
+  await Task.deleteMany({ 'source.kind': 'followup', 'source.refId': projectId });
 }
 
 /**
@@ -96,4 +138,4 @@ async function syncAllFollowUpTasks(userId) {
   }
 }
 
-module.exports = { upsertFollowUpTask, deleteFollowUpTask, syncAllFollowUpTasks };
+module.exports = { upsertFollowUpTask, completeCurrentAndCreateNextFollowUpTask, deleteFollowUpTask, syncAllFollowUpTasks };

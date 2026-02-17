@@ -473,93 +473,16 @@ const setupTasksDigestScheduler = () => {
   setInterval(runOverdue, 24 * 60 * 60 * 1000);
 };
 
-// Recurring tasks scheduler: ensures instances exist for upcoming period
+// Recurring tasks scheduler: ensures one "next" instance per template (next appears when previous is done)
 const setupRecurringTasksScheduler = () => {
-  const Task = require('./models/Task');
-
-  const addDays = (d, n) => {
-    const x = new Date(d);
-    x.setDate(x.getDate() + n);
-    return x;
-  };
-  const addMonths = (d, n) => {
-    const x = new Date(d);
-    x.setMonth(x.getMonth() + n);
-    return x;
-  };
-  const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
-  const endOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
-
+  const { ensureNextInstancePerTemplate } = require('./utils/recurringTasks');
   const run = async () => {
     try {
-      const now = new Date();
-      const horizon = addDays(now, 60);
-      const templates = await Task.find({
-        isRecurrenceTemplate: true,
-        'recurrence.enabled': true,
-        'recurrence.frequency': { $in: ['daily', 'weekly', 'monthly'] }
-      }).lean();
-
-      for (const tpl of templates) {
-        const frequency = tpl.recurrence?.frequency;
-        const interval = Number(tpl.recurrence?.interval ?? 1) || 1;
-        const until = tpl.recurrence?.untilDate ? new Date(tpl.recurrence.untilDate) : null;
-        const effectiveUntil = until && until < horizon ? until : horizon;
-
-        // Find latest instance dueDate (if any)
-        // eslint-disable-next-line no-await-in-loop
-        const last = await Task.findOne({ recurrenceParent: tpl._id })
-          .sort({ dueDate: -1 })
-          .select('dueDate')
-          .lean();
-
-        let cursor = last?.dueDate ? new Date(last.dueDate) : new Date(tpl.dueDate);
-        // move to next occurrence
-        if (frequency === 'daily') cursor = addDays(cursor, interval);
-        else if (frequency === 'weekly') cursor = addDays(cursor, 7 * interval);
-        else cursor = addMonths(cursor, interval);
-
-        const toCreate = [];
-        while (cursor <= effectiveUntil) {
-          const dayStart = startOfDay(cursor);
-          const dayEnd = endOfDay(cursor);
-          // eslint-disable-next-line no-await-in-loop
-          const exists = await Task.findOne({
-            recurrenceParent: tpl._id,
-            dueDate: { $gte: dayStart, $lte: dayEnd }
-          }).select('_id').lean();
-          if (!exists) {
-            toCreate.push({
-              title: tpl.title,
-              description: tpl.description,
-              status: 'todo',
-              priority: tpl.priority,
-              assignee: tpl.assignee || null,
-              project: tpl.project || null,
-              dueDate: new Date(cursor),
-              dueTimeMinutes: tpl.dueTimeMinutes ?? null,
-              durationMinutes: tpl.durationMinutes ?? 60,
-              createdBy: tpl.createdBy,
-              isRecurrenceTemplate: false,
-              recurrenceParent: tpl._id,
-              recurrence: { enabled: false, frequency: null, interval: 1, untilDate: null }
-            });
-          }
-          if (frequency === 'daily') cursor = addDays(cursor, interval);
-          else if (frequency === 'weekly') cursor = addDays(cursor, 7 * interval);
-          else cursor = addMonths(cursor, interval);
-        }
-        if (toCreate.length > 0) {
-          // eslint-disable-next-line no-await-in-loop
-          await Task.insertMany(toCreate);
-        }
-      }
+      await ensureNextInstancePerTemplate();
     } catch (e) {
       console.error('[Recurring tasks] Błąd:', e);
     }
   };
-
-  // First run after 3 minutes, then daily
   setTimeout(run, 3 * 60 * 1000);
   setInterval(run, 24 * 60 * 60 * 1000);
 };
@@ -648,10 +571,18 @@ mongoose.connect(process.env.MONGODB_URI, {
     if (toDrop && toDrop.name) {
       await Task.collection.dropIndex(toDrop.name);
       console.log('Usunięto stary unikalny indeks source na tasks (migracja)');
+    } else {
+      try {
+        await Task.collection.dropIndex('source.kind_1_source.refId_1');
+        console.log('Usunięto indeks source.kind_1_source.refId_1 (migracja)');
+      } catch (e2) {
+        if (e2.code !== 27 && e2.codeName !== 'IndexNotFound') console.error('Drop index by name:', e2.message);
+      }
     }
   } catch (e) {
     if (e.code !== 27 && e.codeName !== 'IndexNotFound') console.error('Drop old tasks index:', e.message);
   }
+  // If unique index still exists (name: source.kind_1_source.refId_1), run: node server/scripts/drop-tasks-source-unique-index.js
   app.listen(PORT, () => {
     console.log(`🚀 Serwer działa na porcie ${PORT}`);
     console.log(`📱 Frontend: https:///ofertownik.soft-synergy.com`);

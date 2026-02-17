@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import {
   format,
@@ -30,8 +30,11 @@ import {
   Edit2,
   Trash2,
   X,
-  GripVertical
+  GripVertical,
+  MessageSquarePlus,
+  FolderOpen
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { tasksAPI, authAPI, projectsAPI } from '../services/api';
 import toast from 'react-hot-toast';
 
@@ -39,7 +42,7 @@ const STATUS_LABELS = { todo: 'Do zrobienia', in_progress: 'W toku', done: 'Zrob
 const PRIORITY_LABELS = { low: 'Niski', normal: 'Normalny', high: 'Wysoki', urgent: 'Pilny' };
 const PRIORITY_COLORS = { low: 'bg-gray-100 text-gray-700', normal: 'bg-blue-100 text-blue-800', high: 'bg-orange-100 text-orange-800', urgent: 'bg-red-100 text-red-800' };
 
-function DraggableTaskChip({ task, isOverdue, onOpen, onToggleDone }) {
+function DraggableTaskChip({ task, isOverdue, onOpen, onToggleDone, onOpenContextMenu }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useDraggable({
     id: task._id,
     data: { taskId: task._id }
@@ -57,10 +60,17 @@ function DraggableTaskChip({ task, isOverdue, onOpen, onToggleDone }) {
       ? 'border-l-4 border-red-500'
       : '';
 
+  const handleContextMenu = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onOpenContextMenu?.(task, e.clientX, e.clientY);
+  };
+
   return (
     <div
       ref={setNodeRef}
       style={style}
+      onContextMenu={handleContextMenu}
       className={`w-full px-2 py-1 rounded text-xs truncate flex items-center gap-1 border-l-4 ${borderClass || 'border-transparent'} ${
         isDone
           ? 'bg-green-100 text-green-800 line-through'
@@ -105,9 +115,133 @@ function DroppableDayCell({ id, className, children }) {
   );
 }
 
+function TaskContextMenu({ task, x, y, onEdit, onDelete, onAddUpdate, onGoToProject, onClose }) {
+  const ref = useRef(null);
+  const projectId = task.project?._id || task.project || task.source?.refId;
+
+  useEffect(() => {
+    const close = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) onClose();
+    };
+    document.addEventListener('click', close, true);
+    return () => document.removeEventListener('click', close, true);
+  }, [onClose]);
+
+  return (
+    <div
+      ref={ref}
+      className="fixed z-[60] min-w-[160px] py-1 bg-white rounded-lg shadow-lg border border-gray-200"
+      style={{ left: x, top: y }}
+    >
+      {projectId && (
+        <Link
+          to={`/projects/${projectId}/edit`}
+          className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+          onClick={onClose}
+        >
+          <FolderOpen className="h-4 w-4" /> Przejdź do projektu
+        </Link>
+      )}
+      <button
+        type="button"
+        className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+        onClick={() => { onEdit(task); onClose(); }}
+      >
+        <Edit2 className="h-4 w-4" /> Edytuj
+      </button>
+      <button
+        type="button"
+        className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+        onClick={() => { onAddUpdate(task); onClose(); }}
+      >
+        <MessageSquarePlus className="h-4 w-4" /> Daj update
+      </button>
+      <button
+        type="button"
+        className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+        onClick={() => { onDelete(task._id); onClose(); }}
+      >
+        <Trash2 className="h-4 w-4" /> Usuń
+      </button>
+    </div>
+  );
+}
+
+function AddUpdateModal({ task, onClose, onSubmit, isLoading }) {
+  const [text, setText] = useState('');
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!text.trim()) return;
+    onSubmit(text.trim());
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-lg font-semibold text-gray-900 mb-2">Daj update</h2>
+        <p className="text-sm text-gray-600 mb-4">Dodaj wpis do zadania „{task?.title}”.</p>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            className="input-field w-full min-h-[100px]"
+            placeholder="Treść update'u..."
+            required
+            autoFocus
+          />
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="btn-secondary">Anuluj</button>
+            <button type="submit" className="btn-primary" disabled={isLoading || !text.trim()}>
+              {isLoading ? 'Zapisuję...' : 'Zapisz'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function FollowUpCompleteModal({ task, onClose, onSubmit, isLoading }) {
+  const [note, setNote] = useState('');
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!note.trim()) return;
+    onSubmit(note.trim());
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-lg font-semibold text-gray-900 mb-2">Oznaczono follow-up jako wykonany</h2>
+        <p className="text-sm text-gray-600 mb-4">Wpisz treść follow-upa – zapisze się w ofercie i projekt przestanie świecić na czerwono.</p>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            className="input-field w-full min-h-[120px]"
+            placeholder="Treść follow-upa..."
+            required
+            autoFocus
+          />
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="btn-secondary">Anuluj</button>
+            <button type="submit" className="btn-primary" disabled={isLoading || !note.trim()}>
+              {isLoading ? 'Zapisuję...' : 'Zapisz i oznacz wykonane'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function TaskModal({ task, initialDueDate, users = [], projects = [], onClose, onSaved }) {
   const queryClient = useQueryClient();
   const isEdit = !!task?._id;
+  const { data: fullTask } = useQuery(
+    ['task', task?._id],
+    () => tasksAPI.getById(task._id),
+    { enabled: isEdit && !!task?._id }
+  );
+  const updates = fullTask?.updates ?? [];
   const [form, setForm] = useState({
     title: task?.title ?? '',
     description: task?.description ?? '',
@@ -257,6 +391,14 @@ function TaskModal({ task, initialDueDate, users = [], projects = [], onClose, o
                 <option key={p._id} value={p._id}>{p.name} {p.clientName ? `(${p.clientName})` : ''}</option>
               ))}
             </select>
+            {(form.project || task?.project) && (
+              <Link
+                to={`/projects/${form.project || task?.project?._id || task?.project}/edit`}
+                className="mt-1 inline-flex items-center gap-1 text-sm text-primary-600 hover:text-primary-800"
+              >
+                Otwórz projekt →
+              </Link>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -328,12 +470,33 @@ function TaskModal({ task, initialDueDate, users = [], projects = [], onClose, o
                     />
                   </div>
                   <div className="sm:col-span-3 text-xs text-gray-500">
-                    Utworzymy kolejne wystąpienia automatycznie (na kilka tygodni do przodu).
+                    Kolejne wystąpienie pojawi się po oznaczeniu bieżącego jako wykonane.
                   </div>
                 </div>
               )}
             </div>
           )}
+
+          {isEdit && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Update'y</label>
+              {updates.length === 0 ? (
+                <p className="text-sm text-gray-500">Brak update'ów. Prawy przycisk na zadaniu → Daj update.</p>
+              ) : (
+                <ul className="space-y-2 max-h-40 overflow-y-auto rounded border border-gray-200 p-2 bg-gray-50">
+                  {[...updates].reverse().map((u, i) => (
+                    <li key={u.createdAt || i} className="text-sm p-2 bg-white rounded border border-gray-100">
+                      <span className="text-gray-500 text-xs">
+                        {u.author?.firstName} {u.author?.lastName}, {u.createdAt ? format(parseISO(u.createdAt), 'd.MM.yyyy HH:mm', { locale: pl }) : ''}
+                      </span>
+                      <p className="mt-1">{u.text}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
           <div className="flex justify-end gap-2 pt-4">
             <button type="button" onClick={onClose} className="btn-secondary">Anuluj</button>
             <button type="submit" className="btn-primary" disabled={createMutation.isLoading || updateMutation.isLoading}>
@@ -346,23 +509,61 @@ function TaskModal({ task, initialDueDate, users = [], projects = [], onClose, o
   );
 }
 
+const DEFAULT_FILTERS = {
+  assignee: '',
+  project: '',
+  status: '',
+  priority: '',
+  dateFrom: '',
+  dateTo: ''
+};
+
 export default function Tasks() {
   const queryClient = useQueryClient();
-  const [view, setView] = useState('calendar'); // 'list' | 'calendar'
+  const [view, setView] = useState('calendar');
   const [month, setMonth] = useState(new Date());
   const [week, setWeek] = useState(new Date());
-  const [calendarMode, setCalendarMode] = useState('month'); // 'month' | 'week'
-  const [filters, setFilters] = useState({
-    assignee: '',
-    project: '',
-    status: '',
-    priority: '',
-    dateFrom: '',
-    dateTo: ''
-  });
+  const [calendarMode, setCalendarMode] = useState('month');
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [modalTask, setModalTask] = useState(null);
   const [modalInitialDueDate, setModalInitialDueDate] = useState(null);
+  const [followUpCompleteTask, setFollowUpCompleteTask] = useState(null);
+  const [contextMenu, setContextMenu] = useState(null);
+  const [updateModalTask, setUpdateModalTask] = useState(null);
   const [showFilters, setShowFilters] = useState(false);
+  const filtersInitializedRef = useRef(false);
+
+  const { data: meData } = useQuery('me', authAPI.me, { staleTime: 60 * 1000 });
+
+  useEffect(() => {
+    const saved = meData?.user?.settings?.tasksFilters;
+    if (!saved || typeof saved !== 'object' || filtersInitializedRef.current) return;
+    filtersInitializedRef.current = true;
+    setFilters({
+      assignee: saved.assignee ?? '',
+      project: saved.project ?? '',
+      status: saved.status ?? '',
+      priority: saved.priority ?? '',
+      dateFrom: saved.dateFrom ?? '',
+      dateTo: saved.dateTo ?? ''
+    });
+    if (saved.view === 'list' || saved.view === 'calendar') setView(saved.view);
+    if (saved.calendarMode === 'month' || saved.calendarMode === 'week') setCalendarMode(saved.calendarMode);
+  }, [meData]);
+
+  useEffect(() => {
+    if (!filtersInitializedRef.current) return;
+    const t = setTimeout(() => {
+      authAPI.updateSettings({
+        tasksFilters: {
+          ...filters,
+          view,
+          calendarMode
+        }
+      }).catch(() => {});
+    }, 800);
+    return () => clearTimeout(t);
+  }, [filters, view, calendarMode]);
 
   const calendarRange = useMemo(() => {
     if (calendarMode === 'week') {
@@ -418,8 +619,7 @@ export default function Tasks() {
           context.previous.forEach(([key, data]) => queryClient.setQueryData(key, data));
         }
         toast.error('Nie udało się zaktualizować statusu zadania');
-      },
-      onSettled: () => queryClient.invalidateQueries('tasks')
+      }
     }
   );
 
@@ -431,12 +631,7 @@ export default function Tasks() {
         const previous = queryClient.getQueriesData(['tasks']);
         queryClient.setQueriesData(['tasks'], (old) => {
           if (!Array.isArray(old)) return old;
-          return old.map((t) => {
-            if (t._id !== id) return t;
-            const prevDate = t.dueDate;
-            const timePart = prevDate && typeof prevDate === 'string' && prevDate.includes('T') ? prevDate.slice(10) : 'T12:00:00.000Z';
-            return { ...t, dueDate: targetDateKey + timePart };
-          });
+          return old.map((t) => (t._id === id ? { ...t, dueDate: targetDateKey } : t));
         });
         return { previous };
       },
@@ -445,10 +640,43 @@ export default function Tasks() {
           context.previous.forEach(([key, data]) => queryClient.setQueryData(key, data));
         }
         toast.error('Nie udało się przenieść zadania');
-      },
-      onSettled: () => queryClient.invalidateQueries('tasks')
+      }
     }
   );
+
+  const followUpCompleteMutation = useMutation(
+    async ({ task, note }) => {
+      const projectId = task.source?.refId || task.project?._id || task.project;
+      if (!projectId) throw new Error('Brak powiązanego projektu');
+      await projectsAPI.addFollowUp(projectId, note);
+      // Backend completeCurrentAndCreateNextFollowUpTask marks this task done (stays on same day) and creates new todo task for next date
+    },
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('tasks');
+        queryClient.invalidateQueries('projects');
+        setFollowUpCompleteTask(null);
+        toast.success('Follow-up zapisany, zadanie wykonane');
+      },
+      onError: (e) => toast.error(e.response?.data?.message || e.message || 'Błąd zapisu follow-upu')
+    }
+  );
+
+  const addUpdateMutation = useMutation(
+    ({ taskId, text }) => tasksAPI.addUpdate(taskId, text),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('tasks');
+        setUpdateModalTask(null);
+        toast.success('Update dodany');
+      },
+      onError: (e) => toast.error(e.response?.data?.message || e.message || 'Błąd dodawania update\'u')
+    }
+  );
+
+  const openContextMenu = (task, clientX, clientY) => {
+    setContextMenu({ task, x: clientX, y: clientY });
+  };
 
   const calendarDays = useMemo(() => {
     const start = startOfWeek(startOfMonth(month), { weekStartsOn: 1 });
@@ -493,6 +721,10 @@ export default function Tasks() {
 
   const handleToggleDone = (task) => {
     const nextStatus = task.status === 'done' ? 'todo' : 'done';
+    if (nextStatus === 'done' && task.source?.kind === 'followup') {
+      setFollowUpCompleteTask(task);
+      return;
+    }
     toggleDoneMutation.mutate({ id: task._id, status: nextStatus });
   };
 
@@ -685,7 +917,14 @@ export default function Tasks() {
                       const isOverdue = t.status !== 'done' && t.dueDate && isBefore(parseISO(t.dueDate), startOfDay(new Date()));
                       const rowBorder = t.status === 'done' ? 'border-l-4 border-green-500' : isOverdue ? 'border-l-4 border-red-500' : '';
                       return (
-                    <tr key={t._id} className={`hover:bg-gray-50 ${rowBorder}`}>
+                    <tr
+                      key={t._id}
+                      className={`hover:bg-gray-50 ${rowBorder}`}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        openContextMenu(t, e.clientX, e.clientY);
+                      }}
+                    >
                       <td className="p-3 align-middle">
                         <input
                           type="checkbox"
@@ -780,6 +1019,7 @@ export default function Tasks() {
                               isOverdue={t.status !== 'done' && t.dueDate && isBefore(parseISO(t.dueDate), startOfDay(new Date()))}
                               onOpen={() => openEdit(t)}
                               onToggleDone={handleToggleDone}
+                              onOpenContextMenu={openContextMenu}
                             />
                           ))}
                         </div>
@@ -843,6 +1083,7 @@ export default function Tasks() {
                               isOverdue={t.status !== 'done' && t.dueDate && isBefore(parseISO(t.dueDate), startOfDay(new Date()))}
                               onOpen={() => openEdit(t)}
                               onToggleDone={handleToggleDone}
+                              onOpenContextMenu={openContextMenu}
                             />
                           ))}
                         </div>
@@ -864,6 +1105,36 @@ export default function Tasks() {
           projects={projects}
           onClose={() => { setModalTask(null); setModalInitialDueDate(null); }}
           onSaved={() => {}}
+        />
+      )}
+
+      {followUpCompleteTask && (
+        <FollowUpCompleteModal
+          task={followUpCompleteTask}
+          onClose={() => setFollowUpCompleteTask(null)}
+          onSubmit={(note) => followUpCompleteMutation.mutate({ task: followUpCompleteTask, note })}
+          isLoading={followUpCompleteMutation.isLoading}
+        />
+      )}
+
+      {contextMenu && (
+        <TaskContextMenu
+          task={contextMenu.task}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onEdit={openEdit}
+          onDelete={(id) => deleteMutation.mutate(id)}
+          onAddUpdate={setUpdateModalTask}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      {updateModalTask && (
+        <AddUpdateModal
+          task={updateModalTask}
+          onClose={() => setUpdateModalTask(null)}
+          onSubmit={(text) => addUpdateMutation.mutate({ taskId: updateModalTask._id, text })}
+          isLoading={addUpdateMutation.isLoading}
         />
       )}
     </div>

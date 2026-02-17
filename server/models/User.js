@@ -40,6 +40,10 @@ const userSchema = new mongoose.Schema({
   lastLogin: {
     type: Date,
     default: null
+  },
+  settings: {
+    type: mongoose.Schema.Types.Mixed,
+    default: () => ({})
   }
 }, {
   timestamps: true

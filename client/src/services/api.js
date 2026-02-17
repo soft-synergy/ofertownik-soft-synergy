@@ -46,10 +46,11 @@ api.interceptors.response.use(
 export const authAPI = {
   login: (credentials) => api.post('/api/auth/login', credentials),
   logout: () => api.post('/api/auth/logout'),
-  me: () => api.get('/api/auth/me'),
+  me: () => api.get('/api/auth/me').then(res => res.data),
   register: (userData) => api.post('/api/auth/register', userData),
   listUsers: () => api.get('/api/auth/users').then(res => res.data),
   deleteUser: (id) => api.delete(`/api/auth/users/${id}`).then(res => res.data),
+  updateSettings: (updates) => api.patch('/api/auth/me/settings', updates).then(res => res.data),
 };
 
 export const projectsAPI = {
@@ -163,6 +164,7 @@ export const tasksAPI = {
   create: (data) => api.post('/api/tasks', data).then(res => res.data),
   update: (id, data) => api.put(`/api/tasks/${id}`, data).then(res => res.data),
   delete: (id) => api.delete(`/api/tasks/${id}`).then(res => res.data),
+  addUpdate: (id, text) => api.post(`/api/tasks/${id}/updates`, { text }).then(res => res.data),
 };
 
 export const clientsAPI = {

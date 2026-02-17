@@ -3,7 +3,7 @@ const { body, validationResult } = require('express-validator');
 const Project = require('../models/Project');
 const { auth, requireRole } = require('../middleware/auth');
 const Activity = require('../models/Activity');
-const { upsertFollowUpTask } = require('../utils/followUpTasks');
+const { upsertFollowUpTask, completeCurrentAndCreateNextFollowUpTask } = require('../utils/followUpTasks');
 
 const router = express.Router();
 
@@ -419,7 +419,7 @@ router.post('/:id/followups', [
     await project.save();
 
     try {
-      await upsertFollowUpTask(project, req.user._id);
+      await completeCurrentAndCreateNextFollowUpTask(project, req.user._id);
     } catch (e) {}
 
     const populated = await Project.findById(project._id)
