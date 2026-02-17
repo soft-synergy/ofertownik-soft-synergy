@@ -132,6 +132,7 @@ router.post('/', auth, async (req, res) => {
       const interval = Math.max(1, Math.min(365, Number(recurrence.interval ?? 1) || 1));
       const untilDateRaw = recurrence.untilDate;
       const untilDate = untilDateRaw ? (() => { const d = new Date(untilDateRaw); return !Number.isNaN(d.getTime()) ? d : null; })() : null;
+      const weekdaysOnly = !!recurrence.weekdaysOnly;
       if (!['daily', 'weekly', 'monthly'].includes(frequency)) {
         return res.status(400).json({ message: 'Nieprawidłowa częstotliwość powtarzania (wybierz codziennie, co tydzień lub co miesiąc)' });
       }
@@ -143,7 +144,8 @@ router.post('/', auth, async (req, res) => {
           enabled: true,
           frequency,
           interval,
-          untilDate
+          untilDate,
+          weekdaysOnly
         }
       });
       await template.save();

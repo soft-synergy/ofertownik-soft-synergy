@@ -158,6 +158,10 @@ export const activityAPI = {
   recent: () => api.get('/api/activities/recent').then(res => res.data),
 };
 
+export const searchAPI = {
+  search: (q) => api.get('/api/search', { params: { q } }).then(res => res.data),
+};
+
 export const tasksAPI = {
   getAll: (params) => api.get('/api/tasks', { params }).then(res => res.data),
   getById: (id) => api.get(`/api/tasks/${id}`).then(res => res.data),

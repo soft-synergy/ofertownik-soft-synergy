@@ -106,10 +106,44 @@ function DraggableTaskChip({ task, isOverdue, onOpen, onToggleDone, onOpenContex
   );
 }
 
-function DroppableDayCell({ id, className, children }) {
-  const { setNodeRef, isOver } = useDroppable({ id });
+function DayContextMenu({ date, x, y, onAddTask, onClose }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const close = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) onClose();
+    };
+    document.addEventListener('click', close, true);
+    return () => document.removeEventListener('click', close, true);
+  }, [onClose]);
+
   return (
-    <div ref={setNodeRef} className={`${className} ${isOver ? 'bg-primary-50' : ''}`}>
+    <div
+      ref={ref}
+      className="fixed z-[60] min-w-[180px] py-1 bg-white rounded-lg shadow-lg border border-gray-200"
+      style={{ left: x, top: y }}
+    >
+      <button
+        type="button"
+        className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+        onClick={() => { onAddTask(date); onClose(); }}
+      >
+        <Plus className="h-4 w-4" /> Dodaj zadanie na ten dzień
+      </button>
+    </div>
+  );
+}
+
+function DroppableDayCell({ id, className, day, onDayContextMenu, children }) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  const handleContextMenu = (e) => {
+    if (onDayContextMenu && day) {
+      e.preventDefault();
+      e.stopPropagation();
+      onDayContextMenu(day, e.clientX, e.clientY);
+    }
+  };
+  return (
+    <div ref={setNodeRef} className={`${className} ${isOver ? 'bg-primary-50' : ''}`} onContextMenu={handleContextMenu}>
       {children}
     </div>
   );
@@ -255,7 +289,8 @@ function TaskModal({ task, initialDueDate, users = [], projects = [], onClose, o
     recurrenceEnabled: false,
     recurrenceFrequency: 'weekly',
     recurrenceInterval: 1,
-    recurrenceUntilDate: ''
+    recurrenceUntilDate: '',
+    recurrenceWeekdaysOnly: false
   });
 
   const createMutation = useMutation((data) => tasksAPI.create(data), {
@@ -291,6 +326,7 @@ function TaskModal({ task, initialDueDate, users = [], projects = [], onClose, o
               enabled: true,
               frequency: form.recurrenceFrequency,
               interval: Number(form.recurrenceInterval) || 1,
+              weekdaysOnly: !!form.recurrenceWeekdaysOnly,
               ...(form.recurrenceUntilDate && form.recurrenceUntilDate.trim()
                 ? { untilDate: form.recurrenceUntilDate.trim() }
                 : {})
@@ -476,6 +512,16 @@ function TaskModal({ task, initialDueDate, users = [], projects = [], onClose, o
                       className="input-field w-full text-sm"
                     />
                   </div>
+                  <div className="sm:col-span-3">
+                    <label className="flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={form.recurrenceWeekdaysOnly}
+                        onChange={(e) => setForm((f) => ({ ...f, recurrenceWeekdaysOnly: e.target.checked }))}
+                      />
+                      Tylko w dni robocze
+                    </label>
+                  </div>
                   <div className="sm:col-span-3 text-xs text-gray-500">
                     Kolejne wystąpienie pojawi się po oznaczeniu bieżącego jako wykonane.
                   </div>
@@ -536,6 +582,7 @@ export default function Tasks() {
   const [modalInitialDueDate, setModalInitialDueDate] = useState(null);
   const [followUpCompleteTask, setFollowUpCompleteTask] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
+  const [dayContextMenu, setDayContextMenu] = useState(null);
   const [updateModalTask, setUpdateModalTask] = useState(null);
   const [showFilters, setShowFilters] = useState(false);
   const filtersInitializedRef = useRef(false);
@@ -689,7 +736,12 @@ export default function Tasks() {
   );
 
   const openContextMenu = (task, clientX, clientY) => {
+    setDayContextMenu(null);
     setContextMenu({ task, x: clientX, y: clientY });
+  };
+  const openDayContextMenu = (day, clientX, clientY) => {
+    setContextMenu(null);
+    setDayContextMenu({ date: day, x: clientX, y: clientY });
   };
 
   const calendarDays = useMemo(() => {
@@ -1010,6 +1062,8 @@ export default function Tasks() {
                       <DroppableDayCell
                         key={key}
                         id={`day:${key}`}
+                        day={day}
+                        onDayContextMenu={openDayContextMenu}
                         className={`min-h-[140px] p-2 flex flex-col ${currentMonth ? 'bg-white' : 'bg-gray-50'} ${isToday(day) ? 'ring-1 ring-primary-500 ring-inset' : ''}`}
                       >
                         <div className="flex items-center justify-between">
@@ -1073,6 +1127,8 @@ export default function Tasks() {
                       <DroppableDayCell
                         key={key}
                         id={`day:${key}`}
+                        day={day}
+                        onDayContextMenu={openDayContextMenu}
                         className={`min-h-[160px] p-2 flex flex-col bg-white ${isToday(day) ? 'ring-1 ring-primary-500 ring-inset' : ''}`}
                       >
                         <div className="flex items-center justify-between">
@@ -1140,6 +1196,16 @@ export default function Tasks() {
           onDelete={(id) => deleteMutation.mutate(id)}
           onAddUpdate={setUpdateModalTask}
           onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      {dayContextMenu && (
+        <DayContextMenu
+          date={dayContextMenu.date}
+          x={dayContextMenu.x}
+          y={dayContextMenu.y}
+          onAddTask={openCreate}
+          onClose={() => setDayContextMenu(null)}
         />
       )}
 

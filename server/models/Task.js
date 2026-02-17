@@ -76,7 +76,8 @@ const taskSchema = new mongoose.Schema({
     enabled: { type: Boolean, default: false },
     frequency: { type: String, enum: ['daily', 'weekly', 'monthly', null], default: null },
     interval: { type: Number, default: 1, min: 1 },
-    untilDate: { type: Date, default: null }
+    untilDate: { type: Date, default: null },
+    weekdaysOnly: { type: Boolean, default: false }
   },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,

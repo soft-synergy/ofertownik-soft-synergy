@@ -32,10 +32,17 @@ async function createNextRecurrenceInstance(templateId) {
   const until = template.recurrence.untilDate ? new Date(template.recurrence.untilDate) : null;
 
   const last = await Task.findOne({ recurrenceParent: templateId }).sort({ dueDate: -1 }).select('dueDate').lean();
+  const weekdaysOnly = !!template.recurrence?.weekdaysOnly;
   let nextDate = last?.dueDate ? new Date(last.dueDate) : new Date(template.dueDate);
   if (frequency === 'daily') nextDate = addDays(nextDate, interval);
   else if (frequency === 'weekly') nextDate = addDays(nextDate, 7 * interval);
   else nextDate = addMonths(nextDate, interval);
+
+  if (weekdaysOnly) {
+    const d = nextDate.getDay();
+    if (d === 0) nextDate = addDays(nextDate, 1);
+    else if (d === 6) nextDate = addDays(nextDate, 2);
+  }
 
   if (until && nextDate > until) return null;
   const dayStart = startOfDay(nextDate);

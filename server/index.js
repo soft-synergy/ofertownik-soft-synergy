@@ -16,6 +16,8 @@ const clientPortalRoutes = require('./routes/clientPortal');
 const sslRoutes = require('./routes/ssl');
 const waitlistRoutes = require('./routes/waitlist');
 const tasksRoutes = require('./routes/tasks');
+const calWebhookRoutes = require('./routes/cal');
+const searchRoutes = require('./routes/search');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -110,6 +112,8 @@ app.use('/api/client-portal', clientPortalRoutes);
 app.use('/api/ssl', sslRoutes);
 app.use('/api/waitlist', waitlistRoutes);
 app.use('/api/tasks', tasksRoutes);
+app.use('/api/search', searchRoutes);
+app.use('/cal', calWebhookRoutes);
 
 // Activities endpoint (recent)
 const Activity = require('./models/Activity');
