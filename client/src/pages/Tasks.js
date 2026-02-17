@@ -71,7 +71,7 @@ function DraggableTaskChip({ task, isOverdue, onOpen, onToggleDone, onOpenContex
       ref={setNodeRef}
       style={style}
       onContextMenu={handleContextMenu}
-      className={`w-full px-2 py-1 rounded text-xs truncate flex items-center gap-1 border-l-4 ${borderClass || 'border-transparent'} ${
+      className={`w-full px-3 py-2 rounded-md text-sm flex items-center gap-2 border-l-4 min-h-[52px] ${borderClass || 'border-transparent'} ${
         isDone
           ? 'bg-green-100 text-green-800 line-through'
           : 'bg-primary-50 text-primary-900 hover:bg-primary-100'
@@ -82,25 +82,25 @@ function DraggableTaskChip({ task, isOverdue, onOpen, onToggleDone, onOpenContex
         type="checkbox"
         checked={isDone}
         onChange={(e) => { e.stopPropagation(); onToggleDone?.(task); }}
-        className="shrink-0 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+        className="shrink-0 h-5 w-5 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
         aria-label={isDone ? 'Oznacz jako niezrobione' : 'Oznacz jako wykonane'}
         title={isDone ? 'Oznacz jako niezrobione' : 'Oznacz jako wykonane'}
       />
       <button
         type="button"
-        className="shrink-0 text-gray-500 hover:text-gray-700 cursor-grab active:cursor-grabbing"
+        className="shrink-0 text-gray-500 hover:text-gray-700 cursor-grab active:cursor-grabbing p-0.5"
         {...listeners}
         {...attributes}
         aria-label="Przeciągnij zadanie"
         title="Przeciągnij"
       >
-        <GripVertical className="h-3.5 w-3.5" />
+        <GripVertical className="h-4 w-4" />
       </button>
-      <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left truncate">
-        <span className={`px-1 rounded mr-1 ${PRIORITY_COLORS[task.priority] ?? 'bg-gray-200'}`}>
+      <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left line-clamp-2 break-words">
+        <span className={`px-1.5 py-0.5 rounded text-xs shrink-0 ${PRIORITY_COLORS[task.priority] ?? 'bg-gray-200'}`}>
           {PRIORITY_LABELS[task.priority]?.[0] ?? ''}
         </span>
-        {task.title}
+        <span className="align-middle">{task.title}</span>
       </button>
     </div>
   );
@@ -259,9 +259,10 @@ function TaskModal({ task, initialDueDate, users = [], projects = [], onClose, o
   });
 
   const createMutation = useMutation((data) => tasksAPI.create(data), {
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries('tasks');
-      toast.success('Zadanie dodane');
+      const isRecurring = !!(variables.recurrence && variables.recurrence.enabled);
+      toast.success(isRecurring ? 'Zadanie cykliczne dodane. Kolejne wystąpienia pojawią się po wykonaniu bieżącego.' : 'Zadanie dodane');
       onSaved();
       onClose();
     },
@@ -283,9 +284,22 @@ function TaskModal({ task, initialDueDate, users = [], projects = [], onClose, o
       toast.error('Podaj tytuł');
       return;
     }
+    const recurrencePayload =
+      form.recurrenceEnabled && !isEdit
+        ? {
+            recurrence: {
+              enabled: true,
+              frequency: form.recurrenceFrequency,
+              interval: Number(form.recurrenceInterval) || 1,
+              ...(form.recurrenceUntilDate && form.recurrenceUntilDate.trim()
+                ? { untilDate: form.recurrenceUntilDate.trim() }
+                : {})
+            }
+          }
+        : {};
     const payload = {
-      title: form.title,
-      description: form.description,
+      title: form.title.trim(),
+      description: (form.description || '').trim(),
       status: form.status,
       priority: form.priority,
       assignee: form.assignee || null,
@@ -293,14 +307,7 @@ function TaskModal({ task, initialDueDate, users = [], projects = [], onClose, o
       dueDate: form.dueDate,
       dueTimeMinutes: form.dueTimeMinutes === '' ? null : Number(form.dueTimeMinutes),
       durationMinutes: Number(form.durationMinutes) || 60,
-      ...(form.recurrenceEnabled && !isEdit ? {
-        recurrence: {
-          enabled: true,
-          frequency: form.recurrenceFrequency,
-          interval: Number(form.recurrenceInterval) || 1,
-          untilDate: form.recurrenceUntilDate || null
-        }
-      } : {})
+      ...recurrencePayload
     };
     if (isEdit) {
       updateMutation.mutate({ id: task._id, data: payload });
@@ -1003,7 +1010,7 @@ export default function Tasks() {
                       <DroppableDayCell
                         key={key}
                         id={`day:${key}`}
-                        className={`min-h-[110px] p-2 flex flex-col ${currentMonth ? 'bg-white' : 'bg-gray-50'} ${isToday(day) ? 'ring-1 ring-primary-500 ring-inset' : ''}`}
+                        className={`min-h-[140px] p-2 flex flex-col ${currentMonth ? 'bg-white' : 'bg-gray-50'} ${isToday(day) ? 'ring-1 ring-primary-500 ring-inset' : ''}`}
                       >
                         <div className="flex items-center justify-between">
                           <span className={`text-sm ${currentMonth ? 'text-gray-900' : 'text-gray-400'}`}>{format(day, 'd')}</span>
@@ -1018,7 +1025,7 @@ export default function Tasks() {
                             </button>
                           )}
                         </div>
-                        <div className="mt-1 space-y-1 flex-1 overflow-y-auto">
+                        <div className="mt-1 space-y-1.5 flex-1 overflow-y-auto min-h-0">
                           {dayTasks.map((t) => (
                             <DraggableTaskChip
                               key={t._id}
@@ -1082,7 +1089,7 @@ export default function Tasks() {
                             <Plus className="h-3.5 w-3.5" />
                           </button>
                         </div>
-                        <div className="mt-2 space-y-1 flex-1 overflow-y-auto">
+                        <div className="mt-2 space-y-1.5 flex-1 overflow-y-auto min-h-0">
                           {dayTasks.map((t) => (
                             <DraggableTaskChip
                               key={t._id}

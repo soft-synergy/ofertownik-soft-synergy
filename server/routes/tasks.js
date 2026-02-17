@@ -126,18 +126,15 @@ router.post('/', auth, async (req, res) => {
       createdBy: req.user._id
     };
 
-    const recurrenceEnabled = !!recurrence?.enabled;
+    const recurrenceEnabled = !!recurrence && !!recurrence.enabled;
     if (recurrenceEnabled) {
-      const frequency = recurrence?.frequency;
-      const interval = Number(recurrence?.interval ?? 1) || 1;
-      const untilDate = recurrence?.untilDate ? new Date(recurrence.untilDate) : null;
+      const frequency = (recurrence.frequency || '').toLowerCase();
+      const interval = Math.max(1, Math.min(365, Number(recurrence.interval ?? 1) || 1));
+      const untilDateRaw = recurrence.untilDate;
+      const untilDate = untilDateRaw ? (() => { const d = new Date(untilDateRaw); return !Number.isNaN(d.getTime()) ? d : null; })() : null;
       if (!['daily', 'weekly', 'monthly'].includes(frequency)) {
-        return res.status(400).json({ message: 'Nieprawidłowa częstotliwość powtarzania' });
+        return res.status(400).json({ message: 'Nieprawidłowa częstotliwość powtarzania (wybierz codziennie, co tydzień lub co miesiąc)' });
       }
-      if (interval < 1 || interval > 365) {
-        return res.status(400).json({ message: 'Nieprawidłowy interwał powtarzania' });
-      }
-
       // 1) Create hidden template
       const template = new Task({
         ...basePayload,
@@ -146,7 +143,7 @@ router.post('/', auth, async (req, res) => {
           enabled: true,
           frequency,
           interval,
-          untilDate: untilDate && !Number.isNaN(untilDate.getTime()) ? untilDate : null
+          untilDate
         }
       });
       await template.save();
