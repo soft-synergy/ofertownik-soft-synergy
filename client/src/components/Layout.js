@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -12,11 +12,24 @@ import {
   LogOut,
   CheckSquare
 } from 'lucide-react';
+import SearchCommandPalette from './SearchCommandPalette';
 
 const Layout = () => {
   const { user, logout } = useAuth();
   const { t } = useI18n();
   const navigate = useNavigate();
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setSearchOpen((prev) => !prev);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const handleLogout = async () => {
     await logout();
@@ -48,6 +61,14 @@ const Layout = () => {
         <div className="p-6 border-b border-gray-200">
           <h1 className="text-xl font-bold text-gray-900">{t('common.appName')}</h1>
           <p className="text-sm text-gray-500 mt-1">Soft Synergy</p>
+          <button
+            type="button"
+            onClick={() => setSearchOpen(true)}
+            className="mt-3 w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+          >
+            <span className="opacity-70">Szukaj...</span>
+            <kbd className="ml-auto text-xs font-mono bg-white px-1.5 py-0.5 rounded">⌘K</kbd>
+          </button>
       </div>
 
         {/* Navigation */}
@@ -91,6 +112,8 @@ const Layout = () => {
           </button>
           </div>
         </div>
+
+      <SearchCommandPalette open={searchOpen} onClose={setSearchOpen} />
 
       {/* Main Content */}
       <div className="pl-64">

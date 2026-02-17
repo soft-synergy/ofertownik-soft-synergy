@@ -61,11 +61,12 @@ router.get('/', auth, async (req, res) => {
         .limit(limit)
         .lean(),
 
-      // Clients: name, email
+      // Clients: name, email, phone
       Client.find({
         $or: [
           { name: pattern },
-          { email: pattern }
+          { email: pattern },
+          { phone: pattern }
         ]
       })
         .select('name email')

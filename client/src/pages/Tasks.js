@@ -34,7 +34,7 @@ import {
   MessageSquarePlus,
   FolderOpen
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { tasksAPI, authAPI, projectsAPI } from '../services/api';
 import toast from 'react-hot-toast';
 
@@ -573,6 +573,8 @@ const DEFAULT_FILTERS = {
 
 export default function Tasks() {
   const queryClient = useQueryClient();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [view, setView] = useState('calendar');
   const [month, setMonth] = useState(new Date());
   const [week, setWeek] = useState(new Date());
@@ -588,6 +590,19 @@ export default function Tasks() {
   const filtersInitializedRef = useRef(false);
 
   const { data: meData } = useQuery('me', authAPI.me, { staleTime: 60 * 1000 });
+
+  const openTaskIdFromState = location.state?.openTaskId;
+  useEffect(() => {
+    if (!openTaskIdFromState) return;
+    tasksAPI.getById(openTaskIdFromState)
+      .then((task) => {
+        setModalTask(task);
+        navigate(location.pathname, { replace: true, state: {} });
+      })
+      .catch(() => {
+        navigate(location.pathname, { replace: true, state: {} });
+      });
+  }, [openTaskIdFromState, navigate, location.pathname]);
 
   useEffect(() => {
     if (meData === undefined || filtersInitializedRef.current) return;

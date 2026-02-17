@@ -265,6 +265,12 @@ const projectSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  /** Cal.com booking URL – for preliminary offers created from Cal.com webhook */
+  calBookingUrl: {
+    type: String,
+    default: null,
+    trim: true
+  },
   technologies: {
     stack: [{
       type: String,

@@ -5,6 +5,14 @@
 const Task = require('../models/Task');
 const Project = require('../models/Project');
 
+const FOLLOW_UP_ASSIGNEE_EMAIL = 'jakub.czajka@soft-synergy.com';
+
+async function getFollowUpAssigneeId() {
+  const User = require('../models/User');
+  const user = await User.findOne({ email: FOLLOW_UP_ASSIGNEE_EMAIL, isActive: true }).select('_id').lean();
+  return user?._id || null;
+}
+
 /**
  * When user just added a follow-up: mark the current follow-up task as done (keep dueDate), create a new task for the next follow-up.
  */
@@ -33,12 +41,14 @@ async function completeCurrentAndCreateNextFollowUpTask(project, userId) {
   }
   if (!createdBy) return existing || null;
 
+  const assignee = await getFollowUpAssigneeId();
+
   const t = new Task({
     title,
     description,
     status: 'todo',
     priority: 'normal',
-    assignee: project.owner || project.createdBy || null,
+    assignee,
     project: projectId,
     dueDate: nextDue,
     dueTimeMinutes: 540,
@@ -69,12 +79,15 @@ async function upsertFollowUpTask(project, userId) {
   const title = `Follow-up #${numSent + 1} – ${project.name || 'Projekt'}`;
   const description = project.clientName ? `Klient: ${project.clientName}` : '';
 
+  const followUpAssigneeId = await getFollowUpAssigneeId();
+
   const existing = await Task.findOne({ 'source.kind': 'followup', 'source.refId': projectId, status: { $ne: 'done' } });
   if (existing) {
     existing.title = title;
     existing.description = description;
     existing.dueDate = nextDue;
     existing.project = projectId;
+    existing.assignee = followUpAssigneeId;
     if (!existing.source) existing.source = { kind: 'followup', refId: projectId };
     await existing.save();
     return existing;
@@ -93,7 +106,7 @@ async function upsertFollowUpTask(project, userId) {
     description,
     status: 'todo',
     priority: 'normal',
-    assignee: project.owner || project.createdBy || null,
+    assignee: followUpAssigneeId,
     project: projectId,
     dueDate: nextDue,
     dueTimeMinutes: 540,

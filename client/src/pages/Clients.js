@@ -1,10 +1,23 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { clientsAPI, projectsAPI, hostingAPI } from '../services/api';
 
 const Clients = () => {
   const queryClient = useQueryClient();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
+  const consumedStateRef = useRef(false);
+
+  useEffect(() => {
+    const q = location.state?.searchClient;
+    if (q && !consumedStateRef.current) {
+      consumedStateRef.current = true;
+      setSearch(q);
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state?.searchClient, location.pathname, navigate]);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', company: '', notes: '' });
   const [selectedClient, setSelectedClient] = useState(null);

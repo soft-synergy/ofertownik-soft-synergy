@@ -13,7 +13,8 @@ import {
   User,
   FolderOpen,
   Download,
-  DollarSign
+  DollarSign,
+  ExternalLink
 } from 'lucide-react';
 import { projectsAPI, offersAPI } from '../services/api';
 import { useI18n } from '../contexts/I18nContext';
@@ -447,6 +448,20 @@ const Projects = () => {
                       Wygeneruj umowę
                     </div>
                   </button>
+                )}
+                {project.offerType === 'preliminary' && project.calBookingUrl && (
+                <a
+                  href={project.calBookingUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-2 text-gray-400 hover:text-purple-600 group relative"
+                  title="Zobacz w Cal.com"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
+                    Zobacz w Cal.com
+                  </div>
+                </a>
                 )}
                 <Link
                   to={`/projects/${project._id}`}

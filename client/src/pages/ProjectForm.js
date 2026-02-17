@@ -8,7 +8,8 @@ import {
   Trash2,
   FileText,
   Eye,
-  Send
+  Send,
+  ExternalLink
 } from 'lucide-react';
 import { projectsAPI, offersAPI, authAPI } from '../services/api';
 import toast from 'react-hot-toast';
@@ -488,14 +489,27 @@ const ProjectForm = () => {
         {isEditing && (
           <div className="flex space-x-2">
             {formData.offerType === 'preliminary' ? (
-              <button
-                onClick={handleConvertToFinal}
-                disabled={convertToFinalMutation.isLoading}
-                className="btn-primary flex items-center"
-              >
-                <FileText className="h-4 w-4 mr-2" />
-                Przekształć w standardową ofertę
-              </button>
+              <>
+                {project?.calBookingUrl && (
+                  <a
+                    href={project.calBookingUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-secondary flex items-center"
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Zobacz w Cal.com
+                  </a>
+                )}
+                <button
+                  onClick={handleConvertToFinal}
+                  disabled={convertToFinalMutation.isLoading}
+                  className="btn-primary flex items-center"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  Przekształć w standardową ofertę
+                </button>
+              </>
             ) : (
               <>
                 <button

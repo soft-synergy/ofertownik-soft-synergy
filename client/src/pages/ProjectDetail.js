@@ -19,7 +19,8 @@ import {
   Plus,
   Trash2,
   Upload,
-  File
+  File,
+  ExternalLink
 } from 'lucide-react';
 import { projectsAPI, offersAPI, authAPI } from '../services/api';
 import { useI18n } from '../contexts/I18nContext';
@@ -360,6 +361,16 @@ const ProjectDetail = () => {
             {statusConfig.label}
           </span>
           
+          {project.offerType === 'preliminary' && project.calBookingUrl && (
+          <a
+            href={project.calBookingUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-secondary flex items-center"
+          >
+            <ExternalLink className="h-4 w-4 mr-2" />Zobacz w Cal.com
+          </a>
+          )}
           <Link
             to={`/projects/${id}/edit`}
             className="btn-secondary flex items-center"

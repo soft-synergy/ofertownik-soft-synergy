@@ -58,17 +58,14 @@ export default function SearchCommandPalette({ open, onClose }) {
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        onClose(!open);
-      }
       if (e.key === 'Escape') {
+        e.preventDefault();
         onClose(false);
       }
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [open, onClose]);
+  }, [onClose]);
 
   const handleSelectProject = (p) => {
     navigate(`/projects/${p._id}`);

@@ -124,6 +124,12 @@ router.post('/', async (req, res) => {
     const consultationNotes = baseNotes + (bookingId ? `\n\n[Cal.com booking #${bookingId}]` : '');
     const name = getProjectName(payload, clientName);
 
+    const uid = payload?.uid;
+    const bookerUrl = payload?.bookerUrl;
+    const calBookingUrl = uid
+      ? (bookerUrl ? `${String(bookerUrl).replace(/\/$/, '')}/booking/${uid}` : `https://app.cal.com/booking/${uid}`)
+      : null;
+
     const adminId = await getAdminUserId();
     if (!adminId) {
       console.error('[Cal.com webhook] No admin user found');
@@ -139,6 +145,7 @@ router.post('/', async (req, res) => {
       offerType: 'preliminary',
       status: 'draft',
       consultationNotes,
+      calBookingUrl: calBookingUrl || undefined,
       modules: [{ name: 'Moduł do ustalenia', description: 'Szczegóły po konsultacji', color: 'blue' }],
       pricing: {
         phase1: 0,
