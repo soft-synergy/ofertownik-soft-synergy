@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from 'react-query';
 import { Toaster } from 'react-hot-toast';
 import './index.css';
 import App from './App';
+import * as serviceWorkerRegistration from './swRegistration';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -34,4 +35,6 @@ root.render(
       </BrowserRouter>
     </QueryClientProvider>
   </React.StrictMode>
-); 
+);
+
+serviceWorkerRegistration.register({}); 

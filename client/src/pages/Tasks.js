@@ -536,34 +536,41 @@ export default function Tasks() {
   const { data: meData } = useQuery('me', authAPI.me, { staleTime: 60 * 1000 });
 
   useEffect(() => {
-    const saved = meData?.user?.settings?.tasksFilters;
-    if (!saved || typeof saved !== 'object' || filtersInitializedRef.current) return;
+    if (meData === undefined || filtersInitializedRef.current) return;
     filtersInitializedRef.current = true;
-    setFilters({
-      assignee: saved.assignee ?? '',
-      project: saved.project ?? '',
-      status: saved.status ?? '',
-      priority: saved.priority ?? '',
-      dateFrom: saved.dateFrom ?? '',
-      dateTo: saved.dateTo ?? ''
-    });
-    if (saved.view === 'list' || saved.view === 'calendar') setView(saved.view);
-    if (saved.calendarMode === 'month' || saved.calendarMode === 'week') setCalendarMode(saved.calendarMode);
+    const saved = meData?.user?.settings?.tasksFilters;
+    if (saved && typeof saved === 'object') {
+      setFilters({
+        assignee: saved.assignee ?? '',
+        project: saved.project ?? '',
+        status: saved.status ?? '',
+        priority: saved.priority ?? '',
+        dateFrom: saved.dateFrom ?? '',
+        dateTo: saved.dateTo ?? ''
+      });
+      if (saved.view === 'list' || saved.view === 'calendar') setView(saved.view);
+      if (saved.calendarMode === 'month' || saved.calendarMode === 'week') setCalendarMode(saved.calendarMode);
+    }
   }, [meData]);
 
   useEffect(() => {
     if (!filtersInitializedRef.current) return;
     const t = setTimeout(() => {
-      authAPI.updateSettings({
-        tasksFilters: {
-          ...filters,
-          view,
-          calendarMode
-        }
-      }).catch(() => {});
+      authAPI
+        .updateSettings({
+          tasksFilters: {
+            ...filters,
+            view,
+            calendarMode
+          }
+        })
+        .then(() => {
+          queryClient.invalidateQueries('me');
+        })
+        .catch(() => {});
     }, 800);
     return () => clearTimeout(t);
-  }, [filters, view, calendarMode]);
+  }, [filters, view, calendarMode, queryClient]);
 
   const calendarRange = useMemo(() => {
     if (calendarMode === 'week') {
