@@ -571,6 +571,8 @@ router.get('/stats/overview', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.upsertHostingPaymentTask = upsertHostingPaymentTask;
+module.exports.deleteHostingPaymentTask = deleteHostingPaymentTask;
 
 // Monitoring endpoints (admin only via router.use above)
 

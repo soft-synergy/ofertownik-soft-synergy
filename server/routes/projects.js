@@ -3,6 +3,7 @@ const { body, validationResult } = require('express-validator');
 const Project = require('../models/Project');
 const { auth, requireRole } = require('../middleware/auth');
 const Activity = require('../models/Activity');
+const { upsertFollowUpTask } = require('../utils/followUpTasks');
 
 const router = express.Router();
 
@@ -233,6 +234,10 @@ router.post('/', [
     }];
     await project.save();
 
+    try {
+      await upsertFollowUpTask(project, req.user._id);
+    } catch (e) {}
+
     // Log activity
     try {
       await Activity.create({
@@ -302,6 +307,10 @@ router.put('/:id', [
     const before = project.toObject();
     Object.assign(project, req.body);
     await project.save();
+
+    try {
+      await upsertFollowUpTask(project, req.user._id);
+    } catch (e) {}
 
     // Compute changed fields for changelog (shallow compare top-level keys)
     try {
@@ -408,6 +417,10 @@ router.post('/:id/followups', [
     project.followUps.push(followUp);
     // Saving will recalculate nextFollowUpDueAt via pre-save hook
     await project.save();
+
+    try {
+      await upsertFollowUpTask(project, req.user._id);
+    } catch (e) {}
 
     const populated = await Project.findById(project._id)
       .populate('createdBy', 'firstName lastName email')

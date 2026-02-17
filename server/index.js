@@ -638,8 +638,20 @@ mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
-.then(() => {
+.then(async () => {
   console.log('✅ Połączono z bazą danych MongoDB');
+  // Drop old unique index that caused E11000 for tasks with source (null, null)
+  const Task = require('./models/Task');
+  try {
+    const indexes = await Task.collection.indexes();
+    const toDrop = indexes.find((idx) => idx.key && idx.key['source.kind'] !== undefined && idx.key['source.refId'] !== undefined && idx.unique === true);
+    if (toDrop && toDrop.name) {
+      await Task.collection.dropIndex(toDrop.name);
+      console.log('Usunięto stary unikalny indeks source na tasks (migracja)');
+    }
+  } catch (e) {
+    if (e.code !== 27 && e.codeName !== 'IndexNotFound') console.error('Drop old tasks index:', e.message);
+  }
   app.listen(PORT, () => {
     console.log(`🚀 Serwer działa na porcie ${PORT}`);
     console.log(`📱 Frontend: https:///ofertownik.soft-synergy.com`);
@@ -670,6 +682,34 @@ mongoose.connect(process.env.MONGODB_URI, {
   } catch (e) {
     console.error('Nie udało się uruchomić digestu zadań:', e);
   }
+  // Sync hosting → tasks so hosting payments appear in Tasks list (once after 1 min, then daily)
+  const syncHostingTasks = async () => {
+    try {
+      const Hosting = require('./models/Hosting');
+      const User = require('./models/User');
+      const { upsertHostingPaymentTask } = require('./routes/hosting');
+      const hostings = await Hosting.find({
+        nextPaymentDate: { $exists: true, $ne: null },
+        status: { $nin: ['cancelled'] }
+      }).lean();
+      const admin = await User.findOne({ role: 'admin', isActive: true }).select('_id').lean();
+      const userId = admin?._id;
+      for (const h of hostings) {
+        const hosting = await Hosting.findById(h._id);
+        if (hosting) await upsertHostingPaymentTask(hosting, userId);
+      }
+      if (hostings.length) console.log(`[Tasks] Zsynchronizowano ${hostings.length} zadań hostingu`);
+    } catch (e) {
+      console.error('[Tasks] Błąd synchronizacji zadań hostingu:', e);
+    }
+  };
+  setTimeout(syncHostingTasks, 60 * 1000);
+  setInterval(syncHostingTasks, 24 * 60 * 60 * 1000);
+  // Sync follow-up → tasks so follow-ups appear in Tasks list (once after 2 min, then daily)
+  const { syncAllFollowUpTasks } = require('./utils/followUpTasks');
+  const runFollowUpTaskSync = () => syncAllFollowUpTasks(null).catch((e) => console.error('[Tasks] Błąd synchronizacji follow-up:', e));
+  setTimeout(runFollowUpTaskSync, 2 * 60 * 1000);
+  setInterval(runFollowUpTaskSync, 24 * 60 * 60 * 1000);
   // Start hosting uptime monitor (every 5 minutes)
   try {
     const hostingMonitor = require('./services/hostingMonitor');

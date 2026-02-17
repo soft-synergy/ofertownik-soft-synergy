@@ -36,7 +36,7 @@ const taskSchema = new mongoose.Schema({
    * Used for automatic sync (upsert) with other modules.
    */
   source: {
-    kind: { type: String, enum: ['hosting', null], default: null },
+    kind: { type: String, enum: ['hosting', 'followup', null], default: null },
     refId: { type: mongoose.Schema.Types.ObjectId, default: null }
   },
   dueDate: {
@@ -94,6 +94,7 @@ const taskSchema = new mongoose.Schema({
 taskSchema.index({ assignee: 1, dueDate: 1 });
 taskSchema.index({ project: 1, dueDate: 1 });
 taskSchema.index({ status: 1, dueDate: 1 });
-taskSchema.index({ 'source.kind': 1, 'source.refId': 1 }, { unique: true, sparse: true });
+// Non-unique so many tasks can have source.kind = null. Hosting/followup uniqueness enforced in app (upsert).
+taskSchema.index({ 'source.kind': 1, 'source.refId': 1 });
 
 module.exports = mongoose.model('Task', taskSchema);

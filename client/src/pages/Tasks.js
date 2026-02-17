@@ -404,20 +404,51 @@ export default function Tasks() {
   const toggleDoneMutation = useMutation(
     ({ id, status }) => tasksAPI.update(id, { status }),
     {
-      onSuccess: () => {
-        queryClient.invalidateQueries('tasks');
+      onMutate: async ({ id, status }) => {
+        await queryClient.cancelQueries(['tasks']);
+        const previous = queryClient.getQueriesData(['tasks']);
+        queryClient.setQueriesData(['tasks'], (old) => {
+          if (!Array.isArray(old)) return old;
+          return old.map((t) => (t._id === id ? { ...t, status } : t));
+        });
+        return { previous };
       },
-      onError: () => toast.error('Nie udało się zaktualizować statusu zadania')
+      onError: (_err, _vars, context) => {
+        if (context?.previous) {
+          context.previous.forEach(([key, data]) => queryClient.setQueryData(key, data));
+        }
+        toast.error('Nie udało się zaktualizować statusu zadania');
+      },
+      onSettled: () => queryClient.invalidateQueries('tasks')
     }
   );
 
-  const moveDueDateMutation = useMutation(({ id, dueDate }) => tasksAPI.update(id, { dueDate }), {
-    onSuccess: () => {
-      queryClient.invalidateQueries('tasks');
-      toast.success('Zmieniono termin zadania');
-    },
-    onError: () => toast.error('Nie udało się przenieść zadania')
-  });
+  const moveDueDateMutation = useMutation(
+    ({ id, dueDate }) => tasksAPI.update(id, { dueDate }),
+    {
+      onMutate: async ({ id, dueDate: targetDateKey }) => {
+        await queryClient.cancelQueries(['tasks']);
+        const previous = queryClient.getQueriesData(['tasks']);
+        queryClient.setQueriesData(['tasks'], (old) => {
+          if (!Array.isArray(old)) return old;
+          return old.map((t) => {
+            if (t._id !== id) return t;
+            const prevDate = t.dueDate;
+            const timePart = prevDate && typeof prevDate === 'string' && prevDate.includes('T') ? prevDate.slice(10) : 'T12:00:00.000Z';
+            return { ...t, dueDate: targetDateKey + timePart };
+          });
+        });
+        return { previous };
+      },
+      onError: (_err, _vars, context) => {
+        if (context?.previous) {
+          context.previous.forEach(([key, data]) => queryClient.setQueryData(key, data));
+        }
+        toast.error('Nie udało się przenieść zadania');
+      },
+      onSettled: () => queryClient.invalidateQueries('tasks')
+    }
+  );
 
   const calendarDays = useMemo(() => {
     const start = startOfWeek(startOfMonth(month), { weekStartsOn: 1 });
