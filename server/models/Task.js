@@ -26,6 +26,11 @@ const taskSchema = new mongoose.Schema({
     ref: 'User',
     default: null
   },
+  /** Multiple assignees support - array of user IDs */
+  assignees: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
   project: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Project',
@@ -35,10 +40,10 @@ const taskSchema = new mongoose.Schema({
    * Optional: source entity that created/owns this task (e.g. hosting payment).
    * Used for automatic sync (upsert) with other modules.
    */
-  source: {
-    kind: { type: String, enum: ['hosting', 'followup', null], default: null },
-    refId: { type: mongoose.Schema.Types.ObjectId, default: null }
-  },
+    source: {
+      kind: { type: String, enum: ['hosting', 'followup', 'cal.com', null], default: null },
+      refId: { type: mongoose.Schema.Types.ObjectId, default: null }
+    },
   dueDate: {
     type: Date,
     required: true
@@ -99,6 +104,7 @@ const taskSchema = new mongoose.Schema({
 });
 
 taskSchema.index({ assignee: 1, dueDate: 1 });
+taskSchema.index({ assignees: 1, dueDate: 1 });
 taskSchema.index({ project: 1, dueDate: 1 });
 taskSchema.index({ status: 1, dueDate: 1 });
 // Non-unique so many tasks can have source.kind = null. Hosting/followup uniqueness enforced in app (upsert).

@@ -276,12 +276,17 @@ function TaskModal({ task, initialDueDate, users = [], projects = [], onClose, o
     { enabled: isEdit && !!task?._id }
   );
   const updates = fullTask?.updates ?? [];
+  // Support both assignee (backward compatibility) and assignees array
+  const initialAssignees = task?.assignees && task.assignees.length > 0 
+    ? task.assignees.map(a => a._id || a).filter(Boolean)
+    : (task?.assignee?._id || task?.assignee ? [task.assignee._id || task.assignee] : []);
+
   const [form, setForm] = useState({
     title: task?.title ?? '',
     description: task?.description ?? '',
     status: task?.status ?? 'todo',
     priority: task?.priority ?? 'normal',
-    assignee: task?.assignee?._id ?? task?.assignee ?? '',
+    assignees: initialAssignees,
     project: task?.project?._id ?? task?.project ?? '',
     dueDate: task?.dueDate ? format(parseISO(task.dueDate), 'yyyy-MM-dd') : (initialDueDate ? format(initialDueDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd')),
     dueTimeMinutes: task?.dueTimeMinutes ?? '',
@@ -338,7 +343,7 @@ function TaskModal({ task, initialDueDate, users = [], projects = [], onClose, o
       description: (form.description || '').trim(),
       status: form.status,
       priority: form.priority,
-      assignee: form.assignee || null,
+      assignees: Array.isArray(form.assignees) ? form.assignees.filter(Boolean) : [],
       project: form.project || null,
       dueDate: form.dueDate,
       dueTimeMinutes: form.dueTimeMinutes === '' ? null : Number(form.dueTimeMinutes),
@@ -410,17 +415,37 @@ function TaskModal({ task, initialDueDate, users = [], projects = [], onClose, o
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Przypisany do</label>
-            <select
-              value={form.assignee}
-              onChange={(e) => setForm((f) => ({ ...f, assignee: e.target.value }))}
-              className="input-field w-full"
-            >
-              <option value="">— Nie przypisany —</option>
-              {users.map((u) => (
-                <option key={u._id} value={u._id}>{u.firstName} {u.lastName}</option>
-              ))}
-            </select>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Przypisani do (można wybrać wielu)</label>
+            <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-2">
+              {users.map((u) => {
+                const isSelected = form.assignees.includes(u._id);
+                return (
+                  <label key={u._id} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setForm((f) => ({ ...f, assignees: [...f.assignees, u._id] }));
+                        } else {
+                          setForm((f) => ({ ...f, assignees: f.assignees.filter(id => id !== u._id) }));
+                        }
+                      }}
+                      className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                    />
+                    <span className="text-sm">{u.firstName} {u.lastName}</span>
+                  </label>
+                );
+              })}
+              {users.length === 0 && (
+                <p className="text-sm text-gray-500 p-2">Brak dostępnych użytkowników</p>
+              )}
+            </div>
+            {form.assignees.length > 0 && (
+              <p className="mt-2 text-xs text-gray-500">
+                Wybrano: {form.assignees.length} {form.assignees.length === 1 ? 'osobę' : 'osób'}
+              </p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Projekt</label>
@@ -1015,7 +1040,19 @@ export default function Tasks() {
                         />
                       </td>
                       <td className="p-3 font-medium">{t.title}</td>
-                      <td className="p-3">{t.assignee ? `${t.assignee.firstName} ${t.assignee.lastName}` : '—'}</td>
+                      <td className="p-3">
+                        {(() => {
+                          const assigneesList = t.assignees && t.assignees.length > 0 
+                            ? t.assignees 
+                            : (t.assignee ? [t.assignee] : []);
+                          if (assigneesList.length === 0) return '—';
+                          if (assigneesList.length === 1) {
+                            const a = assigneesList[0];
+                            return `${a.firstName} ${a.lastName}`;
+                          }
+                          return `${assigneesList.length} osoby`;
+                        })()}
+                      </td>
                       <td className="p-3">{t.project?.name ?? '—'}</td>
                       <td className="p-3">{t.dueDate ? format(parseISO(t.dueDate), 'd.MM.yyyy', { locale: pl }) : '—'}</td>
                       <td className="p-3">{STATUS_LABELS[t.status] ?? t.status}</td>

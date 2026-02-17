@@ -10,6 +10,7 @@ const express = require('express');
 const Project = require('../models/Project');
 const User = require('../models/User');
 const Activity = require('../models/Activity');
+const Task = require('../models/Task');
 const { upsertFollowUpTask } = require('../utils/followUpTasks');
 
 const router = express.Router();
@@ -166,6 +167,53 @@ router.post('/', async (req, res) => {
     });
 
     await project.save();
+
+    // Create meeting task
+    try {
+      const startTime = payload?.startTime || payload?.start || payload?.scheduledAt;
+      const endTime = payload?.endTime || payload?.end;
+      
+      if (startTime) {
+        const meetingDate = new Date(startTime);
+        if (!isNaN(meetingDate.getTime())) {
+          // Calculate time in minutes from midnight
+          const hours = meetingDate.getHours();
+          const minutes = meetingDate.getMinutes();
+          const dueTimeMinutes = hours * 60 + minutes;
+          
+          // Calculate duration in minutes
+          let durationMinutes = 30; // default
+          if (endTime) {
+            const endDate = new Date(endTime);
+            if (!isNaN(endDate.getTime())) {
+              durationMinutes = Math.max(15, Math.round((endDate.getTime() - meetingDate.getTime()) / (1000 * 60)));
+            }
+          }
+          
+          const meetingTask = new Task({
+            title: `Spotkanie: ${clientName}`,
+            description: `Spotkanie z Cal.com${calBookingUrl ? `\n\nLink: ${calBookingUrl}` : ''}${baseNotes ? `\n\nNotatki:\n${baseNotes}` : ''}`,
+            status: 'todo',
+            priority: 'high',
+            assignees: [adminId],
+            project: project._id,
+            dueDate: meetingDate,
+            dueTimeMinutes: dueTimeMinutes,
+            durationMinutes: durationMinutes,
+            createdBy: adminId,
+            source: {
+              kind: 'cal.com',
+              refId: project._id
+            }
+          });
+          
+          await meetingTask.save();
+          console.log(`[Cal.com webhook] Created meeting task for ${email} on ${meetingDate.toISOString()}`);
+        }
+      }
+    } catch (e) {
+      console.warn('[Cal.com webhook] Meeting task creation error:', e.message);
+    }
 
     try {
       await upsertFollowUpTask(project, adminId);

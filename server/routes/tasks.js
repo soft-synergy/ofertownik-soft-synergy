@@ -18,9 +18,15 @@ router.get('/', auth, async (req, res) => {
     }
 
     if (assignee === 'me') {
-      query.assignee = req.user._id;
+      query.$or = [
+        { assignee: req.user._id },
+        { assignees: req.user._id }
+      ];
     } else if (assignee) {
-      query.assignee = assignee;
+      query.$or = [
+        { assignee: assignee },
+        { assignees: assignee }
+      ];
     }
 
     if (project) {
@@ -48,6 +54,7 @@ router.get('/', auth, async (req, res) => {
     const limitNum = Math.min(Number.parseInt(limit, 10) || 200, 500);
     const tasks = await Task.find(query)
       .populate('assignee', 'firstName lastName email')
+      .populate('assignees', 'firstName lastName email')
       .populate('project', 'name clientName status')
       .populate('createdBy', 'firstName lastName')
       .sort({ dueDate: 1, createdAt: 1 })
@@ -66,6 +73,7 @@ router.get('/:id', auth, async (req, res) => {
   try {
     const task = await Task.findById(req.params.id)
       .populate('assignee', 'firstName lastName email')
+      .populate('assignees', 'firstName lastName email')
       .populate('project', 'name clientName status')
       .populate('createdBy', 'firstName lastName')
       .populate('updates.author', 'firstName lastName');
@@ -108,17 +116,21 @@ router.post('/:id/updates', auth, async (req, res) => {
 // Create task
 router.post('/', auth, async (req, res) => {
   try {
-    const { title, description, status, priority, assignee, project, dueDate, dueTimeMinutes, durationMinutes, recurrence } = req.body;
+    const { title, description, status, priority, assignee, assignees, project, dueDate, dueTimeMinutes, durationMinutes, recurrence } = req.body;
     if (!title || !dueDate) {
       return res.status(400).json({ message: 'Tytuł i termin są wymagane' });
     }
+
+    // Support both assignee (single) and assignees (array) for backward compatibility
+    const assigneesArray = assignees && Array.isArray(assignees) ? assignees.filter(Boolean) : (assignee ? [assignee] : []);
 
     const basePayload = {
       title,
       description: description || '',
       status: status || 'todo',
       priority: priority || 'normal',
-      assignee: assignee || null,
+      assignee: assignee || null, // Keep for backward compatibility
+      assignees: assigneesArray, // New array field
       project: project || null,
       dueDate: new Date(dueDate),
       dueTimeMinutes: dueTimeMinutes != null ? dueTimeMinutes : null,
@@ -161,6 +173,7 @@ router.post('/', auth, async (req, res) => {
 
       await firstInstance.populate([
         { path: 'assignee', select: 'firstName lastName email' },
+        { path: 'assignees', select: 'firstName lastName email' },
         { path: 'project', select: 'name clientName status' },
         { path: 'createdBy', select: 'firstName lastName' }
       ]);
@@ -171,6 +184,7 @@ router.post('/', auth, async (req, res) => {
     await task.save();
     await task.populate([
       { path: 'assignee', select: 'firstName lastName email' },
+      { path: 'assignees', select: 'firstName lastName email' },
       { path: 'project', select: 'name clientName status' },
       { path: 'createdBy', select: 'firstName lastName' }
     ]);
@@ -189,12 +203,15 @@ router.put('/:id', auth, async (req, res) => {
       return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
     }
     const prevStatus = task.status;
-    const { title, description, status, priority, assignee, project, dueDate, dueTimeMinutes, durationMinutes } = req.body;
+    const { title, description, status, priority, assignee, assignees, project, dueDate, dueTimeMinutes, durationMinutes } = req.body;
     if (title != null) task.title = title;
     if (description != null) task.description = description;
     if (status != null) task.status = status;
     if (priority != null) task.priority = priority;
     if (assignee !== undefined) task.assignee = assignee || null;
+    if (assignees !== undefined) {
+      task.assignees = Array.isArray(assignees) ? assignees.filter(Boolean) : [];
+    }
     if (project !== undefined) task.project = project || null;
     if (dueDate != null) task.dueDate = new Date(dueDate);
     if (dueTimeMinutes !== undefined) task.dueTimeMinutes = dueTimeMinutes;
@@ -217,6 +234,7 @@ router.put('/:id', auth, async (req, res) => {
     await task.save();
     await task.populate([
       { path: 'assignee', select: 'firstName lastName email' },
+      { path: 'assignees', select: 'firstName lastName email' },
       { path: 'project', select: 'name clientName status' },
       { path: 'createdBy', select: 'firstName lastName' }
     ]);
