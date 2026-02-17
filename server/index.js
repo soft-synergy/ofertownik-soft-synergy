@@ -357,7 +357,7 @@ const setupTasksDigestScheduler = () => {
   const Task = require('./models/Task');
   const User = require('./models/User');
   const { sendEmail } = require('./utils/emailService');
-  const { tasksDailyDigestTemplate } = require('./utils/emailTemplates');
+  const { tasksDailyDigestTemplate, tasksOverdueTemplate } = require('./utils/emailTemplates');
 
   const APP_URL = process.env.APP_URL || 'https://ofertownik.soft-synergy.com';
   const TASKS_URL = `${APP_URL}/tasks`;
@@ -418,9 +418,59 @@ const setupTasksDigestScheduler = () => {
     }
   };
 
+  const runOverdue = async () => {
+    try {
+      const now = new Date();
+      const rangeEnd = startOfDay(now);
+
+      const overdueTasks = await Task.find({
+        isRecurrenceTemplate: { $ne: true },
+        status: { $nin: ['done', 'cancelled'] },
+        dueDate: { $lt: rangeEnd },
+        assignee: { $ne: null }
+      })
+        .populate('assignee', 'email firstName lastName')
+        .populate('project', 'name')
+        .sort({ dueDate: 1 })
+        .limit(200)
+        .lean();
+
+      const byAssignee = {};
+      for (const t of overdueTasks) {
+        const uid = t.assignee?._id?.toString?.() || t.assignee?.toString?.();
+        if (!uid || !t.assignee?.email) continue;
+        if (!byAssignee[uid]) byAssignee[uid] = { user: t.assignee, tasks: [] };
+        byAssignee[uid].tasks.push(t);
+      }
+
+      for (const { user, tasks } of Object.values(byAssignee)) {
+        if (!user.email || tasks.length === 0) continue;
+        const payloadTasks = tasks.map((t) => ({
+          title: t.title,
+          dueDateFormatted: t.dueDate ? formatDate(t.dueDate) : '-',
+          priorityLabel: priorityLabel(t.priority),
+          projectName: t.project?.name || null
+        }));
+        const dateLabel = formatDate(now);
+        const html = tasksOverdueTemplate({
+          recipientName: user.firstName,
+          tasks: payloadTasks,
+          tasksUrl: TASKS_URL,
+          dateLabel
+        });
+        const subject = `⚠️ Zadania po terminie (${tasks.length}) – ${dateLabel}`;
+        await sendEmail({ to: user.email, subject, html });
+      }
+    } catch (e) {
+      console.error('[Tasks overdue] Błąd:', e);
+    }
+  };
+
   // First run after 2 minutes, then every 24h
   setTimeout(runDigest, 2 * 60 * 1000);
   setInterval(runDigest, 24 * 60 * 60 * 1000);
+  setTimeout(runOverdue, 3 * 60 * 1000);
+  setInterval(runOverdue, 24 * 60 * 60 * 1000);
 };
 
 // Recurring tasks scheduler: ensures instances exist for upcoming period

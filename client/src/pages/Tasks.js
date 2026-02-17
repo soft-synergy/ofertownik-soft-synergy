@@ -14,6 +14,8 @@ import {
   subWeeks,
   isToday,
   parseISO,
+  startOfDay,
+  isBefore,
 } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import { DndContext, useDraggable, useDroppable } from '@dnd-kit/core';
@@ -37,7 +39,7 @@ const STATUS_LABELS = { todo: 'Do zrobienia', in_progress: 'W toku', done: 'Zrob
 const PRIORITY_LABELS = { low: 'Niski', normal: 'Normalny', high: 'Wysoki', urgent: 'Pilny' };
 const PRIORITY_COLORS = { low: 'bg-gray-100 text-gray-700', normal: 'bg-blue-100 text-blue-800', high: 'bg-orange-100 text-orange-800', urgent: 'bg-red-100 text-red-800' };
 
-function DraggableTaskChip({ task, onOpen }) {
+function DraggableTaskChip({ task, isOverdue, onOpen, onToggleDone }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useDraggable({
     id: task._id,
     data: { taskId: task._id }
@@ -48,17 +50,32 @@ function DraggableTaskChip({ task, onOpen }) {
     opacity: isDragging ? 0.6 : 1
   };
 
+  const isDone = task.status === 'done';
+  const borderClass = isDone
+    ? 'border-l-4 border-green-500'
+    : isOverdue
+      ? 'border-l-4 border-red-500'
+      : '';
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`w-full px-2 py-1 rounded text-xs truncate flex items-center gap-1 ${
-        task.status === 'done'
+      className={`w-full px-2 py-1 rounded text-xs truncate flex items-center gap-1 border-l-4 ${borderClass || 'border-transparent'} ${
+        isDone
           ? 'bg-green-100 text-green-800 line-through'
           : 'bg-primary-50 text-primary-900 hover:bg-primary-100'
       }`}
       title={task.title}
     >
+      <input
+        type="checkbox"
+        checked={isDone}
+        onChange={(e) => { e.stopPropagation(); onToggleDone?.(task); }}
+        className="shrink-0 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+        aria-label={isDone ? 'Oznacz jako niezrobione' : 'Oznacz jako wykonane'}
+        title={isDone ? 'Oznacz jako niezrobione' : 'Oznacz jako wykonane'}
+      />
       <button
         type="button"
         className="shrink-0 text-gray-500 hover:text-gray-700 cursor-grab active:cursor-grabbing"
@@ -423,7 +440,14 @@ export default function Tasks() {
         map[d].push(t);
       }
     });
-    Object.keys(map).forEach((d) => map[d].sort((a, b) => (a.dueTimeMinutes ?? 0) - (b.dueTimeMinutes ?? 0)));
+    Object.keys(map).forEach((d) => {
+      map[d].sort((a, b) => {
+        const doneA = a.status === 'done' ? 1 : 0;
+        const doneB = b.status === 'done' ? 1 : 0;
+        if (doneA !== doneB) return doneA - doneB;
+        return (a.dueTimeMinutes ?? 0) - (b.dueTimeMinutes ?? 0);
+      });
+    });
     return map;
   }, [tasks]);
 
@@ -619,8 +643,18 @@ export default function Tasks() {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {tasks.map((t) => (
-                    <tr key={t._id} className="hover:bg-gray-50">
+                  {[...tasks]
+                    .sort((a, b) => {
+                      const doneA = a.status === 'done' ? 1 : 0;
+                      const doneB = b.status === 'done' ? 1 : 0;
+                      if (doneA !== doneB) return doneA - doneB;
+                      return new Date(a.dueDate || 0) - new Date(b.dueDate || 0);
+                    })
+                    .map((t) => {
+                      const isOverdue = t.status !== 'done' && t.dueDate && isBefore(parseISO(t.dueDate), startOfDay(new Date()));
+                      const rowBorder = t.status === 'done' ? 'border-l-4 border-green-500' : isOverdue ? 'border-l-4 border-red-500' : '';
+                      return (
+                    <tr key={t._id} className={`hover:bg-gray-50 ${rowBorder}`}>
                       <td className="p-3 align-middle">
                         <input
                           type="checkbox"
@@ -648,7 +682,7 @@ export default function Tasks() {
                         </button>
                       </td>
                     </tr>
-                  ))}
+                  ); })}
                 </tbody>
               </table>
             </div>
@@ -700,8 +734,8 @@ export default function Tasks() {
                             <button
                               type="button"
                               onClick={() => openCreate(day)}
-                              className="opacity-0 hover:opacity-100 p-0.5 rounded text-primary-600 hover:bg-primary-50"
-                              title="Dodaj zadanie"
+                              className="p-0.5 rounded text-primary-600 hover:bg-primary-50 flex items-center justify-center"
+                              title="Dodaj zadanie na ten dzień"
                             >
                               <Plus className="h-3.5 w-3.5" />
                             </button>
@@ -709,7 +743,13 @@ export default function Tasks() {
                         </div>
                         <div className="mt-1 space-y-1 flex-1 overflow-y-auto">
                           {dayTasks.map((t) => (
-                            <DraggableTaskChip key={t._id} task={t} onOpen={() => openEdit(t)} />
+                            <DraggableTaskChip
+                              key={t._id}
+                              task={t}
+                              isOverdue={t.status !== 'done' && t.dueDate && isBefore(parseISO(t.dueDate), startOfDay(new Date()))}
+                              onOpen={() => openEdit(t)}
+                              onToggleDone={handleToggleDone}
+                            />
                           ))}
                         </div>
                       </DroppableDayCell>
@@ -766,7 +806,13 @@ export default function Tasks() {
                         </div>
                         <div className="mt-2 space-y-1 flex-1 overflow-y-auto">
                           {dayTasks.map((t) => (
-                            <DraggableTaskChip key={t._id} task={t} onOpen={() => openEdit(t)} />
+                            <DraggableTaskChip
+                              key={t._id}
+                              task={t}
+                              isOverdue={t.status !== 'done' && t.dueDate && isBefore(parseISO(t.dueDate), startOfDay(new Date()))}
+                              onOpen={() => openEdit(t)}
+                              onToggleDone={handleToggleDone}
+                            />
                           ))}
                         </div>
                       </DroppableDayCell>

@@ -36,7 +36,7 @@ const taskSchema = new mongoose.Schema({
    * Used for automatic sync (upsert) with other modules.
    */
   source: {
-    kind: { type: String, enum: ['hosting'], default: null },
+    kind: { type: String, enum: ['hosting', null], default: null },
     refId: { type: mongoose.Schema.Types.ObjectId, default: null }
   },
   dueDate: {
@@ -74,7 +74,7 @@ const taskSchema = new mongoose.Schema({
   },
   recurrence: {
     enabled: { type: Boolean, default: false },
-    frequency: { type: String, enum: ['daily', 'weekly', 'monthly'], default: null },
+    frequency: { type: String, enum: ['daily', 'weekly', 'monthly', null], default: null },
     interval: { type: Number, default: 1, min: 1 },
     untilDate: { type: Date, default: null }
   },

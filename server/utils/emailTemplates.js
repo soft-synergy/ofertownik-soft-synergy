@@ -404,11 +404,89 @@ function tasksDailyDigestTemplate({ recipientName, tasks, tasksUrl, dateLabel })
 `.trim();
 }
 
+/**
+ * Szablon: zadania po terminie (dla przypisanego użytkownika)
+ */
+function tasksOverdueTemplate({ recipientName, tasks, tasksUrl, dateLabel }) {
+  const rows = (tasks || []).map((t) => `
+    <tr>
+      <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;">
+        <div style="font-weight:600;color:#b91c1c;">${escapeHtml(t.title || '')}</div>
+        <div style="font-size:13px;color:#64748b;margin-top:4px;">
+          Termin minął: <strong>${escapeHtml(t.dueDateFormatted || '-')}</strong>
+          ${t.priorityLabel ? ` · Priorytet: ${escapeHtml(t.priorityLabel)}` : ''}
+          ${t.projectName ? ` · Projekt: ${escapeHtml(t.projectName)}` : ''}
+        </div>
+      </td>
+      <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;text-align:right;">
+        <a href="${tasksUrl}" style="color:#2563eb;text-decoration:none;font-weight:500;">Otwórz →</a>
+      </td>
+    </tr>`).join('');
+
+  const greeting = recipientName ? `Cześć ${escapeHtml(recipientName)},` : 'Cześć,';
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zadania po terminie</title>
+</head>
+<body style="margin:0;padding:0;font-family:${baseStyles.fontFamily};background-color:${baseStyles.backgroundColor};color:${baseStyles.color};">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#fef2f2;">
+    <tr>
+      <td align="center" style="padding:40px 20px;">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;background:#ffffff;border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,0.08);overflow:hidden;">
+          <tr>
+            <td style="background:linear-gradient(135deg,#7f1d1d 0%,#dc2626 100%);padding:32px 36px;text-align:center;">
+              <p style="margin:0 0 8px 0;font-size:32px;">⚠️</p>
+              <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;letter-spacing:-0.02em;">Zadania po terminie – ${escapeHtml(dateLabel || '')}</h1>
+              <p style="margin:10px 0 0 0;color:rgba(255,255,255,0.92);font-size:15px;">Masz niezrealizowane zadania z przekroczonym terminem</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px 36px;">
+              <p style="margin:0 0 16px 0;font-size:16px;line-height:1.6;color:#475569;">${greeting}</p>
+              <p style="margin:0 0 18px 0;font-size:14px;line-height:1.6;color:#64748b;">Poniżej lista zadań po terminie do ogarnięcia:</p>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #fecaca;border-radius:12px;overflow:hidden;">
+                <thead>
+                  <tr style="background:#fef2f2;">
+                    <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;color:#b91c1c;text-transform:uppercase;">Zadanie</th>
+                    <th style="padding:12px 16px;text-align:right;font-size:12px;font-weight:600;color:#b91c1c;text-transform:uppercase;"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${rows || `
+                    <tr><td style="padding:16px;color:#64748b;" colspan="2">Brak zadań po terminie.</td></tr>
+                  `}
+                </tbody>
+              </table>
+              <p style="margin:24px 0 0 0;text-align:center;">
+                <a href="${tasksUrl}" style="${objectToInlineStyle(buttonPrimary)}">Otwórz zadania →</a>
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 36px;background:#f8fafc;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;">
+              Soft Synergy Ofertownik · Powiadomienia zadań · ${new Date().toLocaleDateString('pl-PL')}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`.trim();
+}
+
 module.exports = {
   followUpReminderTemplate,
   quoteRequestTemplate,
   hostingReminder3DaysBeforeTemplate,
   hostingReminderDueTodayTemplate,
   hostingReminder3DaysOverdueTemplate,
-  tasksDailyDigestTemplate
+  tasksDailyDigestTemplate,
+  tasksOverdueTemplate
 };
