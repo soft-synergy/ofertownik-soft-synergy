@@ -34,6 +34,8 @@ const Projects = () => {
   const [selectedProject, setSelectedProject] = useState(null);
   const [finalEstimateTotal, setFinalEstimateTotal] = useState('');
   const [clarificationText, setClarificationText] = useState('');
+  const [clarificationResponseText, setClarificationResponseText] = useState('');
+  const [submittingClarificationResponse, setSubmittingClarificationResponse] = useState(false);
 
   const { data, isLoading, refetch } = useQuery(
     ['projects', filters],
@@ -123,6 +125,7 @@ const Projects = () => {
     setSelectedProject(null);
     setFinalEstimateTotal('');
     setClarificationText('');
+    setClarificationResponseText('');
   };
 
   const handleSubmitFinalEstimate = async () => {
@@ -147,11 +150,27 @@ const Projects = () => {
     }
     try {
       await projectsAPI.requestClarification(selectedProject._id, clarificationText.trim());
-      toast.success('Doprecyzowanie zapisane. Projekt wrócił do statusu Aktywny.');
+      toast.success('Doprecyzowanie zapisane. Jakub dostanie maila – odpowiedź wpisuje w panelu.');
       handleCloseRespondModal();
       refetch();
     } catch (error) {
       toast.error(error.response?.data?.message || 'Błąd podczas zapisywania doprecyzowania');
+    }
+  };
+
+  const handleSubmitClarificationResponse = async () => {
+    if (!selectedProject || !clarificationResponseText.trim()) return;
+    setSubmittingClarificationResponse(true);
+    try {
+      const data = await projectsAPI.submitClarificationResponse(selectedProject._id, clarificationResponseText.trim());
+      toast.success('Odpowiedź na doprecyzowanie zapisana. Status: Do wyceny finalnej.');
+      setClarificationResponseText('');
+      if (data.project) setSelectedProject(data.project);
+      refetch();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Błąd zapisywania odpowiedzi');
+    } finally {
+      setSubmittingClarificationResponse(false);
     }
   };
 
@@ -375,7 +394,7 @@ const Projects = () => {
                         <span>Odpowiedz</span>
                       </button>
                     )}
-                    {/* Info o doprecyzowaniu – gdy czeka na odpowiedź klienta (ostatni wpis w historii bez odpowiedzi) */}
+                    {/* Doprecyzowanie – czeka na odpowiedź Jakuba w panelu (ostatni wpis w historii bez odpowiedzi) */}
                     {project.offerType === 'preliminary' && (() => {
                       const history = project.clarificationHistory || [];
                       const last = history.length ? history[history.length - 1] : null;
@@ -384,9 +403,16 @@ const Projects = () => {
                         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                           <p className="text-xs font-medium text-amber-800 flex items-center gap-1">
                             <MessageCircle className="h-4 w-4" />
-                            Oczekuje na odpowiedź klienta
+                            Oczekuje na odpowiedź (doprecyzowanie w panelu)
                           </p>
                           <p className="text-xs text-amber-700 mt-1 line-clamp-2">{last?.requestText || project.clarificationRequest?.text}</p>
+                          <button
+                            onClick={() => handleOpenRespondModal(project)}
+                            className="mt-2 w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-3 rounded-lg flex items-center justify-center gap-2 text-sm"
+                          >
+                            <MessageCircle className="h-4 w-4" />
+                            Odpowiedz na doprecyzowanie
+                          </button>
                         </div>
                       ) : null;
                     })()}
@@ -618,13 +644,14 @@ const Projects = () => {
                             {entry.responseText && (
                               <div className="mt-2 pt-2 border-t border-amber-200">
                                 <div className="text-xs text-green-700 font-medium mb-1">
-                                  Odpowiedź klienta {entry.respondedAt ? new Date(entry.respondedAt).toLocaleString('pl-PL') : ''}
+                                  Odpowiedź (panel admina) {entry.respondedAt ? new Date(entry.respondedAt).toLocaleString('pl-PL') : ''}
+                                  {entry.respondedBy?.firstName ? ` – ${entry.respondedBy.firstName} ${entry.respondedBy.lastName}` : ''}
                                 </div>
                                 <p className="whitespace-pre-wrap text-gray-800 text-sm bg-white p-2 rounded border">{entry.responseText}</p>
                               </div>
                             )}
                             {!entry.responseText && (
-                              <p className="mt-2 text-xs text-amber-600 italic">Oczekuje na odpowiedź klienta w portalu.</p>
+                              <p className="mt-2 text-xs text-amber-600 italic">Oczekuje na odpowiedź w panelu (Jakub).</p>
                             )}
                           </div>
                         ));
@@ -635,7 +662,33 @@ const Projects = () => {
               </dl>
             </div>
 
-            {/* Rozwidlenie na 2 – Finalna wycena / Doprecyzowanie */}
+            {/* Odpowiedź na doprecyzowanie (gdy status active i ostatni wpis bez odpowiedzi) */}
+            {(() => {
+              const history = selectedProject.clarificationHistory || [];
+              const last = history.length ? history[history.length - 1] : null;
+              const hasPendingClarification = selectedProject.status === 'active' && last && !last.responseText;
+              return hasPendingClarification ? (
+                <div className="p-6 border-t bg-amber-50/50">
+                  <h3 className="text-sm font-semibold text-amber-800 mb-2">Odpowiedz na doprecyzowanie (wpisz w panelu)</h3>
+                  <textarea
+                    value={clarificationResponseText}
+                    onChange={(e) => setClarificationResponseText(e.target.value)}
+                    placeholder="Wpisz doprecyzowanie / notatki po kontakcie z klientem..."
+                    rows={4}
+                    className="input-field resize-none mb-2 w-full"
+                  />
+                  <button
+                    onClick={handleSubmitClarificationResponse}
+                    disabled={!clarificationResponseText.trim() || submittingClarificationResponse}
+                    className="btn-primary bg-amber-600 hover:bg-amber-700"
+                  >
+                    {submittingClarificationResponse ? 'Zapisywanie...' : 'Zapisz odpowiedź (status → Do wyceny finalnej)'}
+                  </button>
+                </div>
+              ) : null;
+            })()}
+
+            {/* Rozwidlenie na 2 – Finalna wycena / Doprecyzowanie (gdy status to_final_estimation) */}
             <div className="p-6 space-y-6">
               <h3 className="text-sm font-semibold text-gray-700">Decyzja</h3>
 

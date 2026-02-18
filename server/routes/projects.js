@@ -223,9 +223,52 @@ router.post('/:id/request-clarification', [
       .populate('clarificationRequest.requestedBy', 'firstName lastName email')
       .populate('clarificationHistory.requestedBy', 'firstName lastName email');
 
-    return res.json({ message: 'Zapisano doprecyzowanie. Oczekuje na odpowiedź klienta.', project: updated });
+    return res.json({ message: 'Zapisano doprecyzowanie. Jakub dostanie maila – odpowiedź wpisuje w panelu admina.', project: updated });
   } catch (e) {
     console.error('request-clarification error:', e);
+    return res.status(500).json({ message: 'Błąd serwera' });
+  }
+});
+
+// Odpowiedź na doprecyzowanie w panelu admina (Jakub / staff) – po wpisaniu status wraca do "Do wyceny finalnej"
+router.post('/:id/clarification-response', [
+  auth,
+  body('responseText').trim().notEmpty().withMessage('Treść odpowiedzi jest wymagana')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ message: errors.array()[0]?.msg || 'Treść odpowiedzi jest wymagana', errors: errors.array() });
+    }
+
+    const project = await Project.findById(req.params.id);
+    if (!project) return res.status(404).json({ message: 'Projekt nie został znaleziony' });
+    if (!canEditProject(project, req.user)) return res.status(403).json({ message: 'Brak uprawnień' });
+
+    const history = project.clarificationHistory || [];
+    if (history.length === 0) return res.status(400).json({ message: 'Brak otwartego doprecyzowania' });
+    const last = history[history.length - 1];
+    if (last.responseText) return res.status(400).json({ message: 'Na to doprecyzowanie już wpisano odpowiedź' });
+
+    const responseText = req.body.responseText.trim();
+    last.responseText = responseText;
+    last.respondedAt = new Date();
+    last.respondedBy = req.user._id;
+    project.clarificationHistory = history;
+    project.status = 'to_final_estimation';
+    await project.save();
+
+    const updated = await Project.findById(project._id)
+      .populate('createdBy', 'firstName lastName email')
+      .populate('owner', 'firstName lastName email')
+      .populate('teamMembers.user', 'firstName lastName email role avatar')
+      .populate('clarificationRequest.requestedBy', 'firstName lastName email')
+      .populate('clarificationHistory.requestedBy', 'firstName lastName email')
+      .populate('clarificationHistory.respondedBy', 'firstName lastName email');
+
+    return res.json({ message: 'Odpowiedź na doprecyzowanie zapisana. Status: Do wyceny finalnej.', project: updated });
+  } catch (e) {
+    console.error('clarification-response error:', e);
     return res.status(500).json({ message: 'Błąd serwera' });
   }
 });

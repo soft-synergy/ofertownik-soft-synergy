@@ -170,7 +170,8 @@ const projectSchema = new mongoose.Schema({
     requestedAt: { type: Date, default: Date.now },
     requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     responseText: { type: String, default: null },
-    respondedAt: { type: Date, default: null }
+    respondedAt: { type: Date, default: null },
+    respondedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
   }],
   priority: {
     type: String,

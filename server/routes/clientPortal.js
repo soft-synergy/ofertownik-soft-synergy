@@ -14,17 +14,10 @@ router.get('/:token', async (req, res) => {
   try {
     const client = await Client.findOne({ portalToken: req.params.token, portalEnabled: true });
     if (!client) return res.status(404).json({ message: 'Nie znaleziono klienta' });
-    const [projectsRaw, hostings] = await Promise.all([
-      Project.find({ client: client._id }).select('name status offerType generatedOfferUrl workSummaryUrl workSummaryPdfUrl documents createdAt _id clarificationHistory clarificationRequest'),
+    const [projects, hostings] = await Promise.all([
+      Project.find({ client: client._id }).select('name status offerType generatedOfferUrl workSummaryUrl workSummaryPdfUrl documents createdAt _id'),
       Hosting.find({ client: client._id }).select('domain status monthlyPrice nextPaymentDate lastPaymentDate')
     ]);
-    const projects = projectsRaw.map(p => {
-      const obj = p.toObject ? p.toObject() : p;
-      const history = obj.clarificationHistory || [];
-      const last = history.length ? history[history.length - 1] : null;
-      const pendingClarification = last && !last.responseText ? { requestText: last.requestText, requestedAt: last.requestedAt } : null;
-      return { ...obj, pendingClarification };
-    });
     
     // Get SSL status for each hosting domain
     const hostingsWithSSL = await Promise.all(hostings.map(async (h) => {
@@ -146,39 +139,6 @@ router.post('/:token/accept-project/:projectId', async (req, res) => {
   } catch (e) {
     console.error('Accept project error:', e);
     res.status(500).json({ message: 'Błąd akceptacji oferty' });
-  }
-});
-
-// Odpowiedź klienta na doprecyzowanie (portal po tokenie)
-router.post('/:token/projects/:projectId/clarification-response', async (req, res) => {
-  try {
-    const client = await Client.findOne({ portalToken: req.params.token, portalEnabled: true });
-    if (!client) return res.status(404).json({ message: 'Nie znaleziono klienta' });
-
-    const project = await Project.findById(req.params.projectId);
-    if (!project) return res.status(404).json({ message: 'Projekt nie znaleziony' });
-    if (project.client?.toString() !== client._id.toString()) {
-      return res.status(403).json({ message: 'Projekt nie należy do tego klienta' });
-    }
-
-    const responseText = (req.body.responseText || '').trim();
-    if (!responseText) return res.status(400).json({ message: 'Treść odpowiedzi jest wymagana' });
-
-    const history = project.clarificationHistory || [];
-    if (history.length === 0) return res.status(400).json({ message: 'Brak otwartego doprecyzowania' });
-    const last = history[history.length - 1];
-    if (last.responseText) return res.status(400).json({ message: 'Na to doprecyzowanie już udzielono odpowiedzi' });
-
-    last.responseText = responseText;
-    last.respondedAt = new Date();
-    project.clarificationHistory = history;
-    project.status = 'to_final_estimation';
-    await project.save();
-
-    res.json({ message: 'Odpowiedź została zapisana. Zespół zostanie poinformowany.', project: { _id: project._id, status: project.status } });
-  } catch (e) {
-    console.error('Clarification response error:', e);
-    res.status(500).json({ message: 'Błąd zapisu odpowiedzi' });
   }
 });
 
