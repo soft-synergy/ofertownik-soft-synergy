@@ -14,7 +14,8 @@ import {
   FolderOpen,
   Download,
   DollarSign,
-  ExternalLink
+  ExternalLink,
+  MessageCircle
 } from 'lucide-react';
 import { projectsAPI, offersAPI } from '../services/api';
 import { useI18n } from '../contexts/I18nContext';
@@ -30,8 +31,10 @@ const Projects = () => {
     page: 1,
   });
   const [showFinalEstimateModal, setShowFinalEstimateModal] = useState(false);
+  const [showClarificationModal, setShowClarificationModal] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
   const [finalEstimateTotal, setFinalEstimateTotal] = useState('');
+  const [clarificationText, setClarificationText] = useState('');
 
   const { data, isLoading, refetch } = useQuery(
     ['projects', filters],
@@ -132,6 +135,29 @@ const Projects = () => {
     } catch (error) {
       console.error('Błąd submitFinalEstimate:', error);
       toast.error(error.response?.data?.message || 'Błąd podczas zapisywania wyceny');
+    }
+  };
+
+  const handleOpenClarificationModal = (project) => {
+    setSelectedProject(project);
+    setClarificationText('');
+    setShowClarificationModal(true);
+  };
+
+  const handleSubmitClarification = async () => {
+    if (!selectedProject || !clarificationText.trim()) {
+      toast.error('Wpisz treść doprecyzowania');
+      return;
+    }
+    try {
+      await projectsAPI.requestClarification(selectedProject._id, clarificationText.trim());
+      toast.success('Doprecyzowanie zapisane. Projekt wrócił do statusu Aktywny.');
+      setShowClarificationModal(false);
+      setSelectedProject(null);
+      setClarificationText('');
+      refetch();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Błąd podczas zapisywania doprecyzowania');
     }
   };
 
@@ -345,18 +371,40 @@ const Projects = () => {
                         <span>Do wyceny finalnej</span>
                       </button>
                     )}
-                    {/* Przycisk "Finalna wycena" - gdy status to_final_estimation */}
+                    {/* Przyciski "Finalna wycena" i "Doprecyzowanie" - gdy status to_final_estimation */}
                     {project.status === 'to_final_estimation' && (
-                      <button
-                        onClick={() => {
-                          console.log('Kliknięto "Finalna wycena" dla projektu:', project._id);
-                          handleOpenFinalEstimateModal(project);
-                        }}
-                        className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center space-x-2 transition-colors shadow-md"
-                      >
-                        <DollarSign className="h-5 w-5" />
-                        <span>Finalna wycena - Wpisz cenę całkowitą</span>
-                      </button>
+                      <div className="space-y-2">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleOpenFinalEstimateModal(project)}
+                            className="flex-1 bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center space-x-2 transition-colors shadow-md"
+                          >
+                            <DollarSign className="h-5 w-5" />
+                            <span>Finalna wycena</span>
+                          </button>
+                          <button
+                            onClick={() => handleOpenClarificationModal(project)}
+                            className="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-medium py-3 px-4 rounded-lg flex items-center justify-center space-x-2 transition-colors shadow-md"
+                            title="Nie mogę jeszcze wycenić – potrzebuję doprecyzowania od klienta"
+                          >
+                            <MessageCircle className="h-5 w-5" />
+                            <span>Doprecyzowanie</span>
+                          </button>
+                        </div>
+                        <p className="text-xs text-gray-500 text-center">
+                          Doprecyzowanie – gdy nie można jeszcze wykonać wyceny finalnej
+                        </p>
+                      </div>
+                    )}
+                    {/* Info o doprecyzowaniu – gdy projekt wrócił z to_final_estimation */}
+                    {project.offerType === 'preliminary' && project.clarificationRequest?.text && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                        <p className="text-xs font-medium text-amber-800 flex items-center gap-1">
+                          <MessageCircle className="h-4 w-4" />
+                          Oczekuje doprecyzowania
+                        </p>
+                        <p className="text-xs text-amber-700 mt-1 line-clamp-2">{project.clarificationRequest.text}</p>
+                      </div>
                     )}
                     {/* Info gdy status to_prepare_final_offer */}
                     {project.status === 'to_prepare_final_offer' && (
@@ -579,6 +627,74 @@ const Projects = () => {
                     className="btn-primary"
                   >
                     Wyślij wycenę
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Doprecyzowania */}
+      {showClarificationModal && selectedProject && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">Doprecyzowanie</h2>
+                <button
+                  onClick={() => {
+                    setShowClarificationModal(false);
+                    setSelectedProject(null);
+                    setClarificationText('');
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="form-label">Projekt</label>
+                  <p className="text-sm text-gray-700 font-medium">{selectedProject.name}</p>
+                  <p className="text-xs text-gray-500">Klient: {selectedProject.clientName}</p>
+                </div>
+
+                <div>
+                  <label className="form-label">Co trzeba doprecyzować? *</label>
+                  <textarea
+                    value={clarificationText}
+                    onChange={(e) => setClarificationText(e.target.value)}
+                    placeholder="Np. brakuje szczegółów wymagań, potrzeba dodatkowych informacji od klienta..."
+                    rows={4}
+                    className="input-field resize-none"
+                    autoFocus
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Projekt wróci do statusu Aktywny. Możesz ponownie oznaczyć go jako „Do wyceny finalnej” po doprecyzowaniu.
+                  </p>
+                </div>
+
+                <div className="flex justify-end space-x-4 pt-4 border-t">
+                  <button
+                    onClick={() => {
+                      setShowClarificationModal(false);
+                      setSelectedProject(null);
+                      setClarificationText('');
+                    }}
+                    className="btn-secondary"
+                  >
+                    Anuluj
+                  </button>
+                  <button
+                    onClick={handleSubmitClarification}
+                    disabled={!clarificationText.trim()}
+                    className="btn-primary bg-amber-500 hover:bg-amber-600"
+                  >
+                    Zapisz doprecyzowanie
                   </button>
                 </div>
               </div>

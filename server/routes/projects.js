@@ -126,6 +126,50 @@ router.post('/:id/request-final-estimation', auth, async (req, res) => {
   }
 });
 
+// Doprecyzowanie – gdy nie można jeszcze zrobić wyceny finalnej (brakuje info od klienta)
+router.post('/:id/request-clarification', [
+  auth,
+  body('clarificationText').trim().notEmpty().withMessage('Treść doprecyzowania jest wymagana')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ message: errors.array()[0]?.msg || 'Treść doprecyzowania jest wymagana', errors: errors.array() });
+    }
+
+    const project = await Project.findById(req.params.id);
+    if (!project) return res.status(404).json({ message: 'Projekt nie został znaleziony' });
+    if (!canEditProject(project, req.user)) return res.status(403).json({ message: 'Brak uprawnień' });
+
+    if (project.offerType !== 'preliminary') {
+      return res.status(400).json({ message: 'Ta akcja jest dostępna tylko dla ofert wstępnych' });
+    }
+
+    if (project.status !== 'to_final_estimation') {
+      return res.status(400).json({ message: 'Doprecyzowanie jest dostępne tylko gdy status to "Do wyceny finalnej"' });
+    }
+
+    project.clarificationRequest = {
+      text: req.body.clarificationText.trim(),
+      requestedAt: new Date(),
+      requestedBy: req.user._id
+    };
+    project.status = 'active'; // wraca do aktywnego, aby można było doprecyzować z klientem
+    await project.save();
+
+    const updated = await Project.findById(project._id)
+      .populate('createdBy', 'firstName lastName email')
+      .populate('owner', 'firstName lastName email')
+      .populate('teamMembers.user', 'firstName lastName email role avatar')
+      .populate('clarificationRequest.requestedBy', 'firstName lastName email');
+
+    return res.json({ message: 'Zapisano doprecyzowanie. Projekt wrócił do statusu Aktywny.', project: updated });
+  } catch (e) {
+    console.error('request-clarification error:', e);
+    return res.status(500).json({ message: 'Błąd serwera' });
+  }
+});
+
 // Submit final estimate (single total) and mark as "Do przygotowania oferty finalnej" (green highlight)
 router.post('/:id/submit-final-estimate', [
   auth,

@@ -158,6 +158,12 @@ const projectSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  // Doprecyzowanie – gdy nie można jeszcze zrobić wyceny finalnej (np. brakuje info od klienta)
+  clarificationRequest: {
+    text: { type: String, default: null },
+    requestedAt: { type: Date, default: null },
+    requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
+  },
   priority: {
     type: String,
     enum: ['low', 'normal', 'high', 'urgent'],
