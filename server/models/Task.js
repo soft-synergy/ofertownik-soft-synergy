@@ -41,7 +41,7 @@ const taskSchema = new mongoose.Schema({
    * Used for automatic sync (upsert) with other modules.
    */
     source: {
-      kind: { type: String, enum: ['hosting', 'followup', 'cal.com', null], default: null },
+      kind: { type: String, enum: ['hosting', 'followup', 'cal.com', 'offer_workflow', null], default: null },
       refId: { type: mongoose.Schema.Types.ObjectId, default: null }
     },
   dueDate: {

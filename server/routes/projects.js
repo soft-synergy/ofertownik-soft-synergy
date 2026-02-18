@@ -96,6 +96,14 @@ router.post('/:id/request-final-estimation', auth, async (req, res) => {
     project.status = 'to_final_estimation';
     await project.save();
 
+    // Task dla info@soft-synergy.com (Do wyceny finalnej)
+    try {
+      const { upsertToFinalEstimationTask } = require('../utils/offerWorkflowTasks');
+      await upsertToFinalEstimationTask(project, req.user._id);
+    } catch (taskErr) {
+      console.error('[request-final-estimation] Błąd tworzenia taska:', taskErr);
+    }
+
     const updated = await Project.findById(project._id)
       .populate('createdBy', 'firstName lastName email')
       .populate('owner', 'firstName lastName email')
@@ -126,7 +134,7 @@ router.post('/:id/request-final-estimation', auth, async (req, res) => {
   }
 });
 
-// Doprecyzowanie – gdy nie można jeszcze zrobić wyceny finalnej (brakuje info od klienta)
+// Doprecyzowanie – gdy nie można jeszcze zrobić wyceny finalnej (brakuje info od klienta). Dopisuje do historii.
 router.post('/:id/request-clarification', [
   auth,
   body('clarificationText').trim().notEmpty().withMessage('Treść doprecyzowania jest wymagana')
@@ -145,25 +153,77 @@ router.post('/:id/request-clarification', [
       return res.status(400).json({ message: 'Ta akcja jest dostępna tylko dla ofert wstępnych' });
     }
 
-    if (project.status !== 'to_final_estimation') {
-      return res.status(400).json({ message: 'Doprecyzowanie jest dostępne tylko gdy status to "Do wyceny finalnej"' });
+    const canRequest = project.status === 'to_final_estimation' ||
+      (project.status === 'active' && project.clarificationHistory?.length > 0 &&
+        project.clarificationHistory[project.clarificationHistory.length - 1].responseText);
+    if (!canRequest) {
+      return res.status(400).json({ message: 'Doprecyzowanie dostępne gdy status to "Do wyceny finalnej" lub gdy klient już odpowiedział na ostatnie doprecyzowanie' });
     }
 
+    const clarificationText = req.body.clarificationText.trim();
+    const requestedAt = new Date();
+    if (!project.clarificationHistory) project.clarificationHistory = [];
+    // Migracja: jeśli są stare dane w clarificationRequest a brak w historii
+    if (project.clarificationHistory.length === 0 && project.clarificationRequest?.text) {
+      project.clarificationHistory.push({
+        requestText: project.clarificationRequest.text,
+        requestedAt: project.clarificationRequest.requestedAt || requestedAt,
+        requestedBy: project.clarificationRequest.requestedBy,
+        responseText: null,
+        respondedAt: null
+      });
+    }
+    project.clarificationHistory.push({
+      requestText: clarificationText,
+      requestedAt,
+      requestedBy: req.user._id,
+      responseText: null,
+      respondedAt: null
+    });
     project.clarificationRequest = {
-      text: req.body.clarificationText.trim(),
-      requestedAt: new Date(),
+      text: clarificationText,
+      requestedAt,
       requestedBy: req.user._id
     };
-    project.status = 'active'; // wraca do aktywnego, aby można było doprecyzować z klientem
+    project.status = 'active'; // czeka na odpowiedź klienta
     await project.save();
+
+    // Wyślij email do Jakuba o doprecyzowaniu
+    try {
+      const { sendEmail } = require('../utils/emailService');
+      const { clarificationRequestTemplate } = require('../utils/emailTemplates');
+      const subject = `📋 Doprecyzowanie: ${project.name}`;
+      const html = clarificationRequestTemplate({
+        projectName: project.name,
+        clientName: project.clientName || '-',
+        clientContact: project.clientContact || '-',
+        clientEmail: project.clientEmail || '-',
+        clientPhone: project.clientPhone || '-',
+        consultationNotes: project.consultationNotes || '',
+        clarificationText,
+        projectId: project._id.toString()
+      });
+      await sendEmail({ to: 'jakub.czajka@soft-synergy.com', subject, html });
+    } catch (emailErr) {
+      console.error('[request-clarification] Błąd wysyłki emaila:', emailErr);
+    }
+
+    // Task dla Jakuba – doprecyzowanie (przygotowanie dodatkowych informacji)
+    try {
+      const { upsertClarificationTask } = require('../utils/offerWorkflowTasks');
+      await upsertClarificationTask(project, req.user._id);
+    } catch (taskErr) {
+      console.error('[request-clarification] Błąd tworzenia taska:', taskErr);
+    }
 
     const updated = await Project.findById(project._id)
       .populate('createdBy', 'firstName lastName email')
       .populate('owner', 'firstName lastName email')
       .populate('teamMembers.user', 'firstName lastName email role avatar')
-      .populate('clarificationRequest.requestedBy', 'firstName lastName email');
+      .populate('clarificationRequest.requestedBy', 'firstName lastName email')
+      .populate('clarificationHistory.requestedBy', 'firstName lastName email');
 
-    return res.json({ message: 'Zapisano doprecyzowanie. Projekt wrócił do statusu Aktywny.', project: updated });
+    return res.json({ message: 'Zapisano doprecyzowanie. Oczekuje na odpowiedź klienta.', project: updated });
   } catch (e) {
     console.error('request-clarification error:', e);
     return res.status(500).json({ message: 'Błąd serwera' });
@@ -203,6 +263,34 @@ router.post('/:id/submit-final-estimate', [
     // pricing.total is calculated in pre-save hook
 
     await project.save();
+
+    // Wyślij email do Jakuba o zapisanej wycenie finalnej
+    try {
+      const { sendEmail } = require('../utils/emailService');
+      const { finalEstimateSubmittedTemplate } = require('../utils/emailTemplates');
+      const subject = `💰 Wycena finalna zapisana: ${project.name}`;
+      const html = finalEstimateSubmittedTemplate({
+        projectName: project.name,
+        clientName: project.clientName || '-',
+        clientContact: project.clientContact || '-',
+        clientEmail: project.clientEmail || '-',
+        clientPhone: project.clientPhone || '-',
+        consultationNotes: project.consultationNotes || '',
+        total,
+        projectId: project._id.toString()
+      });
+      await sendEmail({ to: 'jakub.czajka@soft-synergy.com', subject, html });
+    } catch (emailErr) {
+      console.error('[submit-final-estimate] Błąd wysyłki emaila:', emailErr);
+    }
+
+    // Task dla Jakuba – do przygotowania oferty finalnej
+    try {
+      const { upsertPrepareFinalOfferTask } = require('../utils/offerWorkflowTasks');
+      await upsertPrepareFinalOfferTask(project, req.user._id);
+    } catch (taskErr) {
+      console.error('[submit-final-estimate] Błąd tworzenia taska:', taskErr);
+    }
 
     const updated = await Project.findById(project._id)
       .populate('createdBy', 'firstName lastName email')
@@ -351,6 +439,14 @@ router.put('/:id', [
     const before = project.toObject();
     Object.assign(project, req.body);
     await project.save();
+
+    // Usuń taski offer workflow przy statusie accepted/cancelled
+    if (project.status === 'cancelled') {
+      try {
+        const { deleteOfferWorkflowTasks } = require('../utils/offerWorkflowTasks');
+        await deleteOfferWorkflowTasks(project._id);
+      } catch (e) {}
+    }
 
     try {
       await upsertFollowUpTask(project, req.user._id);

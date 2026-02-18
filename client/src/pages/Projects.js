@@ -30,8 +30,7 @@ const Projects = () => {
     owner: '',
     page: 1,
   });
-  const [showFinalEstimateModal, setShowFinalEstimateModal] = useState(false);
-  const [showClarificationModal, setShowClarificationModal] = useState(false);
+  const [showRespondModal, setShowRespondModal] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
   const [finalEstimateTotal, setFinalEstimateTotal] = useState('');
   const [clarificationText, setClarificationText] = useState('');
@@ -112,10 +111,18 @@ const Projects = () => {
     }
   };
 
-  const handleOpenFinalEstimateModal = (project) => {
+  const handleOpenRespondModal = (project) => {
     setSelectedProject(project);
     setFinalEstimateTotal('');
-    setShowFinalEstimateModal(true);
+    setClarificationText('');
+    setShowRespondModal(true);
+  };
+
+  const handleCloseRespondModal = () => {
+    setShowRespondModal(false);
+    setSelectedProject(null);
+    setFinalEstimateTotal('');
+    setClarificationText('');
   };
 
   const handleSubmitFinalEstimate = async () => {
@@ -124,24 +131,13 @@ const Projects = () => {
       return;
     }
     try {
-      console.log('Wywołuję submitFinalEstimate dla:', selectedProject._id, 'kwota:', finalEstimateTotal);
-      const response = await projectsAPI.submitFinalEstimate(selectedProject._id, parseFloat(finalEstimateTotal));
-      console.log('Odpowiedź:', response);
+      await projectsAPI.submitFinalEstimate(selectedProject._id, parseFloat(finalEstimateTotal));
       toast.success('Finalna wycena została zapisana. Status zmieniony na "Do przygotowania oferty finalnej"');
-      setShowFinalEstimateModal(false);
-      setSelectedProject(null);
-      setFinalEstimateTotal('');
+      handleCloseRespondModal();
       refetch();
     } catch (error) {
-      console.error('Błąd submitFinalEstimate:', error);
       toast.error(error.response?.data?.message || 'Błąd podczas zapisywania wyceny');
     }
-  };
-
-  const handleOpenClarificationModal = (project) => {
-    setSelectedProject(project);
-    setClarificationText('');
-    setShowClarificationModal(true);
   };
 
   const handleSubmitClarification = async () => {
@@ -152,9 +148,7 @@ const Projects = () => {
     try {
       await projectsAPI.requestClarification(selectedProject._id, clarificationText.trim());
       toast.success('Doprecyzowanie zapisane. Projekt wrócił do statusu Aktywny.');
-      setShowClarificationModal(false);
-      setSelectedProject(null);
-      setClarificationText('');
+      handleCloseRespondModal();
       refetch();
     } catch (error) {
       toast.error(error.response?.data?.message || 'Błąd podczas zapisywania doprecyzowania');
@@ -371,41 +365,31 @@ const Projects = () => {
                         <span>Do wyceny finalnej</span>
                       </button>
                     )}
-                    {/* Przyciski "Finalna wycena" i "Doprecyzowanie" - gdy status to_final_estimation */}
+                    {/* Przycisk "Odpowiedz" – gdy status to_final_estimation */}
                     {project.status === 'to_final_estimation' && (
-                      <div className="space-y-2">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleOpenFinalEstimateModal(project)}
-                            className="flex-1 bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center space-x-2 transition-colors shadow-md"
-                          >
-                            <DollarSign className="h-5 w-5" />
-                            <span>Finalna wycena</span>
-                          </button>
-                          <button
-                            onClick={() => handleOpenClarificationModal(project)}
-                            className="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-medium py-3 px-4 rounded-lg flex items-center justify-center space-x-2 transition-colors shadow-md"
-                            title="Nie mogę jeszcze wycenić – potrzebuję doprecyzowania od klienta"
-                          >
-                            <MessageCircle className="h-5 w-5" />
-                            <span>Doprecyzowanie</span>
-                          </button>
+                      <button
+                        onClick={() => handleOpenRespondModal(project)}
+                        className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center space-x-2 transition-colors shadow-md"
+                      >
+                        <MessageCircle className="h-5 w-5" />
+                        <span>Odpowiedz</span>
+                      </button>
+                    )}
+                    {/* Info o doprecyzowaniu – gdy czeka na odpowiedź klienta (ostatni wpis w historii bez odpowiedzi) */}
+                    {project.offerType === 'preliminary' && (() => {
+                      const history = project.clarificationHistory || [];
+                      const last = history.length ? history[history.length - 1] : null;
+                      const pending = last && !last.responseText && (last.requestText || project.clarificationRequest?.text);
+                      return pending ? (
+                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                          <p className="text-xs font-medium text-amber-800 flex items-center gap-1">
+                            <MessageCircle className="h-4 w-4" />
+                            Oczekuje na odpowiedź klienta
+                          </p>
+                          <p className="text-xs text-amber-700 mt-1 line-clamp-2">{last?.requestText || project.clarificationRequest?.text}</p>
                         </div>
-                        <p className="text-xs text-gray-500 text-center">
-                          Doprecyzowanie – gdy nie można jeszcze wykonać wyceny finalnej
-                        </p>
-                      </div>
-                    )}
-                    {/* Info o doprecyzowaniu – gdy projekt wrócił z to_final_estimation */}
-                    {project.offerType === 'preliminary' && project.clarificationRequest?.text && (
-                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                        <p className="text-xs font-medium text-amber-800 flex items-center gap-1">
-                          <MessageCircle className="h-4 w-4" />
-                          Oczekuje doprecyzowania
-                        </p>
-                        <p className="text-xs text-amber-700 mt-1 line-clamp-2">{project.clarificationRequest.text}</p>
-                      </div>
-                    )}
+                      ) : null;
+                    })()}
                     {/* Info gdy status to_prepare_final_offer */}
                     {project.status === 'to_prepare_final_offer' && (
                       <div className="bg-green-50 border border-green-200 rounded-lg p-3">
@@ -568,36 +552,96 @@ const Projects = () => {
         )}
       </div>
 
-      {/* Modal Finalnej Wyceny */}
-      {showFinalEstimateModal && selectedProject && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-gray-900">Finalna wycena</h2>
-                <button
-                  onClick={() => {
-                    setShowFinalEstimateModal(false);
-                    setSelectedProject(null);
-                    setFinalEstimateTotal('');
-                  }}
-                  className="text-gray-400 hover:text-gray-600"
-                >
+      {/* Modal Odpowiedz – pełne info projektu + rozwidlenie na Finalna wycena / Doprecyzowanie */}
+      {showRespondModal && selectedProject && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-lg max-w-2xl w-full my-8 max-h-[90vh] flex flex-col">
+            <div className="p-6 flex-shrink-0 border-b">
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold text-gray-900">Odpowiedz – Do wyceny finalnej</h2>
+                <button onClick={handleCloseRespondModal} className="text-gray-400 hover:text-gray-600">
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
+            </div>
+
+            {/* Wszystkie info o projekcie w jednym miejscu */}
+            <div className="p-6 overflow-y-auto flex-1 border-b bg-gray-50">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Informacje o projekcie</h3>
+              <dl className="space-y-2 text-sm">
+                <div><dt className="text-gray-500 inline">Projekt:</dt> <dd className="inline font-medium">{selectedProject.name}</dd></div>
+                <div><dt className="text-gray-500 inline">Klient:</dt> <dd className="inline font-medium">{selectedProject.clientName}</dd></div>
+                <div><dt className="text-gray-500 inline">Kontakt:</dt> <dd className="inline">{selectedProject.clientContact || '-'}</dd></div>
+                <div><dt className="text-gray-500 inline">Email:</dt> <dd className="inline"><a href={`mailto:${selectedProject.clientEmail}`} className="text-blue-600 hover:underline">{selectedProject.clientEmail || '-'}</a></dd></div>
+                <div><dt className="text-gray-500 inline">Telefon:</dt> <dd className="inline">{selectedProject.clientPhone || '-'}</dd></div>
+                {selectedProject.consultationNotes && (
+                  <div className="pt-2">
+                    <dt className="text-gray-500 block mb-1">Notatki z konsultacji:</dt>
+                    <dd className="whitespace-pre-wrap text-gray-800 bg-white p-3 rounded border">{selectedProject.consultationNotes}</dd>
+                  </div>
+                )}
+                {selectedProject.notes?.length > 0 && (
+                  <div className="pt-2">
+                    <dt className="text-gray-500 block mb-1">Notatki:</dt>
+                    <dd className="space-y-1">
+                      {selectedProject.notes.map((n, i) => (
+                        <div key={i} className="bg-white p-2 rounded border text-gray-800 text-xs">{n.text}</div>
+                      ))}
+                    </dd>
+                  </div>
+                )}
+                {selectedProject.description && (
+                  <div className="pt-2">
+                    <dt className="text-gray-500 block mb-1">Opis:</dt>
+                    <dd className="whitespace-pre-wrap text-gray-800 bg-white p-3 rounded border">{selectedProject.description}</dd>
+                  </div>
+                )}
+                {(selectedProject.clarificationHistory?.length > 0 || selectedProject.clarificationRequest?.text) && (
+                  <div className="pt-2">
+                    <dt className="text-amber-700 block mb-2 font-medium">Historia doprecyzowań</dt>
+                    <dd className="space-y-3">
+                      {(() => {
+                        const history = selectedProject.clarificationHistory?.length
+                          ? selectedProject.clarificationHistory
+                          : selectedProject.clarificationRequest?.text
+                            ? [{ requestText: selectedProject.clarificationRequest.text, requestedAt: selectedProject.clarificationRequest.requestedAt, requestedBy: selectedProject.clarificationRequest.requestedBy, responseText: null, respondedAt: null }]
+                            : [];
+                        return history.map((entry, idx) => (
+                          <div key={idx} className="bg-amber-50 rounded-lg border border-amber-200 p-3">
+                            <div className="text-xs text-amber-700 font-medium mb-1">
+                              #{idx + 1} Żądanie {entry.requestedAt ? new Date(entry.requestedAt).toLocaleString('pl-PL') : ''}
+                              {entry.requestedBy?.firstName ? ` (${entry.requestedBy.firstName} ${entry.requestedBy.lastName})` : ''}
+                            </div>
+                            <p className="whitespace-pre-wrap text-amber-900 text-sm">{entry.requestText}</p>
+                            {entry.responseText && (
+                              <div className="mt-2 pt-2 border-t border-amber-200">
+                                <div className="text-xs text-green-700 font-medium mb-1">
+                                  Odpowiedź klienta {entry.respondedAt ? new Date(entry.respondedAt).toLocaleString('pl-PL') : ''}
+                                </div>
+                                <p className="whitespace-pre-wrap text-gray-800 text-sm bg-white p-2 rounded border">{entry.responseText}</p>
+                              </div>
+                            )}
+                            {!entry.responseText && (
+                              <p className="mt-2 text-xs text-amber-600 italic">Oczekuje na odpowiedź klienta w portalu.</p>
+                            )}
+                          </div>
+                        ));
+                      })()}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+            </div>
+
+            {/* Rozwidlenie na 2 – Finalna wycena / Doprecyzowanie */}
+            <div className="p-6 space-y-6">
+              <h3 className="text-sm font-semibold text-gray-700">Decyzja</h3>
 
               <div className="space-y-4">
                 <div>
-                  <label className="form-label">Projekt</label>
-                  <p className="text-sm text-gray-700 font-medium">{selectedProject.name}</p>
-                  <p className="text-xs text-gray-500">Klient: {selectedProject.clientName}</p>
-                </div>
-
-                <div>
-                  <label className="form-label">Całkowita cena (PLN) *</label>
+                  <label className="form-label">Finalna wycena – wpisz cenę całkowitą</label>
                   <input
                     type="number"
                     value={finalEstimateTotal}
@@ -605,98 +649,43 @@ const Projects = () => {
                     placeholder="0.00"
                     min="0"
                     step="0.01"
-                    className="input-field"
-                    autoFocus
+                    className="input-field mb-2"
                   />
-                </div>
-
-                <div className="flex justify-end space-x-4 pt-4 border-t">
-                  <button
-                    onClick={() => {
-                      setShowFinalEstimateModal(false);
-                      setSelectedProject(null);
-                      setFinalEstimateTotal('');
-                    }}
-                    className="btn-secondary"
-                  >
-                    Anuluj
-                  </button>
                   <button
                     onClick={handleSubmitFinalEstimate}
                     disabled={!finalEstimateTotal || parseFloat(finalEstimateTotal) <= 0}
-                    className="btn-primary"
+                    className="btn-primary bg-orange-600 hover:bg-orange-700"
                   >
-                    Wyślij wycenę
+                    <DollarSign className="h-4 w-4 inline mr-2" />
+                    Zapisz wycenę finalną
                   </button>
                 </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* Modal Doprecyzowania */}
-      {showClarificationModal && selectedProject && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-gray-900">Doprecyzowanie</h2>
-                <button
-                  onClick={() => {
-                    setShowClarificationModal(false);
-                    setSelectedProject(null);
-                    setClarificationText('');
-                  }}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="form-label">Projekt</label>
-                  <p className="text-sm text-gray-700 font-medium">{selectedProject.name}</p>
-                  <p className="text-xs text-gray-500">Klient: {selectedProject.clientName}</p>
-                </div>
-
-                <div>
-                  <label className="form-label">Co trzeba doprecyzować? *</label>
+                <div className="border-t pt-4">
+                  <label className="form-label">Doprecyzowanie – nie można jeszcze wycenić</label>
                   <textarea
                     value={clarificationText}
                     onChange={(e) => setClarificationText(e.target.value)}
                     placeholder="Np. brakuje szczegółów wymagań, potrzeba dodatkowych informacji od klienta..."
-                    rows={4}
-                    className="input-field resize-none"
-                    autoFocus
+                    rows={3}
+                    className="input-field resize-none mb-2"
                   />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Projekt wróci do statusu Aktywny. Możesz ponownie oznaczyć go jako „Do wyceny finalnej” po doprecyzowaniu.
-                  </p>
-                </div>
-
-                <div className="flex justify-end space-x-4 pt-4 border-t">
-                  <button
-                    onClick={() => {
-                      setShowClarificationModal(false);
-                      setSelectedProject(null);
-                      setClarificationText('');
-                    }}
-                    className="btn-secondary"
-                  >
-                    Anuluj
-                  </button>
                   <button
                     onClick={handleSubmitClarification}
                     disabled={!clarificationText.trim()}
-                    className="btn-primary bg-amber-500 hover:bg-amber-600"
+                    className="btn-secondary bg-amber-500 hover:bg-amber-600 text-white border-amber-600"
                   >
+                    <MessageCircle className="h-4 w-4 inline mr-2" />
                     Zapisz doprecyzowanie
                   </button>
+                  <p className="text-xs text-gray-500 mt-1">Projekt wróci do statusu Aktywny.</p>
                 </div>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button onClick={handleCloseRespondModal} className="btn-secondary">
+                  Anuluj
+                </button>
               </div>
             </div>
           </div>

@@ -481,9 +481,156 @@ function tasksOverdueTemplate({ recipientName, tasks, tasksUrl, dateLabel }) {
 `.trim();
 }
 
+/**
+ * Szablon: doprecyzowanie – gdy nie można jeszcze zrobić wyceny (dla Jakuba)
+ */
+function clarificationRequestTemplate({ projectName, clientName, clientContact, clientEmail, clientPhone, consultationNotes, clarificationText, projectId }) {
+  const projectUrl = `${APP_URL}/projects/${projectId}`;
+  const notes = consultationNotes ? consultationNotes.replace(/\n/g, '<br>') : '-';
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Doprecyzowanie – projekt do wyceny</title>
+</head>
+<body style="margin:0;padding:0;font-family:${baseStyles.fontFamily};background-color:${baseStyles.backgroundColor};color:${baseStyles.color};">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f3f4f6;">
+    <tr>
+      <td align="center" style="padding:40px 20px;">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;background:#ffffff;border-radius:12px;box-shadow:0 4px 6px rgba(0,0,0,0.05);overflow:hidden;">
+          <tr>
+            <td style="background:linear-gradient(135deg,#b45309 0%,#f59e0b 100%);padding:28px 32px;text-align:center;">
+              <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;">📋 Doprecyzowanie</h1>
+              <p style="margin:8px 0 0 0;color:rgba(255,255,255,0.9);font-size:14px;">Nie można jeszcze wykonać wyceny – potrzeba doprecyzowania</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px;">
+              <p style="margin:0 0 20px 0;font-size:16px;line-height:1.6;">Projekt <strong>„${escapeHtml(projectName)}”</strong> wymaga doprecyzowania przed przygotowaniem wyceny finalnej.</p>
+              
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#fffbeb;border-radius:8px;border:1px solid #fcd34d;margin-bottom:24px;">
+                <tr>
+                  <td style="padding:20px;">
+                    <p style="margin:0 0 12px 0;font-size:14px;font-weight:600;color:#92400e;">Co trzeba doprecyzować:</p>
+                    <p style="margin:0;font-size:14px;line-height:1.6;color:#78350f;">${escapeHtml(clarificationText).replace(/\n/g, '<br>')}</p>
+                  </td>
+                </tr>
+              </table>
+
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;margin-bottom:24px;">
+                <tr>
+                  <td style="padding:20px;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                      <tr><td style="padding:8px 0;font-size:14px;color:#64748b;">Projekt</td><td style="padding:8px 0;font-size:14px;font-weight:600;text-align:right;">${escapeHtml(projectName)}</td></tr>
+                      <tr><td style="padding:8px 0;font-size:14px;color:#64748b;">Klient</td><td style="padding:8px 0;font-size:14px;font-weight:600;text-align:right;">${escapeHtml(clientName)}</td></tr>
+                      <tr><td style="padding:8px 0;font-size:14px;color:#64748b;">Kontakt</td><td style="padding:8px 0;font-size:14px;font-weight:600;text-align:right;">${escapeHtml(clientContact || '-')}</td></tr>
+                      <tr><td style="padding:8px 0;font-size:14px;color:#64748b;">Email</td><td style="padding:8px 0;font-size:14px;font-weight:600;text-align:right;"><a href="mailto:${escapeHtml(clientEmail || '')}" style="color:#059669;">${escapeHtml(clientEmail || '-')}</a></td></tr>
+                      <tr><td style="padding:8px 0;font-size:14px;color:#64748b;">Telefon</td><td style="padding:8px 0;font-size:14px;font-weight:600;text-align:right;">${escapeHtml(clientPhone || '-')}</td></tr>
+                      <tr><td style="padding:8px 0;font-size:14px;color:#64748b;vertical-align:top;">Notatki z konsultacji</td><td style="padding:8px 0;font-size:14px;text-align:right;">${notes}</td></tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:0;text-align:center;">
+                <a href="${projectUrl}" style="${objectToInlineStyle({ ...buttonPrimary, backgroundColor: '#d97706' })}">Otwórz projekt →</a>
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 32px;background:#f8fafc;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;">
+              Soft Synergy Ofertownik · Ten email został wygenerowany automatycznie
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`.trim();
+}
+
+/**
+ * Szablon: wycena finalna zapisana (dla Jakuba)
+ */
+function finalEstimateSubmittedTemplate({ projectName, clientName, clientContact, clientEmail, clientPhone, consultationNotes, total, projectId }) {
+  const projectUrl = `${APP_URL}/projects/${projectId}`;
+  const notes = consultationNotes ? String(consultationNotes).replace(/\n/g, '<br>') : '-';
+  const formattedTotal = new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN' }).format(total || 0);
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wycena finalna zapisana</title>
+</head>
+<body style="margin:0;padding:0;font-family:${baseStyles.fontFamily};background-color:${baseStyles.backgroundColor};color:${baseStyles.color};">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f3f4f6;">
+    <tr>
+      <td align="center" style="padding:40px 20px;">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;background:#ffffff;border-radius:12px;box-shadow:0 4px 6px rgba(0,0,0,0.05);overflow:hidden;">
+          <tr>
+            <td style="background:linear-gradient(135deg,#059669 0%,#10b981 100%);padding:28px 32px;text-align:center;">
+              <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;">💰 Wycena finalna zapisana</h1>
+              <p style="margin:8px 0 0 0;color:rgba(255,255,255,0.9);font-size:14px;">Projekt gotowy do przygotowania oferty finalnej</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px;">
+              <p style="margin:0 0 20px 0;font-size:16px;line-height:1.6;">Wycena finalna dla projektu <strong>„${escapeHtml(projectName)}”</strong> została zapisana.</p>
+              
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0;margin-bottom:24px;">
+                <tr>
+                  <td style="padding:20px;text-align:center;">
+                    <p style="margin:0;font-size:28px;font-weight:700;color:#14532d;">${escapeHtml(formattedTotal)}</p>
+                    <p style="margin:4px 0 0 0;font-size:14px;color:#166534;">całkowita kwota</p>
+                  </td>
+                </tr>
+              </table>
+
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;margin-bottom:24px;">
+                <tr>
+                  <td style="padding:20px;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                      <tr><td style="padding:8px 0;font-size:14px;color:#64748b;">Projekt</td><td style="padding:8px 0;font-size:14px;font-weight:600;text-align:right;">${escapeHtml(projectName)}</td></tr>
+                      <tr><td style="padding:8px 0;font-size:14px;color:#64748b;">Klient</td><td style="padding:8px 0;font-size:14px;font-weight:600;text-align:right;">${escapeHtml(clientName)}</td></tr>
+                      <tr><td style="padding:8px 0;font-size:14px;color:#64748b;">Kontakt</td><td style="padding:8px 0;font-size:14px;font-weight:600;text-align:right;">${escapeHtml(clientContact || '-')}</td></tr>
+                      <tr><td style="padding:8px 0;font-size:14px;color:#64748b;">Email</td><td style="padding:8px 0;font-size:14px;font-weight:600;text-align:right;"><a href="mailto:${escapeHtml(clientEmail || '')}" style="color:#059669;">${escapeHtml(clientEmail || '-')}</a></td></tr>
+                      <tr><td style="padding:8px 0;font-size:14px;color:#64748b;">Telefon</td><td style="padding:8px 0;font-size:14px;font-weight:600;text-align:right;">${escapeHtml(clientPhone || '-')}</td></tr>
+                      <tr><td style="padding:8px 0;font-size:14px;color:#64748b;vertical-align:top;">Notatki z konsultacji</td><td style="padding:8px 0;font-size:14px;text-align:right;">${notes}</td></tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:0;text-align:center;">
+                <a href="${projectUrl}" style="${objectToInlineStyle({ ...buttonPrimary, backgroundColor: '#059669' })}">Otwórz projekt →</a>
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 32px;background:#f8fafc;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;">
+              Soft Synergy Ofertownik · Ten email został wygenerowany automatycznie
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`.trim();
+}
+
 module.exports = {
   followUpReminderTemplate,
   quoteRequestTemplate,
+  clarificationRequestTemplate,
+  finalEstimateSubmittedTemplate,
   hostingReminder3DaysBeforeTemplate,
   hostingReminderDueTodayTemplate,
   hostingReminder3DaysOverdueTemplate,

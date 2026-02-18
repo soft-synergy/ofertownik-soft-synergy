@@ -10,6 +10,9 @@ const ClientPortal = () => {
   const [accepting, setAccepting] = useState(null);
   const [success, setSuccess] = useState('');
   const [actionError, setActionError] = useState('');
+  const [clarificationProjectId, setClarificationProjectId] = useState(null);
+  const [clarificationResponseText, setClarificationResponseText] = useState('');
+  const [clarificationSubmitting, setClarificationSubmitting] = useState(false);
   const [month, setMonth] = useState(() => {
     const d = new Date();
     const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -56,6 +59,28 @@ const ClientPortal = () => {
       setTimeout(() => setActionError(''), 5000);
     } finally {
       setAccepting(null);
+    }
+  };
+
+  const handleSubmitClarificationResponse = async (projectId) => {
+    if (!clarificationResponseText.trim()) return;
+    setClarificationSubmitting(true);
+    setSuccess('');
+    setActionError('');
+    try {
+      await api.post(`/api/client-portal/${token}/projects/${projectId}/clarification-response`, {
+        responseText: clarificationResponseText.trim()
+      });
+      setSuccess('Odpowiedź została zapisana. Zespół zostanie poinformowany.');
+      setClarificationProjectId(null);
+      setClarificationResponseText('');
+      await fetchData();
+      setTimeout(() => setSuccess(''), 6000);
+    } catch (e) {
+      setActionError(e?.response?.data?.message || 'Błąd wysyłania odpowiedzi');
+      setTimeout(() => setActionError(''), 5000);
+    } finally {
+      setClarificationSubmitting(false);
     }
   };
 
@@ -184,6 +209,45 @@ const ClientPortal = () => {
                       <div className="mt-1 text-xs text-gray-500">Status: <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${p.status === 'accepted' ? 'bg-green-100 text-green-700' : p.status === 'active' ? 'bg-blue-100 text-blue-700' : p.status === 'draft' ? 'bg-gray-100 text-gray-700' : 'bg-yellow-100 text-yellow-700'}`}>{p.status}</span></div>
                     </div>
                   </div>
+                  {p.pendingClarification && (
+                    <div className="mt-4 p-4 rounded-xl bg-amber-50 border-2 border-amber-200">
+                      <div className="text-sm font-bold text-amber-800 mb-2">📋 Prośba o doprecyzowanie</div>
+                      <p className="text-sm text-amber-900 whitespace-pre-wrap mb-3">{p.pendingClarification.requestText}</p>
+                      {clarificationProjectId === p._id ? (
+                        <div>
+                          <textarea
+                            value={clarificationResponseText}
+                            onChange={(e) => setClarificationResponseText(e.target.value)}
+                            placeholder="Wpisz swoją odpowiedź..."
+                            rows={3}
+                            className="w-full border-2 border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                          />
+                          <div className="mt-2 flex gap-2">
+                            <button
+                              onClick={() => handleSubmitClarificationResponse(p._id)}
+                              disabled={!clarificationResponseText.trim() || clarificationSubmitting}
+                              className="px-4 py-2 text-sm font-bold rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
+                            >
+                              {clarificationSubmitting ? 'Wysyłanie...' : 'Wyślij odpowiedź'}
+                            </button>
+                            <button
+                              onClick={() => { setClarificationProjectId(null); setClarificationResponseText(''); }}
+                              className="px-4 py-2 text-sm font-medium rounded-lg border-2 border-amber-300 text-amber-800 hover:bg-amber-100"
+                            >
+                              Anuluj
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => { setClarificationProjectId(p._id); setClarificationResponseText(''); }}
+                          className="px-4 py-2 text-sm font-bold rounded-lg bg-amber-600 text-white hover:bg-amber-700"
+                        >
+                          Odpowiedz na doprecyzowanie
+                        </button>
+                      )}
+                    </div>
+                  )}
                   <div className="mt-4 flex flex-wrap gap-3">
                     {p.generatedOfferUrl && (
                       <a href={toBackendUrl(p.generatedOfferUrl)} target="_blank" rel="noreferrer" className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm">Podgląd oferty</a>

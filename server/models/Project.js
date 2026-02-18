@@ -158,12 +158,20 @@ const projectSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
-  // Doprecyzowanie – gdy nie można jeszcze zrobić wyceny finalnej (np. brakuje info od klienta)
+  // Doprecyzowanie – ostatnie żądanie (kompatybilność wsteczna, ustawiane z ostatniego wpisu w clarificationHistory)
   clarificationRequest: {
     text: { type: String, default: null },
     requestedAt: { type: Date, default: null },
     requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
   },
+  // Historia wszystkich rund doprecyzowań (żądanie od zespołu + opcjonalna odpowiedź klienta)
+  clarificationHistory: [{
+    requestText: { type: String, required: true },
+    requestedAt: { type: Date, default: Date.now },
+    requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    responseText: { type: String, default: null },
+    respondedAt: { type: Date, default: null }
+  }],
   priority: {
     type: String,
     enum: ['low', 'normal', 'high', 'urgent'],

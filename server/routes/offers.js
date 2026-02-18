@@ -2156,6 +2156,12 @@ router.post('/generate-contract/:projectId', auth, async (req, res) => {
     project.status = 'accepted';
     await project.save();
 
+    // Usuń taski offer workflow (projekt zakończony)
+    try {
+      const { deleteOfferWorkflowTasks } = require('../utils/offerWorkflowTasks');
+      await deleteOfferWorkflowTasks(project._id);
+    } catch (e) {}
+
     // Log activity
     try {
       await Activity.create({
@@ -2274,7 +2280,13 @@ router.post('/accept/:projectId', async (req, res) => {
     // Update project status
     project.status = 'accepted';
     await project.save();
-    
+
+    // Usuń taski offer workflow (projekt zakończony)
+    try {
+      const { deleteOfferWorkflowTasks } = require('../utils/offerWorkflowTasks');
+      await deleteOfferWorkflowTasks(project._id);
+    } catch (e) {}
+
     // Log activity
     try {
       await Activity.create({
