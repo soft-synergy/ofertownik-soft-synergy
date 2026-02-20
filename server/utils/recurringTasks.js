@@ -53,12 +53,24 @@ async function createNextRecurrenceInstance(templateId) {
   }).select('_id').lean();
   if (exists) return null;
 
+  // Copy assignees from template (support both assignee and assignees array)
+  const assigneesArray = template.assignees && Array.isArray(template.assignees) && template.assignees.length > 0
+    ? template.assignees.filter(Boolean)
+    : (template.assignee ? [template.assignee] : []);
+  
+  // Copy watchers from template
+  const watchersArray = template.watchers && Array.isArray(template.watchers) && template.watchers.length > 0
+    ? template.watchers.filter(Boolean)
+    : [];
+
   const instance = new Task({
     title: template.title,
     description: template.description,
     status: 'todo',
     priority: template.priority,
-    assignee: template.assignee || null,
+    assignee: template.assignee || null, // Keep for backward compatibility
+    assignees: assigneesArray, // Copy assignees array
+    watchers: watchersArray, // Copy watchers array
     project: template.project || null,
     dueDate: nextDate,
     dueTimeMinutes: template.dueTimeMinutes ?? null,

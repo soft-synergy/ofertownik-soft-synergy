@@ -3,6 +3,7 @@ const Task = require('../models/Task');
 const Project = require('../models/Project');
 const { auth } = require('../middleware/auth');
 const { createNextRecurrenceInstance } = require('../utils/recurringTasks');
+const { notifyTaskWatchers } = require('../utils/taskNotifications');
 
 const router = express.Router();
 
@@ -55,6 +56,7 @@ router.get('/', auth, async (req, res) => {
     const tasks = await Task.find(query)
       .populate('assignee', 'firstName lastName email')
       .populate('assignees', 'firstName lastName email')
+      .populate('watchers', 'firstName lastName email')
       .populate('project', 'name clientName status')
       .populate('createdBy', 'firstName lastName')
       .sort({ dueDate: 1, createdAt: 1 })
@@ -74,6 +76,7 @@ router.get('/:id', auth, async (req, res) => {
     const task = await Task.findById(req.params.id)
       .populate('assignee', 'firstName lastName email')
       .populate('assignees', 'firstName lastName email')
+      .populate('watchers', 'firstName lastName email')
       .populate('project', 'name clientName status')
       .populate('createdBy', 'firstName lastName')
       .populate('updates.author', 'firstName lastName');
@@ -106,6 +109,12 @@ router.post('/:id/updates', auth, async (req, res) => {
     });
     await task.save();
     await task.populate('updates.author', 'firstName lastName');
+    
+    // Wyślij powiadomienia do watchers
+    notifyTaskWatchers(task, 'update_added', `Dodano update: "${text.substring(0, 100)}${text.length > 100 ? '...' : ''}"`, req.user).catch(err => {
+      console.error('[Add task update] Błąd powiadomień:', err);
+    });
+    
     res.status(201).json(task);
   } catch (error) {
     console.error('Add task update error:', error);
@@ -116,13 +125,14 @@ router.post('/:id/updates', auth, async (req, res) => {
 // Create task
 router.post('/', auth, async (req, res) => {
   try {
-    const { title, description, status, priority, assignee, assignees, project, dueDate, dueTimeMinutes, durationMinutes, recurrence } = req.body;
+    const { title, description, status, priority, assignee, assignees, project, dueDate, dueTimeMinutes, durationMinutes, recurrence, watchers } = req.body;
     if (!title || !dueDate) {
       return res.status(400).json({ message: 'Tytuł i termin są wymagane' });
     }
 
     // Support both assignee (single) and assignees (array) for backward compatibility
     const assigneesArray = assignees && Array.isArray(assignees) ? assignees.filter(Boolean) : (assignee ? [assignee] : []);
+    const watchersArray = watchers && Array.isArray(watchers) ? watchers.filter(Boolean) : [];
 
     const basePayload = {
       title,
@@ -131,6 +141,7 @@ router.post('/', auth, async (req, res) => {
       priority: priority || 'normal',
       assignee: assignee || null, // Keep for backward compatibility
       assignees: assigneesArray, // New array field
+      watchers: watchersArray, // Watchers array
       project: project || null,
       dueDate: new Date(dueDate),
       dueTimeMinutes: dueTimeMinutes != null ? dueTimeMinutes : null,
@@ -148,7 +159,7 @@ router.post('/', auth, async (req, res) => {
       if (!['daily', 'weekly', 'monthly'].includes(frequency)) {
         return res.status(400).json({ message: 'Nieprawidłowa częstotliwość powtarzania (wybierz codziennie, co tydzień lub co miesiąc)' });
       }
-      // 1) Create hidden template
+      // 1) Create hidden template (watchers are already in basePayload)
       const template = new Task({
         ...basePayload,
         isRecurrenceTemplate: true,
@@ -174,9 +185,16 @@ router.post('/', auth, async (req, res) => {
       await firstInstance.populate([
         { path: 'assignee', select: 'firstName lastName email' },
         { path: 'assignees', select: 'firstName lastName email' },
+        { path: 'watchers', select: 'firstName lastName email' },
         { path: 'project', select: 'name clientName status' },
         { path: 'createdBy', select: 'firstName lastName' }
       ]);
+      
+      // Wyślij powiadomienia do watchers (jeśli są)
+      notifyTaskWatchers(firstInstance, 'created', 'Utworzono nowe zadanie cykliczne', req.user).catch(err => {
+        console.error('[Create recurring task] Błąd powiadomień:', err);
+      });
+      
       return res.status(201).json(firstInstance);
     }
 
@@ -185,9 +203,16 @@ router.post('/', auth, async (req, res) => {
     await task.populate([
       { path: 'assignee', select: 'firstName lastName email' },
       { path: 'assignees', select: 'firstName lastName email' },
+      { path: 'watchers', select: 'firstName lastName email' },
       { path: 'project', select: 'name clientName status' },
       { path: 'createdBy', select: 'firstName lastName' }
     ]);
+    
+    // Wyślij powiadomienia do watchers (jeśli są)
+    notifyTaskWatchers(task, 'created', 'Utworzono nowe zadanie', req.user).catch(err => {
+      console.error('[Create task] Błąd powiadomień:', err);
+    });
+    
     return res.status(201).json(task);
   } catch (error) {
     console.error('Create task error:', error);
@@ -203,7 +228,8 @@ router.put('/:id', auth, async (req, res) => {
       return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
     }
     const prevStatus = task.status;
-    const { title, description, status, priority, assignee, assignees, project, dueDate, dueTimeMinutes, durationMinutes } = req.body;
+    const prevDueDate = task.dueDate ? new Date(task.dueDate) : null;
+    const { title, description, status, priority, assignee, assignees, project, dueDate, dueTimeMinutes, durationMinutes, watchers } = req.body;
     if (title != null) task.title = title;
     if (description != null) task.description = description;
     if (status != null) task.status = status;
@@ -212,7 +238,11 @@ router.put('/:id', auth, async (req, res) => {
     if (assignees !== undefined) {
       task.assignees = Array.isArray(assignees) ? assignees.filter(Boolean) : [];
     }
+    if (watchers !== undefined) {
+      task.watchers = Array.isArray(watchers) ? watchers.filter(Boolean) : [];
+    }
     if (project !== undefined) task.project = project || null;
+    const dueDateChanged = dueDate != null && prevDueDate && new Date(dueDate).getTime() !== prevDueDate.getTime();
     if (dueDate != null) task.dueDate = new Date(dueDate);
     if (dueTimeMinutes !== undefined) task.dueTimeMinutes = dueTimeMinutes;
     if (durationMinutes != null) task.durationMinutes = durationMinutes;
@@ -235,9 +265,30 @@ router.put('/:id', auth, async (req, res) => {
     await task.populate([
       { path: 'assignee', select: 'firstName lastName email' },
       { path: 'assignees', select: 'firstName lastName email' },
+      { path: 'watchers', select: 'firstName lastName email' },
       { path: 'project', select: 'name clientName status' },
       { path: 'createdBy', select: 'firstName lastName' }
     ]);
+    
+    // Wyślij powiadomienia do watchers
+    let changeType = 'updated';
+    let changeDescription = 'Zadanie zostało zaktualizowane';
+    
+    if (status != null && status !== prevStatus) {
+      changeType = 'status_changed';
+      changeDescription = `Status zmieniony z "${STATUS_LABELS[prevStatus] || prevStatus}" na "${STATUS_LABELS[status] || status}"`;
+    } else if (dueDateChanged) {
+      changeType = 'moved';
+      changeDescription = 'Zadanie zostało przeniesione na inny termin';
+    } else if (assignees !== undefined || assignee !== undefined) {
+      changeType = 'assigned';
+      changeDescription = 'Zmieniono przypisanie do zadania';
+    }
+    
+    notifyTaskWatchers(task, changeType, changeDescription, req.user).catch(err => {
+      console.error('[Update task] Błąd powiadomień:', err);
+    });
+    
     res.json(task);
   } catch (error) {
     console.error('Update task error:', error);

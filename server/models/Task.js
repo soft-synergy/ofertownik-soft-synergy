@@ -31,6 +31,11 @@ const taskSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   }],
+  /** Watchers - users who receive email notifications when task changes */
+  watchers: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
   project: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Project',
@@ -105,6 +110,7 @@ const taskSchema = new mongoose.Schema({
 
 taskSchema.index({ assignee: 1, dueDate: 1 });
 taskSchema.index({ assignees: 1, dueDate: 1 });
+taskSchema.index({ watchers: 1 });
 taskSchema.index({ project: 1, dueDate: 1 });
 taskSchema.index({ status: 1, dueDate: 1 });
 // Non-unique so many tasks can have source.kind = null. Hosting/followup uniqueness enforced in app (upsert).

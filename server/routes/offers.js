@@ -366,7 +366,7 @@ router.post('/generate/:projectId', auth, async (req, res) => {
       },
       technologyExplanation: project.technologyExplanation || '',
       warrantyUrl: 'https://soft-synergy.com/gwarancja',
-      contractTemplateUrl: process.env.CONTRACT_TEMPLATE_URL || 'https://soft-synergy.com/wzor-umowy.pdf',
+      contractTemplateUrl: process.env.CONTRACT_TEMPLATE_URL || 'https://file.notion.so/f/f/20ce8f8b-a7e7-40ad-896c-55adeb1536f3/090bf315-b3d7-4894-b511-6ef3bf7bf794/Draft_umowy_ofertownik.pdf?table=block&id=30bf8816-0445-80c5-8592-e4a24e74afc9&spaceId=20ce8f8b-a7e7-40ad-896c-55adeb1536f3&expirationTimestamp=1771509600000&signature=KKOqeLt1XFtxBvKNg5NHwAyD3YJY12mo68cfBqbamRI&downloadName=Draft+umowy+ofertownik.pdf',
       // Testimonials - 7 professional testimonials
       testimonials: project.testimonials || [
         {
@@ -792,7 +792,7 @@ router.get('/preview/:projectId', auth, async (req, res) => {
       },
       technologyExplanation: project.technologyExplanation || '',
       warrantyUrl: 'https://soft-synergy.com/gwarancja',
-      contractTemplateUrl: process.env.CONTRACT_TEMPLATE_URL || 'https://soft-synergy.com/wzor-umowy.pdf',
+      contractTemplateUrl: process.env.CONTRACT_TEMPLATE_URL || 'https://file.notion.so/f/f/20ce8f8b-a7e7-40ad-896c-55adeb1536f3/090bf315-b3d7-4894-b511-6ef3bf7bf794/Draft_umowy_ofertownik.pdf?table=block&id=30bf8816-0445-80c5-8592-e4a24e74afc9&spaceId=20ce8f8b-a7e7-40ad-896c-55adeb1536f3&expirationTimestamp=1771509600000&signature=KKOqeLt1XFtxBvKNg5NHwAyD3YJY12mo68cfBqbamRI&downloadName=Draft+umowy+ofertownik.pdf',
       testimonials: project.testimonials || [
         {
           quote: 'Profesjonalna obsługa, terminowość i wysokiej jakości kod. Polecam!',
@@ -955,7 +955,7 @@ router.post('/generate-pdf/:projectId', auth, async (req, res) => {
       },
       technologyExplanation: project.technologyExplanation || '',
       warrantyUrl: 'https://soft-synergy.com/gwarancja',
-      contractTemplateUrl: process.env.CONTRACT_TEMPLATE_URL || 'https://soft-synergy.com/wzor-umowy.pdf',
+      contractTemplateUrl: process.env.CONTRACT_TEMPLATE_URL || 'https://file.notion.so/f/f/20ce8f8b-a7e7-40ad-896c-55adeb1536f3/090bf315-b3d7-4894-b511-6ef3bf7bf794/Draft_umowy_ofertownik.pdf?table=block&id=30bf8816-0445-80c5-8592-e4a24e74afc9&spaceId=20ce8f8b-a7e7-40ad-896c-55adeb1536f3&expirationTimestamp=1771509600000&signature=KKOqeLt1XFtxBvKNg5NHwAyD3YJY12mo68cfBqbamRI&downloadName=Draft+umowy+ofertownik.pdf',
       // Testimonials - 7 professional testimonials
       testimonials: project.testimonials || [
         {

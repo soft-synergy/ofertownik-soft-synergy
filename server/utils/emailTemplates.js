@@ -626,6 +626,116 @@ function finalEstimateSubmittedTemplate({ projectName, clientName, clientContact
 `.trim();
 }
 
+/**
+ * Szablon: powiadomienie o zmianie w zadaniu (dla watchers)
+ */
+function taskChangeNotificationTemplate({ taskTitle, taskId, changeType, changeDescription, changedBy, taskUrl, dueDateFormatted, priorityLabel, projectName, statusLabel, assigneesList }) {
+  const taskUrlFull = `${APP_URL}${taskUrl || '/tasks'}`;
+  const emojiMap = {
+    created: '✨',
+    updated: '✏️',
+    status_changed: '🔄',
+    update_added: '💬',
+    assigned: '👤',
+    moved: '📅'
+  };
+  const emoji = emojiMap[changeType] || '📋';
+  const titleMap = {
+    created: 'Nowe zadanie',
+    updated: 'Zadanie zaktualizowane',
+    status_changed: 'Zmiana statusu zadania',
+    update_added: 'Dodano update do zadania',
+    assigned: 'Zmiana przypisania',
+    moved: 'Zadanie przeniesione'
+  };
+  const title = titleMap[changeType] || 'Zmiana w zadaniu';
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+</head>
+<body style="margin:0;padding:0;font-family:${baseStyles.fontFamily};background-color:${baseStyles.backgroundColor};color:${baseStyles.color};">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f1f5f9;">
+    <tr>
+      <td align="center" style="padding:40px 20px;">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;background:#ffffff;border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,0.08);overflow:hidden;">
+          <tr>
+            <td style="background:linear-gradient(135deg,#0f172a 0%,#2563eb 100%);padding:32px 36px;text-align:center;">
+              <p style="margin:0 0 8px 0;font-size:32px;">${emoji}</p>
+              <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;letter-spacing:-0.02em;">${title}</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px 36px;">
+              <p style="margin:0 0 16px 0;font-size:16px;line-height:1.6;color:#475569;">Cześć,</p>
+              <p style="margin:0 0 18px 0;font-size:14px;line-height:1.6;color:#64748b;">${changeDescription || 'W zadaniu, które obserwujesz, nastąpiła zmiana:'}</p>
+              
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;margin-bottom:24px;">
+                <tr>
+                  <td style="padding:20px;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                      <tr>
+                        <td style="padding:8px 0;font-size:14px;color:#64748b;">Zadanie</td>
+                        <td style="padding:8px 0;font-size:14px;font-weight:600;color:#1e293b;text-align:right;">${escapeHtml(taskTitle || '')}</td>
+                      </tr>
+                      ${dueDateFormatted ? `
+                      <tr>
+                        <td style="padding:8px 0;font-size:14px;color:#64748b;">Termin</td>
+                        <td style="padding:8px 0;font-size:14px;font-weight:600;color:#1e293b;text-align:right;">${escapeHtml(dueDateFormatted)}</td>
+                      </tr>` : ''}
+                      ${statusLabel ? `
+                      <tr>
+                        <td style="padding:8px 0;font-size:14px;color:#64748b;">Status</td>
+                        <td style="padding:8px 0;font-size:14px;font-weight:600;color:#1e293b;text-align:right;">${escapeHtml(statusLabel)}</td>
+                      </tr>` : ''}
+                      ${priorityLabel ? `
+                      <tr>
+                        <td style="padding:8px 0;font-size:14px;color:#64748b;">Priorytet</td>
+                        <td style="padding:8px 0;font-size:14px;font-weight:600;color:#1e293b;text-align:right;">${escapeHtml(priorityLabel)}</td>
+                      </tr>` : ''}
+                      ${projectName ? `
+                      <tr>
+                        <td style="padding:8px 0;font-size:14px;color:#64748b;">Projekt</td>
+                        <td style="padding:8px 0;font-size:14px;font-weight:600;color:#1e293b;text-align:right;">${escapeHtml(projectName)}</td>
+                      </tr>` : ''}
+                      ${assigneesList ? `
+                      <tr>
+                        <td style="padding:8px 0;font-size:14px;color:#64748b;">Przypisani</td>
+                        <td style="padding:8px 0;font-size:14px;font-weight:600;color:#1e293b;text-align:right;">${escapeHtml(assigneesList)}</td>
+                      </tr>` : ''}
+                      ${changedBy ? `
+                      <tr>
+                        <td style="padding:8px 0;font-size:14px;color:#64748b;">Zmienione przez</td>
+                        <td style="padding:8px 0;font-size:14px;font-weight:600;color:#1e293b;text-align:right;">${escapeHtml(changedBy)}</td>
+                      </tr>` : ''}
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:0;text-align:center;">
+                <a href="${taskUrlFull}" style="${objectToInlineStyle(buttonPrimary)}">Otwórz zadanie →</a>
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 32px;background:#f8fafc;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;">
+              Soft Synergy Ofertownik · Ten email został wygenerowany automatycznie
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`.trim();
+}
+
 module.exports = {
   followUpReminderTemplate,
   quoteRequestTemplate,
@@ -635,5 +745,6 @@ module.exports = {
   hostingReminderDueTodayTemplate,
   hostingReminder3DaysOverdueTemplate,
   tasksDailyDigestTemplate,
-  tasksOverdueTemplate
+  tasksOverdueTemplate,
+  taskChangeNotificationTemplate
 };
