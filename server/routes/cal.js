@@ -12,6 +12,7 @@ const User = require('../models/User');
 const Activity = require('../models/Activity');
 const Task = require('../models/Task');
 const { upsertFollowUpTask } = require('../utils/followUpTasks');
+const Client = require('../models/Client');
 
 const router = express.Router();
 
@@ -137,12 +138,33 @@ router.post('/', async (req, res) => {
       return res.status(500).json({ ok: false, message: 'No admin user' });
     }
 
+    // Auto-utworzenie / przypięcie klienta po emailu
+    let client = null;
+    if (email) {
+      const normalizedEmail = email.trim().toLowerCase();
+      client = await Client.findOne({ email: normalizedEmail });
+      if (!client) {
+        const token = Math.random().toString(36).slice(2) + Date.now().toString(36);
+        client = await Client.create({
+          name: clientName,
+          email: normalizedEmail,
+          phone: clientPhone || undefined,
+          company: undefined,
+          notes: '',
+          createdBy: adminId,
+          portalEnabled: true,
+          portalToken: token
+        });
+      }
+    }
+
     const project = new Project({
       name,
       clientName,
       clientContact,
       clientEmail: email,
       clientPhone: clientPhone || undefined,
+      client: client ? client._id : undefined,
       offerType: 'preliminary',
       status: 'draft',
       consultationNotes,

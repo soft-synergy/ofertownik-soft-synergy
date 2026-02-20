@@ -4,6 +4,7 @@ const Project = require('../models/Project');
 const { auth, requireRole } = require('../middleware/auth');
 const Activity = require('../models/Activity');
 const { upsertFollowUpTask, completeCurrentAndCreateNextFollowUpTask } = require('../utils/followUpTasks');
+const Client = require('../models/Client');
 
 const router = express.Router();
 
@@ -394,6 +395,27 @@ router.post('/', [
       createdBy: req.user._id,
       owner: req.user._id
     };
+
+    // Auto-utworzenie / przypięcie klienta po emailu
+    const email = (projectData.clientEmail || '').trim().toLowerCase();
+    if (email) {
+      let client = await Client.findOne({ email });
+      if (!client) {
+        const token = Math.random().toString(36).slice(2) + Date.now().toString(36);
+        client = await Client.create({
+          name: projectData.clientName,
+          email,
+          phone: projectData.clientPhone || undefined,
+          company: undefined,
+          notes: '',
+          createdBy: req.user._id,
+          portalEnabled: true,
+          portalToken: token
+        });
+      }
+      projectData.client = client._id;
+    }
+
     // Opiekun projektu zawsze Jakub Czajka – nie z formularza
     if (projectData.offerType === 'final') {
       projectData.projectManager = { ...DEFAULT_PROJECT_MANAGER };
