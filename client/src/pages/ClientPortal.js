@@ -23,7 +23,22 @@ const ClientPortal = () => {
   const [monitorData, setMonitorData] = useState(null);
   const [selectedHostingId, setSelectedHostingId] = useState('');
 
+  const isFirstVisitKey = React.useMemo(() => `ss:client-portal:first-visit:${token}`, [token]);
+
+  const getFirstVisitMinDelayMs = React.useCallback(() => {
+    try {
+      const hasSeen = window.localStorage.getItem(isFirstVisitKey) === '1';
+      if (hasSeen) return 0;
+      window.localStorage.setItem(isFirstVisitKey, '1');
+      return 1400; // wydłużone ładowanie tylko za 1. razem w tej przeglądarce
+    } catch (e) {
+      return 0;
+    }
+  }, [isFirstVisitKey]);
+
   const fetchData = React.useCallback(async () => {
+    const startedAt = Date.now();
+    const minDelayMs = getFirstVisitMinDelayMs();
     setLoading(true);
     setLoadError('');
     try {
@@ -34,9 +49,16 @@ const ClientPortal = () => {
     } catch (e) {
       setLoadError(e?.response?.data?.message || 'Nie udało się pobrać danych');
     } finally {
+      if (minDelayMs > 0) {
+        const elapsed = Date.now() - startedAt;
+        const remaining = Math.max(0, minDelayMs - elapsed);
+        if (remaining > 0) {
+          await new Promise((r) => setTimeout(r, remaining));
+        }
+      }
       setLoading(false);
     }
-  }, [token]);
+  }, [token, getFirstVisitMinDelayMs]);
 
   React.useEffect(() => {
     fetchData();
@@ -97,9 +119,317 @@ const ClientPortal = () => {
 
   const logoUrl = toBackendUrl('/generated-offers/logo-removebg-preview.png');
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-600">Ładowanie…</div>;
+  const getProjectStatusConfig = (project) => {
+    const status = project?.status || 'draft';
+    const isPreliminary = project?.offerType === 'preliminary';
+
+    const map = {
+      draft: {
+        label: isPreliminary ? 'Przyjęliśmy zgłoszenie' : 'W przygotowaniu',
+        classes: 'bg-gray-100 text-gray-800 border border-gray-200',
+      },
+      active: {
+        label: isPreliminary ? 'Przygotowujemy ofertę' : 'Oferta aktywna',
+        classes: 'bg-blue-100 text-blue-800 border border-blue-200',
+      },
+      accepted: {
+        label: 'Oferta zaakceptowana',
+        classes: 'bg-green-100 text-green-800 border border-green-200',
+      },
+      completed: {
+        label: 'Projekt zrealizowany',
+        classes: 'bg-blue-100 text-blue-800 border border-blue-200',
+      },
+      cancelled: {
+        label: 'Projekt anulowany',
+        classes: 'bg-red-100 text-red-800 border border-red-200',
+      },
+      to_final_estimation: {
+        label: 'Liczymy finalną wycenę',
+        classes: 'bg-orange-100 text-orange-800 border border-orange-200',
+      },
+      to_prepare_final_offer: {
+        label: 'Składamy finalną ofertę',
+        classes: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
+      },
+    };
+
+    return map[status] || map.draft;
+  };
+
+  const renderProjectStatusBadge = (project) => {
+    const cfg = getProjectStatusConfig(project);
+    return (
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${cfg.classes}`}>
+        {cfg.label}
+      </span>
+    );
+  };
+
+  const getProjectStatusExplainer = (project) => {
+    if (!project) {
+      return {
+        title: 'Twoje projekty w SoftSynergy',
+        description:
+          'W tym panelu w czasie rzeczywistym śledzisz postęp prac nad ofertami i projektami – bez szukania maili.',
+      };
+    }
+
+    const status = project.status;
+    const isPreliminary = project.offerType === 'preliminary';
+
+    if (isPreliminary) {
+      if (status === 'to_final_estimation') {
+        return {
+          title: 'Liczymy dla Ciebie finalną wycenę',
+          description:
+            'Na bazie Twojego zgłoszenia i oferty wstępnej nasz zespół rozpisuje dokładny budżet projektu. Zwykle zajmuje to 1–2 dni robocze.',
+        };
+      }
+      if (status === 'to_prepare_final_offer') {
+        return {
+          title: 'Składamy finalną ofertę do akceptacji',
+          description:
+            'Finalna wycena jest już policzona. Teraz dopieszczamy dokument oferty, żebyś mógł ją wygodnie przejrzeć i zaakceptować online.',
+        };
+      }
+      if (status === 'accepted') {
+        return {
+          title: 'Oferta została zaakceptowana – szykujemy kolejne kroki',
+          description:
+            'Dziękujemy za zaufanie! W oparciu o zaakceptowaną ofertę przygotujemy formalności i szczegółowy plan startu projektu.',
+        };
+      }
+      if (status === 'cancelled') {
+        return {
+          title: 'Ten projekt został zamknięty',
+          description:
+            'Jeżeli chcesz do niego wrócić lub rozpocząć nową rozmowę, po prostu odezwij się do nas – przygotujemy świeżą propozycję.',
+        };
+      }
+
+      return {
+        title: 'Przygotowujemy dla Ciebie ofertę',
+        description:
+          'Twoje zgłoszenie jest już w naszym systemie. Zbieramy informacje i układamy ofertę, którą zobaczysz tutaj – krok po kroku, bez biegania po wątkach mailowych.',
+      };
+    }
+
+    // Final offers
+    if (status === 'accepted') {
+      return {
+        title: 'Oferta zaakceptowana – jesteśmy po tej samej stronie stołu',
+        description:
+          'Na bazie zaakceptowanej oferty przygotowujemy formalności i planujemy start prac. W tym panelu zawsze sprawdzisz historię ofert i dokumentów.',
+      };
+    }
+
+    if (status === 'active' || status === 'to_prepare_final_offer') {
+      return {
+        title: 'Twoja oferta finalna czeka na spokojne przejrzenie',
+        description:
+          'Masz tu w jednym miejscu wszystko: dokument oferty, podsumowania i przycisk do akceptacji. Możesz wrócić do panelu w dowolnym momencie.',
+      };
+    }
+
+    return {
+      title: 'Twoja oferta w SoftSynergy',
+      description:
+        'Ten panel pokazuje aktualny etap pracy nad ofertą oraz wszystkie najważniejsze materiały w jednym miejscu.',
+    };
+  };
+
+  const getOfferWorkflowSteps = (project) => {
+    const steps = [
+      {
+        id: 'preliminary',
+        label: 'Oferta wstępna',
+        description: 'Pierwszy zarys zakresu i budżetu na bazie Twojego zgłoszenia.',
+      },
+      {
+        id: 'final_estimation',
+        label: 'Wycena finalna',
+        description: 'Liczymy precyzyjny koszt projektu i dobieramy optymalny zakres.',
+      },
+      {
+        id: 'final_offer',
+        label: 'Oferta finalna',
+        description: 'Składamy dopieszczony dokument oferty gotowy do akceptacji.',
+      },
+      {
+        id: 'acceptance',
+        label: 'Akceptacja',
+        description: 'Jednym kliknięciem zatwierdzasz ofertę i przechodzimy do formalności.',
+      },
+    ];
+
+    if (!project) {
+      return steps.map((s, index) => ({
+        ...s,
+        state: index === 0 ? 'current' : 'upcoming',
+      }));
+    }
+
+    const status = project.status;
+    const isPreliminary = project.offerType === 'preliminary';
+
+    let currentIndex = 0;
+    if (status === 'to_final_estimation') currentIndex = 1;
+    else if (status === 'to_prepare_final_offer') currentIndex = 2;
+    else if (status === 'accepted' || status === 'completed' || status === 'cancelled') currentIndex = 3;
+    else if (!isPreliminary && (status === 'active' || status === 'draft')) currentIndex = 2;
+    else currentIndex = 0;
+
+    return steps.map((s, index) => ({
+      ...s,
+      state: index < currentIndex ? 'done' : index === currentIndex ? 'current' : 'upcoming',
+    }));
+  };
+
+  const renderOfferProgress = (project) => {
+    const steps = getOfferWorkflowSteps(project);
+    if (!steps.length) return null;
+
+    const activeIndex = steps.findIndex((s) => s.state === 'current');
+    const visibleIndex = activeIndex === -1 ? steps.length - 1 : activeIndex;
+    const completedCount = visibleIndex + 1;
+
+    return (
+      <div className="mt-4 offer-progress">
+        <div className="flex items-center justify-between mb-2">
+          <div className="inline-flex items-center gap-2 text-xs font-semibold text-gray-700">
+            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold">
+              i
+            </span>
+            <span>Postęp pracy nad ofertą</span>
+          </div>
+          <div className="text-[11px] text-gray-500 font-medium">
+            Etap {completedCount} z {steps.length}
+          </div>
+        </div>
+        <div className="flex items-center">
+          {steps.map((step, index) => {
+            const isLast = index === steps.length - 1;
+            const circleClasses =
+              step.state === 'done'
+                ? 'bg-emerald-500 border-emerald-500 text-white'
+                : step.state === 'current'
+                ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-500/40'
+                : 'bg-gray-100 border-gray-300 text-gray-400';
+
+            const connectorClasses =
+              step.state === 'done'
+                ? 'bg-emerald-400'
+                : step.state === 'current'
+                ? 'bg-blue-400'
+                : 'bg-gray-200';
+
+            const dotBaseClasses =
+              step.state === 'current'
+                ? 'offer-progress-dot offer-progress-dot-current'
+                : 'offer-progress-dot';
+
+            const dotIndexClass = `offer-progress-dot-${index + 1}`;
+
+            return (
+              <div key={step.id} className="flex-1 flex items-center">
+                <div className="relative flex items-center justify-center">
+                  <div
+                    className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold ${circleClasses} ${dotBaseClasses} ${dotIndexClass}`}
+                  >
+                    {index + 1}
+                  </div>
+                </div>
+                {!isLast && <div className={`flex-1 h-0.5 mx-1 sm:mx-2 rounded-full ${connectorClasses}`} />}
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3 text-[11px] leading-snug">
+          {steps.map((step) => (
+            <div key={step.id}>
+              <div
+                className={`font-semibold mb-0.5 ${
+                  step.state === 'current'
+                    ? 'text-blue-700'
+                    : step.state === 'done'
+                    ? 'text-emerald-700'
+                    : 'text-gray-600'
+                }`}
+              >
+                {step.label}
+              </div>
+              <div className="text-gray-500">{step.description}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900 px-6">
+        <div className="w-full max-w-lg">
+          <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-2xl">
+            <div className="absolute inset-0 pointer-events-none">
+              <div className="absolute -top-20 -left-24 h-64 w-64 rounded-full bg-blue-500/25 blur-3xl" />
+              <div className="absolute -bottom-24 -right-24 h-64 w-64 rounded-full bg-orange-500/20 blur-3xl" />
+            </div>
+            <div className="relative p-7 sm:p-8">
+              <div className="flex items-center gap-4">
+                <img src={logoUrl} alt="SoftSynergy" className="h-12 w-auto drop-shadow" />
+                <div className="min-w-0">
+                  <div className="text-xl font-extrabold tracking-tight text-white">
+                    Soft<span className="text-orange-400">Synergy</span>
+                  </div>
+                  <div className="text-xs sm:text-sm text-blue-200/80">
+                    Odpalamy panel klienta i ładujemy status Twojej oferty
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-7 flex items-center justify-center">
+                <div className="ss-spinner" aria-label="Ładowanie" />
+              </div>
+
+              <div className="mt-6 text-center">
+                <div className="text-base font-bold text-white">Jeszcze chwila</div>
+                <div className="mt-1 text-xs sm:text-sm text-blue-200/80">
+                  Panel uruchomi się automatycznie. W międzyczasie szykujemy podgląd dokumentów i postęp etapów.
+                </div>
+              </div>
+
+              <div className="mt-7 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="h-3 w-24 rounded-full ss-skeleton" />
+                  <div className="mt-3 h-8 w-16 rounded-xl ss-skeleton" />
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="h-3 w-20 rounded-full ss-skeleton" />
+                  <div className="mt-3 h-8 w-14 rounded-xl ss-skeleton" />
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="h-3 w-24 rounded-full ss-skeleton" />
+                  <div className="mt-3 h-8 w-20 rounded-xl ss-skeleton" />
+                </div>
+              </div>
+
+              <div className="mt-6 flex items-center justify-center gap-2 text-[11px] text-blue-200/70">
+                <span className="inline-block h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.35)]" />
+                <span>Bez maili. Bez chaosu. Wszystko tu.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (loadError) return <div className="min-h-screen flex items-center justify-center text-red-600">{loadError}</div>;
   if (!data) return null;
+
+  const primaryProject = (data.projects || [])[0] || null;
+  const primaryExplainer = getProjectStatusExplainer(primaryProject);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -110,8 +440,12 @@ const ClientPortal = () => {
             <div className="flex items-center gap-4">
               <img src={logoUrl} alt="SoftSynergy" className="h-12 w-auto" />
               <div>
-                <div className="text-2xl font-extrabold tracking-tight">Soft<span className="text-orange-400">Synergy</span></div>
-                <span className="hidden md:inline text-blue-200/80 text-sm">Client Portal</span>
+                <div className="text-2xl font-extrabold tracking-tight">
+                  Soft<span className="text-orange-400">Synergy</span>
+                </div>
+                <span className="hidden md:inline text-blue-200/80 text-sm">
+                  Panel klienta – statusy ofert w czasie rzeczywistym
+                </span>
               </div>
             </div>
             <div className="text-sm text-blue-200/80">
@@ -121,8 +455,44 @@ const ClientPortal = () => {
           <div className="mt-8">
             <h1 className="text-4xl md:text-5xl font-bold mb-2">{data.client.name}</h1>
             <div className="mt-2 text-blue-100/90 text-lg">{data.client.company || ''}</div>
-            <div className="mt-3 text-sm text-blue-200/80">{data.client.email || '-'} {data.client.phone ? `· ${data.client.phone}` : ''}</div>
+            <div className="mt-3 text-sm text-blue-200/80">
+              {data.client.email || '-'} {data.client.phone ? `· ${data.client.phone}` : ''}
+            </div>
           </div>
+          {/* Live explainer for the primary project */}
+          {primaryProject && (
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-[minmax(0,2.1fr)_minmax(0,2.4fr)] gap-4 items-stretch">
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20 shadow-sm">
+                <div className="text-[11px] uppercase tracking-wide text-blue-200/80 mb-1">
+                  Twoja oferta: {primaryProject.name}
+                </div>
+                <div className="text-sm md:text-base font-semibold text-white mb-1">
+                  {primaryExplainer.title}
+                </div>
+                <p className="text-xs md:text-sm text-blue-100/90 leading-relaxed">
+                  {primaryExplainer.description}
+                </p>
+                <p className="mt-3 text-[11px] text-blue-200/80">
+                  Ten panel aktualizuje się automatycznie, gdy zespół SoftSynergy przechodzi kolejne etapy pracy nad Twoją ofertą
+                  i projektem.
+                </p>
+              </div>
+              <div className="hidden md:flex flex-col justify-center text-xs text-blue-100/90 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-300 shadow-sm" />
+                  <span>W jednym miejscu widzisz status oferty, dokumenty i kolejny krok po Twojej stronie.</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-orange-300 shadow-sm" />
+                  <span>Nie musisz szukać maili – ten panel jest zawsze aktualny i dostępny pod stałym linkiem.</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-blue-200 shadow-sm" />
+                  <span>Po akceptacji oferty tutaj też pojawią się kolejne materiały i dokumenty.</span>
+                </div>
+              </div>
+            </div>
+          )}
           {/* Stats */}
           <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-white/15 backdrop-blur-sm rounded-xl p-5 border border-white/20">
@@ -176,14 +546,37 @@ const ClientPortal = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {data.projects.map(p => (
-                <div key={p._id} className="bg-white rounded-xl border-2 border-gray-100 p-6 shadow-sm hover:shadow-lg hover:border-blue-200 transition-all duration-200">
+              {data.projects.map(p => {
+                const isPreliminary = p.offerType === 'preliminary';
+                return (
+                  <div
+                    key={p._id}
+                    className={`bg-white rounded-xl border-2 border-gray-100 p-6 shadow-sm hover:shadow-lg hover:border-blue-200 transition-all duration-200 ${
+                      isPreliminary ? 'md:col-span-2 offer-preliminary-card' : ''
+                    }`}
+                  >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="text-xl font-bold text-gray-900 mb-2">{p.name}</div>
-                      <div className="mt-1 text-xs text-gray-500">Status: <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${p.status === 'accepted' ? 'bg-green-100 text-green-700' : p.status === 'active' ? 'bg-blue-100 text-blue-700' : p.status === 'draft' ? 'bg-gray-100 text-gray-700' : 'bg-yellow-100 text-yellow-700'}`}>{p.status}</span></div>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+                        <span className="font-medium text-gray-600">Status:</span>
+                        {renderProjectStatusBadge(p)}
+                        <span className="hidden sm:inline text-gray-400">•</span>
+                        <span className="text-gray-500">
+                          {isPreliminary
+                            ? 'Oferta wstępna – prowadzimy Cię krok po kroku do wersji finalnej'
+                            : 'Oferta finalna przygotowana na podstawie wcześniejszych ustaleń i rozmów'}
+                        </span>
+                        {p.createdAt && (
+                          <>
+                            <span className="hidden sm:inline text-gray-400">•</span>
+                            <span>Start: {new Date(p.createdAt).toLocaleDateString('pl-PL')}</span>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
+                  {renderOfferProgress(p)}
                   <div className="mt-4 flex flex-wrap gap-3">
                     {p.generatedOfferUrl && (
                       <a href={toBackendUrl(p.generatedOfferUrl)} target="_blank" rel="noreferrer" className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm">Podgląd oferty</a>
@@ -217,8 +610,28 @@ const ClientPortal = () => {
                       </div>
                     )}
                   </div>
-                </div>
-              ))}
+                  {isPreliminary && (
+                    <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
+                      <a
+                        href="https://soft-synergy.com/gwarancja"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-2 text-xs font-semibold text-blue-700 hover:text-blue-800"
+                        title="Zobacz gwarancję i SLA Soft Synergy"
+                      >
+                        <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-50 border border-blue-200 text-blue-700">
+                          ?
+                        </span>
+                        Zobacz nasze warunki gwarancji i SLA
+                      </a>
+                      <div className="text-[11px] text-gray-500">
+                        3 miesiące gwarancji w standardzie · SLA 99,5% · reakcja do 2h
+                      </div>
+                    </div>
+                  )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </section>
@@ -398,10 +811,15 @@ const ClientPortal = () => {
         <footer className="pt-8 border-t border-gray-200">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <img src={logoUrl} alt="SoftSynergy" className="h-8 w-auto opacity-60" />
-              <div className="text-sm text-gray-600">© {new Date().getFullYear()} SoftSynergy</div>
+              <img src={logoUrl} alt="SoftSynergy" className="h-8 w-auto opacity-70" />
+              <div className="text-sm text-gray-600">
+                © {new Date().getFullYear()} SoftSynergy – panel klienta
+              </div>
             </div>
-            <div className="text-sm text-gray-500 font-medium">budujemy software, efektywnie</div>
+            <div className="text-xs md:text-sm text-gray-500 font-medium text-center md:text-right">
+              Ten panel klienta jest własnością i autorskim produktem Soft Synergy – zaprojektowanym tak, aby w czasie
+              rzeczywistym pokazywać postęp prac nad Twoimi projektami i ofertami.
+            </div>
           </div>
         </footer>
       </div>
