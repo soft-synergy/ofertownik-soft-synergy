@@ -142,6 +142,46 @@ export const portfolioAPI = {
   toggleStatus: (id) => api.patch(`/api/portfolio/${id}/toggle`).then(res => res.data),
 };
 
+const uploadAxiosConfig = () => ({
+  baseURL: process.env.REACT_APP_API_URL || 'https://oferty.soft-synergy.com',
+  timeout: 300000,
+  maxContentLength: Infinity,
+  maxBodyLength: Infinity,
+});
+const uploadAxiosInterceptors = (instance) => {
+  instance.interceptors.request.use((config) => {
+    const token = localStorage.getItem('token');
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+    if (config.data instanceof FormData) delete config.headers['Content-Type'];
+    return config;
+  });
+};
+
+export const servicesAPI = {
+  getAll: (params) => api.get('/api/services', { params }).then(res => res.data),
+  getById: (id) => api.get(`/api/services/${id}`).then(res => res.data),
+  create: (data) => {
+    if (data instanceof FormData) {
+      const instance = axios.create(uploadAxiosConfig());
+      uploadAxiosInterceptors(instance);
+      return instance.post('/api/services', data).then(res => res.data);
+    }
+    return api.post('/api/services', data).then(res => res.data);
+  },
+  update: (id, data) => {
+    if (data instanceof FormData) {
+      const instance = axios.create(uploadAxiosConfig());
+      uploadAxiosInterceptors(instance);
+      return instance.put(`/api/services/${id}`, data).then(res => res.data);
+    }
+    return api.put(`/api/services/${id}`, data).then(res => res.data);
+  },
+  delete: (id) => api.delete(`/api/services/${id}`).then(res => res.data),
+  updateOrderBatch: (updates) => api.put('/api/services/order/batch', { updates }).then(res => res.data),
+  toggleStatus: (id) => api.patch(`/api/services/${id}/toggle`).then(res => res.data),
+  getDocumentation: () => api.get('/api/services/documentation').then(res => res.data),
+};
+
 export const offersAPI = {
   generate: (projectId) => api.post(`/api/offers/generate/${projectId}`).then(res => res.data),
   generatePdf: (projectId, projectData) => api.post(`/api/offers/generate-pdf-simple`, projectData).then(res => res.data),

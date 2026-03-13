@@ -12,6 +12,7 @@ const dictionaries = {
       dashboard: 'Dashboard',
       projects: 'Projekty',
       portfolio: 'Portfolio',
+      services: 'Usługi',
       hosting: 'Hosting',
       employees: 'Pracownicy',
       logout: 'Wyloguj'
@@ -111,6 +112,7 @@ const dictionaries = {
       dashboard: 'Dashboard',
       projects: 'Projects',
       portfolio: 'Portfolio',
+      services: 'Services',
       hosting: 'Hosting',
       employees: 'Employees',
       logout: 'Log out'

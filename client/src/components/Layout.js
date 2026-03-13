@@ -10,7 +10,8 @@ import {
   Activity,
   Server,
   LogOut,
-  CheckSquare
+  CheckSquare,
+  Wrench
 } from 'lucide-react';
 import SearchCommandPalette from './SearchCommandPalette';
 
@@ -41,6 +42,7 @@ const Layout = () => {
     { path: '/projects', label: t('nav.projects'), icon: FolderOpen },
     { path: '/tasks', label: 'Zadania', icon: CheckSquare },
     { path: '/portfolio', label: t('nav.portfolio'), icon: Briefcase },
+    { path: '/services', label: t('nav.services'), icon: Wrench },
     { path: '/activity', label: 'Aktywność', icon: Activity },
   ];
 

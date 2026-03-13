@@ -12,6 +12,8 @@ import ProjectForm from './pages/ProjectForm';
 import ProjectDetail from './pages/ProjectDetail';
 import Portfolio from './pages/Portfolio';
 import PortfolioForm from './pages/PortfolioForm';
+import Services from './pages/Services';
+import ServiceForm from './pages/ServiceForm';
 import Employees from './pages/Employees';
 import Activity from './pages/Activity';
 import Hosting from './pages/Hosting';
@@ -53,6 +55,9 @@ function AppContent() {
           <Route path="portfolio" element={<Portfolio />} />
           <Route path="portfolio/new" element={<PortfolioForm />} />
           <Route path="portfolio/:id/edit" element={<PortfolioForm />} />
+          <Route path="services" element={<Services />} />
+          <Route path="services/new" element={<ServiceForm />} />
+          <Route path="services/:id/edit" element={<ServiceForm />} />
           <Route path="employees" element={<Employees />} />
           <Route path="tasks" element={<Tasks />} />
           <Route path="activity" element={<Activity />} />

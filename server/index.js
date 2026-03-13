@@ -18,6 +18,7 @@ const waitlistRoutes = require('./routes/waitlist');
 const tasksRoutes = require('./routes/tasks');
 const calWebhookRoutes = require('./routes/cal');
 const searchRoutes = require('./routes/search');
+const servicesRoutes = require('./routes/services');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -83,6 +84,7 @@ const setCorsHeaders = (req, res, next) => {
 };
 
 app.use('/uploads/portfolio', setCorsHeaders, express.static(path.join(__dirname, '../uploads/portfolio')));
+app.use('/uploads/services', setCorsHeaders, express.static(path.join(__dirname, '../uploads/services')));
 app.use('/uploads/documents', setCorsHeaders, express.static(path.join(__dirname, '../uploads/documents')));
 app.use('/uploads/monitoring', setCorsHeaders, express.static(path.join(__dirname, '../uploads/monitoring')));
 
@@ -113,6 +115,7 @@ app.use('/api/ssl', sslRoutes);
 app.use('/api/waitlist', waitlistRoutes);
 app.use('/api/tasks', tasksRoutes);
 app.use('/api/search', searchRoutes);
+app.use('/api/services', servicesRoutes);
 app.use('/cal', calWebhookRoutes);
 
 // Activities endpoint (recent)
