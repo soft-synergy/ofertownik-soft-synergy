@@ -13,7 +13,8 @@
     "create-admin": "node server/scripts/create-admin.js",
     "import-portfolio": "node server/scripts/import-portfolio.js",
     "test-ssl": "node server/scripts/test-ssl-monitor.js",
-    "ai-analyze": "node server/scripts/run-ai-analyze.js"
+    "ai-analyze": "node server/scripts/run-ai-analyze.js",
+    "delete-public-orders": "node server/scripts/delete-all-public-orders.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
