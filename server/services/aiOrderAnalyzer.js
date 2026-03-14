@@ -1,4 +1,5 @@
 const Anthropic = require('@anthropic-ai/sdk');
+const { fetchOfferDetail, BIZNES_POLSKA_COOKIES } = require('./biznesPolskaScraper');
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 
@@ -98,15 +99,17 @@ Zasady:
 
 // ───────────────────────────────────────────────────────────────
 // FAZA 2 – Scoring (Haiku, ~$0.0005/zlecenie)
-//   Wysyłamy pełne dane jednego zlecenia, AI zwraca JSON:
-//   { score: 1-10, analysis: "..." }
+//   Przed oceną pobieramy świeży HTML ze strony Biznes Polska (z cookies),
+//   potem wysyłamy pełną treść do AI. fullTextOverride = treść z pobranego HTML (jeśli podana).
 // ───────────────────────────────────────────────────────────────
 
-async function scoreOrder(order) {
+async function scoreOrder(order, options = {}) {
   const client = getClient();
+  const { fullTextOverride } = options;
 
-  const fullText = (order.detailFullText || '').slice(0, 4000);
-  const fallback = !fullText.trim()
+  const fullText = (fullTextOverride || order.detailFullText || '').trim();
+  const fullTextLimited = fullText.slice(0, 14000);
+  const fallback = !fullTextLimited.trim()
     ? `Tytuł: ${order.title}\nOpis: ${order.description || ''}\nUwagi: ${order.remarks || ''}\nKontakt: ${order.contact || ''}\nInwestor: ${order.investor || ''}\nBranże: ${(order.branches || []).join(', ')}`
     : '';
 
@@ -121,8 +124,10 @@ ID: ${order.biznesPolskaId}
 Tytuł: ${order.title}
 Kategoria: ${order.category || ''}
 Województwo: ${order.region || ''}
-Inwestor: ${order.investor || ''}
-${fullText || fallback}
+Inwestor/Zamawiający: ${order.investor || ''}
+
+Pełna treść ogłoszenia (ze strony biznes-polska.pl):
+${fullTextLimited || fallback}
 
 Odpowiedz WYŁĄCZNIE poprawnym JSON:
 {"score":N,"analysis":"2-3 zdania: co dokładnie obejmuje zamówienie, dlaczego pasuje/nie pasuje, jakie są ryzyka"}`;
@@ -248,9 +253,37 @@ async function runAiAnalysis(options = {}) {
     .sort({ createdAt: -1 })
     .lean();
 
+  const cookies = process.env.BIZNES_POLSKA_COOKIES || BIZNES_POLSKA_COOKIES;
+
   for (const order of candidates) {
     try {
-      const { score, analysis } = await scoreOrder(order);
+      let fullTextForAi = order.detailFullText || '';
+      if (order.detailUrl) {
+        try {
+          const fresh = await fetchOfferDetail(order.detailUrl, cookies);
+          fullTextForAi = (fresh.detailFullText || '').trim();
+          if (fullTextForAi) {
+            await PublicOrder.findByIdAndUpdate(order._id, {
+              $set: {
+                detailFullText: fresh.detailFullText || '',
+                detailRawHtml: fresh.detailRawHtml || '',
+                investor: fresh.investor || order.investor,
+                description: fresh.description || order.description,
+                requirements: fresh.requirements || order.requirements,
+                submissionPlaceAndDeadline: fresh.submissionPlaceAndDeadline || order.submissionPlaceAndDeadline,
+                contact: fresh.contact || order.contact,
+                remarks: fresh.remarks || order.remarks
+              }
+            });
+          }
+        } catch (fetchErr) {
+          stats.errors.push(`Fetch ${order.biznesPolskaId}: ${fetchErr.message}`);
+        }
+      }
+
+      const { score, analysis } = await scoreOrder(order, {
+        fullTextOverride: fullTextForAi || undefined
+      });
       await PublicOrder.findByIdAndUpdate(order._id, {
         aiStatus: 'scored',
         aiScore: score,
