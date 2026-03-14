@@ -19,6 +19,7 @@ const tasksRoutes = require('./routes/tasks');
 const calWebhookRoutes = require('./routes/cal');
 const searchRoutes = require('./routes/search');
 const servicesRoutes = require('./routes/services');
+const publicOrdersRoutes = require('./routes/publicOrders');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -116,6 +117,7 @@ app.use('/api/waitlist', waitlistRoutes);
 app.use('/api/tasks', tasksRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/services', servicesRoutes);
+app.use('/api/public-orders', publicOrdersRoutes);
 app.use('/cal', calWebhookRoutes);
 
 // Activities endpoint (recent)
@@ -663,6 +665,24 @@ mongoose.connect(process.env.MONGODB_URI, {
     console.log('🔒 Monitoring certyfikatów SSL uruchomiony (co 24 godziny)');
   } catch (e) {
     console.error('Nie udało się uruchomić monitoringu certyfikatów SSL:', e);
+  }
+  // Zlecenia publiczne – synchronizacja z Grupą Biznes Polska 5× dziennie (co ~4h 48min), cookies w kodzie
+  const setupBiznesPolskaScheduler = () => {
+    const { runSync } = require('./services/biznesPolskaScraper');
+    const intervalMs = Math.floor((24 * 60 * 60 * 1000) / 5); // 5× daily
+    const run = () => {
+      runSync(undefined, { maxListPages: 50 })
+        .then((r) => console.log(`[Biznes Polska] Sync zakończony: dodano ${r.added} zleceń${r.errors.length ? `, błędy: ${r.errors.length}` : ''}`))
+        .catch((e) => console.error('[Biznes Polska] Błąd sync:', e.message));
+    };
+    setTimeout(run, 2 * 60 * 1000);
+    setInterval(run, intervalMs);
+  };
+  try {
+    setupBiznesPolskaScheduler();
+    console.log('📋 Zlecenia publiczne (Biznes Polska) – synchronizacja 5× dziennie');
+  } catch (e) {
+    console.error('Nie udało się uruchomić schedulera zleceń publicznych:', e);
   }
 })
 .catch((err) => {

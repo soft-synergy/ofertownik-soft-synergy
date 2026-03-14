@@ -18,6 +18,7 @@ import Employees from './pages/Employees';
 import Activity from './pages/Activity';
 import Hosting from './pages/Hosting';
 import Clients from './pages/Clients';
+import ZleceniaPubliczne from './pages/ZleceniaPubliczne';
 import ClientPortal from './pages/ClientPortal';
 import Tasks from './pages/Tasks';
 import Layout from './components/Layout';
@@ -62,6 +63,7 @@ function AppContent() {
           <Route path="tasks" element={<Tasks />} />
           <Route path="activity" element={<Activity />} />
           <Route path="hosting" element={<Hosting />} />
+          <Route path="zlecenia-publiczne" element={<ZleceniaPubliczne />} />
           <Route path="clients" element={<Clients />} />
         </Route>
       </Route>

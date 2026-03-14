@@ -196,6 +196,13 @@ export const offersAPI = {
 
 }; 
 
+export const publicOrdersAPI = {
+  getAll: (params) => api.get('/api/public-orders', { params }).then(res => res.data),
+  getById: (id) => api.get(`/api/public-orders/${id}`).then(res => res.data),
+  sync: () => api.post('/api/public-orders/sync').then(res => res.data),
+  getConfigStatus: () => api.get('/api/public-orders/config/status').then(res => res.data),
+};
+
 export const activityAPI = {
   recent: () => api.get('/api/activities/recent').then(res => res.data),
 };

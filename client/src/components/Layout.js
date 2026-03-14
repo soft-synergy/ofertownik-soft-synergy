@@ -11,7 +11,8 @@ import {
   Server,
   LogOut,
   CheckSquare,
-  Wrench
+  Wrench,
+  FileCheck
 } from 'lucide-react';
 import SearchCommandPalette from './SearchCommandPalette';
 
@@ -51,6 +52,7 @@ const Layout = () => {
     navItems.push(
       { path: '/employees', label: t('nav.employees'), icon: Users },
       { path: '/hosting', label: t('nav.hosting'), icon: Server },
+      { path: '/zlecenia-publiczne', label: 'Zlecenia publiczne', icon: FileCheck },
       { path: '/clients', label: 'Klienci', icon: Users }
     );
   }
