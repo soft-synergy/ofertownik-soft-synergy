@@ -120,6 +120,18 @@ const ZleceniaPubliczne = () => {
     onError: (e) => toast.error(e.response?.data?.message || 'Błąd usuwania')
   });
 
+  const refreshDetailsMutation = useMutation(
+    (ids) => publicOrdersAPI.refreshDetails(ids),
+    {
+      onSuccess: (res) => {
+        toast.success(res.message || 'Szczegóły zaktualizowane');
+        queryClient.invalidateQueries('publicOrders');
+        if (selectedId) queryClient.invalidateQueries(['publicOrder', selectedId]);
+      },
+      onError: (e) => toast.error(e.response?.data?.message || 'Błąd odświeżania')
+    }
+  );
+
   const items = data?.items || [];
   const totalPages = data?.totalPages || 0;
   const total = data?.total || 0;
@@ -137,7 +149,7 @@ const ZleceniaPubliczne = () => {
   };
 
   const isAdmin = user?.role === 'admin';
-  const isBusy = syncMutation.isLoading || aiMutation.isLoading || resetMutation.isLoading || deleteAllMutation.isLoading;
+  const isBusy = syncMutation.isLoading || aiMutation.isLoading || resetMutation.isLoading || deleteAllMutation.isLoading || refreshDetailsMutation.isLoading;
 
   return (
     <div className="space-y-6">
@@ -190,6 +202,16 @@ const ZleceniaPubliczne = () => {
             >
               {deleteAllMutation.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
               Usuń wszystkie
+            </button>
+            <button
+              type="button"
+              onClick={() => refreshDetailsMutation.mutate(undefined)}
+              disabled={isBusy || total === 0}
+              title="Pobierz ponownie pełne opisy, organizatora, wymagania itd. z biznes-polska.pl"
+              className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            >
+              {refreshDetailsMutation.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              Odśwież szczegóły
             </button>
           </div>
         )}
@@ -438,6 +460,13 @@ function OrderDetailPopup({ id, onClose }) {
                 </div>
               )}
               <DetailRow label="Opis" value={data.description} pre />
+              <DetailRow label="Wymagania" value={data.requirements} pre />
+              {(data.submissionPlaceAndDeadline || data.submissionDeadline) && (
+                <div className="flex items-start gap-2">
+                  <Calendar className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
+                  <span>{data.submissionPlaceAndDeadline || (data.submissionDeadline ? `Termin składania: ${format(new Date(data.submissionDeadline), 'yyyy-MM-dd', { locale: pl })}` : '')}</span>
+                </div>
+              )}
               {data.placeAndTerm && (
                 <div className="flex items-start gap-2">
                   <Calendar className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />

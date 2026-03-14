@@ -1,7 +1,7 @@
 const express = require('express');
 const PublicOrder = require('../models/PublicOrder');
 const { auth, requireRole } = require('../middleware/auth');
-const { runSync, SEARCH_URL } = require('../services/biznesPolskaScraper');
+const { runSync, fetchOfferDetail, SEARCH_URL } = require('../services/biznesPolskaScraper');
 const { runAiAnalysis } = require('../services/aiOrderAnalyzer');
 
 const router = express.Router();
@@ -69,6 +69,69 @@ router.delete('/all', auth, requireRole(['admin']), async (req, res) => {
   } catch (e) {
     console.error('Public orders delete all error:', e);
     res.status(500).json({ message: 'Błąd usuwania zleceń' });
+  }
+});
+
+/** Ponowne pobranie szczegółów z biznes-polska.pl dla wybranych lub wszystkich zleceń (tylko admin). */
+router.post('/refresh-details', auth, requireRole(['admin']), async (req, res) => {
+  try {
+    const { ids } = req.body || {};
+    const filter = Array.isArray(ids) && ids.length > 0 ? { _id: { $in: ids } } : {};
+    const orders = await PublicOrder.find(filter).select('_id detailUrl').lean();
+    let updated = 0;
+    const errors = [];
+    for (const order of orders) {
+      if (!order.detailUrl) {
+        errors.push(`${order._id}: brak linku`);
+        continue;
+      }
+      try {
+        const detail = await fetchOfferDetail(order.detailUrl, undefined);
+        await PublicOrder.updateOne(
+          { _id: order._id },
+          {
+            $set: {
+              category: detail.category,
+              addedDate: detail.addedDate,
+              title: detail.title || '',
+              region: detail.region || '',
+              investor: detail.investor || '',
+              address: detail.address || '',
+              voivodeshipDistrict: detail.voivodeshipDistrict || '',
+              country: detail.country || '',
+              nip: detail.nip || '',
+              phoneFax: detail.phoneFax || '',
+              email: detail.email || '',
+              website: detail.website || '',
+              description: detail.description || '',
+              requirements: detail.requirements || '',
+              submissionPlaceAndDeadline: detail.submissionPlaceAndDeadline || '',
+              placeAndTerm: detail.placeAndTerm || '',
+              remarks: detail.remarks || '',
+              contact: detail.contact || '',
+              source: detail.source || '',
+              branches: detail.branches || [],
+              originalContentUrl: detail.originalContentUrl || '',
+              offerStatus: detail.offerStatus || '',
+              detailFullText: detail.detailFullText || '',
+              detailRawHtml: detail.detailRawHtml || ''
+            }
+          }
+        );
+        updated++;
+      } catch (e) {
+        errors.push(`${order._id}: ${e.message || String(e)}`);
+      }
+    }
+    res.json({
+      message: `Zaktualizowano szczegóły dla ${updated} z ${orders.length} zleceń.`,
+      updated,
+      total: orders.length,
+      errors: errors.length ? errors : undefined
+    });
+  } catch (e) {
+    console.error('Refresh details error:', e);
+    res.status(500).json({ message: e.message || 'Błąd odświeżania szczegółów' });
   }
 });
 

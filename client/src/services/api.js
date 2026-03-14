@@ -204,6 +204,7 @@ export const publicOrdersAPI = {
   aiAnalyze: (limit = 10) => api.post('/api/public-orders/ai-analyze', { limit }).then(res => res.data),
   aiReset: (ids) => api.post('/api/public-orders/ai-reset', { ids }).then(res => res.data),
   deleteAll: () => api.delete('/api/public-orders/all').then(res => res.data),
+  refreshDetails: (ids) => api.post('/api/public-orders/refresh-details', { ids }).then(res => res.data),
 };
 
 export const activityAPI = {

@@ -40,6 +40,10 @@ const publicOrderSchema = new mongoose.Schema({
   website: { type: String, trim: true },
   /** Opis */
   description: { type: String, trim: true },
+  /** Wymagania (warunki udziału itd.) */
+  requirements: { type: String, trim: true },
+  /** Miejsce i termin składania ofert */
+  submissionPlaceAndDeadline: { type: String, trim: true },
   /** Miejsce i termin realizacji */
   placeAndTerm: { type: String, trim: true },
   /** Uwagi */

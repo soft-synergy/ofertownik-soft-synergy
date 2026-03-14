@@ -143,6 +143,15 @@ async function fetchOfferDetail(detailUrl, cookies) {
     return out;
   };
 
+  /** Pierwsza niepusta wartość dla jednej z etykiet (np. Organizator lub Inwestor). */
+  const rawOneOf = (...labels) => {
+    for (const label of labels) {
+      const v = raw(label);
+      if (v && v.trim()) return v.trim();
+    }
+    return '';
+  };
+
   const idMatch = detailUrl.match(/,(\d+)\/?$/);
   const biznesPolskaId = idMatch ? idMatch[1] : '';
 
@@ -202,7 +211,7 @@ async function fetchOfferDetail(detailUrl, cookies) {
     title: raw('Przedmiot ogłoszenia').replace(/^\s*|\s*$/g, ''),
     detailUrl,
     region: raw('Województwo / powiat').split(',')[0].trim(),
-    investor: raw('Inwestor'),
+    investor: rawOneOf('Organizator', 'Inwestor'),
     address: raw('Adres'),
     voivodeshipDistrict: raw('Województwo / powiat'),
     country: raw('Państwo'),
@@ -211,6 +220,8 @@ async function fetchOfferDetail(detailUrl, cookies) {
     email: raw('E-mail'),
     website: raw('Strona www'),
     description: raw('Opis'),
+    requirements: raw('Wymagania'),
+    submissionPlaceAndDeadline: rawOneOf('Miejsce i termin składania ofert', 'Termin składania'),
     placeAndTerm: raw('Miejsce i termin realizacji'),
     remarks: raw('Uwagi'),
     contact: raw('Kontakt'),
@@ -297,6 +308,8 @@ async function runSync(cookies, options = {}) {
         email: detail.email,
         website: detail.website,
         description: detail.description,
+        requirements: detail.requirements,
+        submissionPlaceAndDeadline: detail.submissionPlaceAndDeadline,
         placeAndTerm: detail.placeAndTerm,
         remarks: detail.remarks,
         contact: detail.contact,
