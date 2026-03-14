@@ -1,7 +1,7 @@
 const express = require('express');
 const PublicOrder = require('../models/PublicOrder');
 const { auth, requireRole } = require('../middleware/auth');
-const { runSync, fetchOfferDetail, SEARCH_URL } = require('../services/biznesPolskaScraper');
+const { runSync, fetchOfferDetail, SEARCH_URL, BIZNES_POLSKA_COOKIES } = require('../services/biznesPolskaScraper');
 const { runAiAnalysis, deepAnalyzeOrder } = require('../services/aiOrderAnalyzer');
 
 const router = express.Router();
@@ -86,7 +86,7 @@ router.post('/refresh-details', auth, requireRole(['admin']), async (req, res) =
         continue;
       }
       try {
-        const detail = await fetchOfferDetail(order.detailUrl, undefined);
+        const detail = await fetchOfferDetail(order.detailUrl, process.env.BIZNES_POLSKA_COOKIES || BIZNES_POLSKA_COOKIES);
         await PublicOrder.updateOne(
           { _id: order._id },
           {

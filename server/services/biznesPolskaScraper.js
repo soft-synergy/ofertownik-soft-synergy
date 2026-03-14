@@ -4,8 +4,8 @@ const cheerio = require('cheerio');
 const BASE_URL = 'https://www.biznes-polska.pl';
 const SEARCH_PATH = '/wyszukiwarka/beyJjYXRlZ29yeSI6IFsxLCA3LCAyLCA4LCA0LCAzLCA5XSwgImNpdHkiOiAiIiwgInN0ZW1fdGV4dCI6IHRydWUsICJzdWJtaXNzaW9uX2RlYWRsaW5lX3Njb3BlIjogMSwgIm9mZmVyX3R5cGUiOiBbMV0sICJwcm9maWxlX2lkIjogIiIsICJkZXBvc2l0X3R5cGUiOiAxLCAidmFsdWUiOiAiIiwgIm9yZ2FuaXNlciI6ICIiLCAic3VibWlzc2lvbl9kZWFkbGluZV9kYXlzIjogIiIsICJ2YWx1ZV90eXBlIjogMSwgImxvY2F0aW9uIjogIiIsICJicmFuY2giOiBbIjE5NzIsMTk3OCIsICIxOTcyLDE5NzYiLCAiMjM2MCwxMjU0NzYxMSJdLCAiY3B2X2NvZGUiOiAiIiwgImJyYW5jaF9tYWluIjogdHJ1ZSwgImRlcG9zaXQiOiAiIn0%3D/';
 
-/** Cookies z subskrypcji biznes-polska.pl – w kodzie */
-const BIZNES_POLSKA_COOKIES = '__utmc=123207320; __utmz=123207320.1773406329.1.1.utmcsr=(direct)|utmccn=(direct)|utmcmd=(none); _gcl_au=1.1.2056477190.1773406329; CookieConsent={stamp:%27-1%27%2Cnecessary:true%2Cpreferences:true%2Cstatistics:true%2Cmarketing:true%2Cmethod:%27implied%27%2Cver:1%2Cutc:1773406331342%2Cregion:%27VN%27}; _ga=GA1.1.425820818.1773406330; timedPopupShowed=true; __utma=123207320.2108299888.1773406329.1773406329.1773455295.2; __utmt=1; __utmb=123207320.2.10.1773455295; _ga_CZRV7LJQEM=GS2.1.s1773455295$o2$g1$t1773455532$j60$l0$h0';
+/** Cookies z subskrypcji biznes-polska.pl – na sztywno (wymagane do pobrania opisu i wymagań) */
+const BIZNES_POLSKA_COOKIES = 'source_subscription=adw-konwersja; _gcl_aw=GCL.1773407841.CjwKCAjw687NBhB4EiwAQ645dq8ocN8DBp69wVFcUr8q0EsOyI60bvOu60gRaute7rbO8hVcgf8lXBoCHQ4QAvD_BwE; _gcl_gs=2.1.k1$i1773407808$u123207320; __utmc=123207320; __utmz=123207320.1773407841.1.1.utmgclid=CjwKCAjw687NBhB4EiwAQ645dq8ocN8DBp69wVFcUr8q0EsOyI60bvOu60gRaute7rbO8hVcgf8lXBoCHQ4QAvD_BwE|utmccn=(not%20set)|utmcmd=(not%20set)|utmctr=(not%20provided); _gac_UA-12962180-1=1.1773407841.CjwKCAjw687NBhB4EiwAQ645dq8ocN8DBp69wVFcUr8q0EsOyI60bvOu60gRaute7rbO8hVcgf8lXBoCHQ4QAvD_BwE; CookieConsent={stamp:%27-1%27%2Cnecessary:true%2Cpreferences:true%2Cstatistics:true%2Cmarketing:true%2Cmethod:%27implied%27%2Cver:1%2Cutc:1773407841657%2Cregion:%27VN%27}; _ga=GA1.1.265139833.1773407841; _gcl_au=1.1.2041128461.1773407841.2046683477.1773407924.1773407939; przetargi=39c6aadc41621bd47a4bbd93e557f2133229d6e0d76554301b60fda41edee90755fd1a5f; __utma=123207320.1402870305.1773407841.1773461408.1773468740.4; _ga_CZRV7LJQEM=GS2.1.s1773468124$o5$g1$t1773471814$j60$l0$h0';
 
 function getCookieHeader(cookies) {
   const s = (cookies != null && typeof cookies === 'string') ? cookies.trim() : BIZNES_POLSKA_COOKIES;
@@ -157,6 +157,17 @@ async function fetchOfferDetail(detailUrl, cookies) {
 
   const branches = [];
   $('.offer-header .popup .inner ul li a').each((_, el) => { branches.push($(el).text().trim()); });
+  if (!branches.length) {
+    $('article.offer-sheet table tr').each((_, tr) => {
+      const thText = normalizeLabel($(tr).find('th').text());
+      if (thText === 'Branże') {
+        $(tr).find('td ul li').each((_, li) => {
+          const t = $(li).text().trim();
+          if (t) branches.push(t);
+        });
+      }
+    });
+  }
 
   let originalContentUrl = '';
   $('section.associations a.full-offer.ajax').each((_, el) => {
@@ -198,6 +209,15 @@ async function fetchOfferDetail(detailUrl, cookies) {
     const fallback = $('article.offer-sheet').text() || $('#main').text() || $('body').text();
     detailFullText = (fallback || '').trim().replace(/\s+/g, ' ');
   }
+  // Zawsze dołącz pełny Opis i Wymagania na końcu – kluczowe dla AI
+  const opisFull = raw('Opis');
+  const wymaganiaFull = raw('Wymagania');
+  if (opisFull && opisFull.trim()) {
+    detailFullText += '\n\n--- OPIS (pełny) ---\n' + opisFull.trim();
+  }
+  if (wymaganiaFull && wymaganiaFull.trim()) {
+    detailFullText += '\n\n--- WYMAGANIA (pełne) ---\n' + wymaganiaFull.trim();
+  }
 
   // Surowy HTML całej sekcji ogłoszenia + powiązania – nic nie pominięte
   let detailRawHtml = ($('article.offer-sheet').html() || '').trim();
@@ -216,7 +236,7 @@ async function fetchOfferDetail(detailUrl, cookies) {
     addedDate,
     title: raw('Przedmiot ogłoszenia').replace(/^\s*|\s*$/g, ''),
     detailUrl,
-    region: raw('Województwo / powiat').split(',')[0].trim(),
+    region: (rawOneOf('Województwo / powiat', 'Województwo')).split(',')[0].trim(),
     investor: rawOneOf('Organizator', 'Inwestor'),
     address: raw('Adres'),
     voivodeshipDistrict: raw('Województwo / powiat'),

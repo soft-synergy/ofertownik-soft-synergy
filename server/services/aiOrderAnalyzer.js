@@ -53,13 +53,14 @@ async function batchFilter(orders) {
   const ordersSummary = orders.map((o) => ({
     id: o.biznesPolskaId || o._id.toString(),
     title: (o.title || '').slice(0, 300),
-    description: (o.description || o.detailFullText || '').slice(0, 500),
+    description: (o.description || '').trim().slice(0, 800),
+    requirements: (o.requirements || '').trim().slice(0, 800),
     category: o.category || '',
     investor: (o.investor || '').slice(0, 150),
     branches: (o.branches || []).join(', ')
   }));
 
-  const userMessage = `Oto lista ${ordersSummary.length} zamówień publicznych. Dla KAŻDEGO oceń, czy nasza firma mogłaby je realizować (relevant=true) czy NIE (relevant=false).
+  const userMessage = `Oto lista ${ordersSummary.length} zamówień publicznych. Dla KAŻDEGO masz: title, description (OPIS), requirements (WYMAGANIA), investor, branches. Na tej podstawie oceń, czy nasza firma mogłaby je realizować (relevant=true) czy NIE (relevant=false).
 
 Zamówienia:
 ${JSON.stringify(ordersSummary, null, 0)}
@@ -114,8 +115,16 @@ async function scoreOrder(order, options = {}) {
     ? fullPageHtmlOverride.trim().slice(0, MAX_HTML_CHARS)
     : '';
   const fallbackText = (fullTextOverride || order.detailFullText || '').trim().slice(0, 14000);
+  const opis = (order.description || '').trim();
+  const wymagania = (order.requirements || '').trim();
   const textFallback = !hasFullHtml
-    ? `Tytuł: ${order.title}\nOpis: ${order.description || ''}\nUwagi: ${order.remarks || ''}\nKontakt: ${order.contact || ''}\nInwestor: ${order.investor || ''}\nBranże: ${(order.branches || []).join(', ')}`
+    ? `Tytuł: ${order.title}
+Opis: ${opis || '(brak)'}
+Wymagania: ${wymagania || '(brak)'}
+Uwagi: ${order.remarks || ''}
+Kontakt: ${order.contact || ''}
+Inwestor: ${order.investor || ''}
+Branże: ${(order.branches || []).join(', ')}`
     : '';
 
   const userMessage = `Przeanalizuj to zamówienie publiczne i oceń w skali 1-10:
@@ -140,7 +149,13 @@ Kategoria: ${order.category || ''}
 Województwo: ${order.region || ''}
 Inwestor/Zamawiający: ${order.investor || ''}
 
-Treść:
+--- OPIS (kluczowy) ---
+${opis || '(brak)'}
+
+--- WYMAGANIA (kluczowe) ---
+${wymagania || '(brak)'}
+
+--- Pełna treść ---
 ${fallbackText || textFallback}`}
 
 Odpowiedz WYŁĄCZNIE poprawnym JSON:
@@ -207,8 +222,25 @@ async function deepAnalyzeOrder(order, options = {}) {
   }
 
   const htmlContent = pageHtml.slice(0, MAX_HTML_CHARS);
+  const opis = (order.description || '').trim();
+  const wymagania = (order.requirements || '').trim();
   const fallbackContent = !htmlContent.trim()
-    ? `Tytuł: ${order.title || ''}\nOpis: ${order.description || ''}\nWymagania: ${order.requirements || ''}\nUwagi: ${order.remarks || ''}\nKontakt: ${order.contact || ''}\nOrganizator: ${order.investor || ''}\nBranże: ${(order.branches || []).join(', ')}\nTermin: ${order.submissionPlaceAndDeadline || ''}\nPełna treść:\n${(order.detailFullText || '').slice(0, 20000)}`
+    ? `Tytuł: ${order.title || ''}
+
+--- OPIS (pełny) ---
+${opis || '(brak)'}
+
+--- WYMAGANIA (pełne) ---
+${wymagania || '(brak)'}
+
+Uwagi: ${order.remarks || ''}
+Kontakt: ${order.contact || ''}
+Organizator: ${order.investor || ''}
+Branże: ${(order.branches || []).join(', ')}
+Termin: ${order.submissionPlaceAndDeadline || ''}
+
+--- Pełna treść (detailFullText) ---
+${(order.detailFullText || '').slice(0, 20000)}`
     : '';
 
   const systemPrompt = `Jesteś seniorem konsultantem zamówień publicznych w Polsce z 20-letnim doświadczeniem. Pracujesz dla firmy web-designowej i pomagasz przygotowywać oferty na przetargi, zlecenia i zamówienia publiczne.
@@ -239,13 +271,21 @@ Odpowiedz WYŁĄCZNIE poprawnym JSON (bez markdown, bez bloków kodu), w struktu
   "offerDraft": "Pełny DRAFT oferty handlowej (min. 300 słów) zgodny z wymaganiami zamawiającego. Zawiera: dane oferenta [DO UZUPEŁNIENIA], odniesienie do nr ogłoszenia, przedmiot oferty, proponowane podejście/metodologię, harmonogram, cenę [DO UZUPEŁNIENIA], oświadczenia wymagane przez zamawiającego, podpis [DO UZUPEŁNIENIA]. Draft powinien być gotowy do edycji przez człowieka – miejsca do uzupełnienia oznacz [DO UZUPEŁNIENIA]."
 }`;
 
+  const opisForDeep = (order.description || '').trim();
+  const wymaganiaForDeep = (order.requirements || '').trim();
   const userMessage = hasContentForDeep(htmlContent)
-    ? `Przeanalizuj dogłębnie to zamówienie publiczne. Poniżej cała strona HTML z biznes-polska.pl:
+    ? `Przeanalizuj dogłębnie to zamówienie publiczne. Poniżej wyciągnięte z bazy OPIS i WYMAGANIA (kluczowe), a potem cała strona HTML z biznes-polska.pl.
 
 ID: ${order.biznesPolskaId}
 URL: ${order.detailUrl || ''}
 Poprzednia ocena AI: ${order.aiScore || '?'}/10
 Poprzednia analiza AI: ${order.aiAnalysis || 'brak'}
+
+--- OPIS (z bazy – pełny) ---
+${opisForDeep || '(brak)'}
+
+--- WYMAGANIA (z bazy – pełne) ---
+${wymaganiaForDeep || '(brak)'}
 
 --- POCZĄTEK HTML STRONY ---
 ${htmlContent}
