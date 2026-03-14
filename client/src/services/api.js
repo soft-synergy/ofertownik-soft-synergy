@@ -205,6 +205,7 @@ export const publicOrdersAPI = {
   aiReset: (ids) => api.post('/api/public-orders/ai-reset', { ids }).then(res => res.data),
   deleteAll: () => api.delete('/api/public-orders/all').then(res => res.data),
   refreshDetails: (ids) => api.post('/api/public-orders/refresh-details', { ids }).then(res => res.data),
+  deepAnalyze: (id) => api.post(`/api/public-orders/deep-analyze/${id}`).then(res => res.data),
 };
 
 export const activityAPI = {

@@ -2,7 +2,7 @@ const express = require('express');
 const PublicOrder = require('../models/PublicOrder');
 const { auth, requireRole } = require('../middleware/auth');
 const { runSync, fetchOfferDetail, SEARCH_URL } = require('../services/biznesPolskaScraper');
-const { runAiAnalysis } = require('../services/aiOrderAnalyzer');
+const { runAiAnalysis, deepAnalyzeOrder } = require('../services/aiOrderAnalyzer');
 
 const router = express.Router();
 
@@ -180,13 +180,35 @@ router.post('/sync', auth, requireRole(['admin']), async (req, res) => {
   }
 });
 
+/** Ręczna głęboka analiza AI dla jednego zlecenia (Sonnet). Tylko admin. */
+router.post('/deep-analyze/:id', auth, requireRole(['admin']), async (req, res) => {
+  try {
+    const order = await PublicOrder.findById(req.params.id).lean();
+    if (!order) return res.status(404).json({ message: 'Nie znaleziono zlecenia' });
+
+    const result = await deepAnalyzeOrder(order);
+    await PublicOrder.findByIdAndUpdate(order._id, {
+      aiDeepAnalysis: result,
+      aiDeepAnalyzedAt: new Date()
+    });
+
+    res.json({
+      message: 'Głęboka analiza zakończona',
+      deepAnalysis: result
+    });
+  } catch (e) {
+    console.error('Deep analyze error:', e);
+    res.status(500).json({ message: e.message || 'Błąd głębokiej analizy AI' });
+  }
+});
+
 /** Uruchom analizę AI dla ostatnich N zleceń (domyślnie 10). Tylko admin. */
 router.post('/ai-analyze', auth, requireRole(['admin']), async (req, res) => {
   try {
     const limit = Math.min(200, Math.max(1, parseInt(req.body.limit, 10) || 10));
     const stats = await runAiAnalysis({ limit, batchSize: 20 });
     res.json({
-      message: `AI: przefiltrowano ${stats.filtered}, odrzucono ${stats.rejected}, kandydatów ${stats.candidates}, ocenionych ${stats.scored}`,
+      message: `AI: przefiltrowano ${stats.filtered}, odrzucono ${stats.rejected}, kandydatów ${stats.candidates}, ocenionych ${stats.scored}, głęboko: ${stats.deepAnalyzed || 0}`,
       ...stats
     });
   } catch (e) {

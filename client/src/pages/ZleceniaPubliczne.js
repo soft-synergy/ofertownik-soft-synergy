@@ -16,7 +16,14 @@ import {
   Loader2,
   Sparkles,
   RotateCcw,
-  Trash2
+  Trash2,
+  FileText,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  ClipboardList,
+  Target,
+  BrainCircuit
 } from 'lucide-react';
 
 const AI_STATUS_CONFIG = {
@@ -294,7 +301,12 @@ const ZleceniaPubliczne = () => {
                   {items.map((row) => (
                     <tr key={row._id} className={`hover:bg-gray-50/50 ${rowBgClass(row)}`}>
                       <td className="px-3 py-3">
-                        <AiBadge status={row.aiStatus} score={row.aiScore} />
+                        <div className="flex items-center gap-1.5">
+                          <AiBadge status={row.aiStatus} score={row.aiScore} />
+                          {row.aiDeepAnalysis && !row.aiDeepAnalysis.error && (
+                            <span title="Głęboka analiza dostępna"><BrainCircuit className="h-4 w-4 text-violet-500" /></span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-3">
                         <ScoreBar score={row.aiScore} />
@@ -391,111 +403,374 @@ function StatCard({ label, count, color }) {
 }
 
 function OrderDetailPopup({ id, onClose }) {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState('info');
+
   const { data, isLoading } = useQuery(
     ['publicOrder', id],
     () => publicOrdersAPI.getById(id),
     { enabled: !!id }
   );
 
+  const deepMutation = useMutation(
+    () => publicOrdersAPI.deepAnalyze(id),
+    {
+      onSuccess: () => {
+        toast.success('Głęboka analiza zakończona');
+        queryClient.invalidateQueries(['publicOrder', id]);
+      },
+      onError: (e) => toast.error(e.response?.data?.message || 'Błąd analizy')
+    }
+  );
+
   if (!id) return null;
+
+  const deep = data?.aiDeepAnalysis;
+  const hasDeep = deep && deep.summary && !deep.error;
+  const isAdmin = user?.role === 'admin';
+  const canDeepAnalyze = isAdmin && data?.aiScore >= 5;
+
+  const tabs = [
+    { key: 'info', label: 'Informacje' },
+    ...(hasDeep ? [
+      { key: 'analysis', label: 'Analiza' },
+      { key: 'actions', label: 'Kroki' },
+      { key: 'draft', label: 'Draft oferty' },
+    ] : [])
+  ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
       <div
-        className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+        className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h2 className="text-lg font-semibold text-gray-900">Szczegóły zlecenia</h2>
-            {data && <AiBadge status={data.aiStatus} score={data.aiScore} />}
+        {/* Header */}
+        <div className="p-4 border-b border-gray-200">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <h2 className="text-lg font-semibold text-gray-900 truncate">{data?.title || 'Szczegóły zlecenia'}</h2>
+              {data && <AiBadge status={data.aiStatus} score={data.aiScore} />}
+              {hasDeep && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-violet-50 text-violet-700">
+                  <BrainCircuit className="h-3 w-3" /> Deep Analysis
+                </span>
+              )}
+            </div>
+            <button type="button" onClick={onClose} className="text-gray-500 hover:text-gray-700 text-xl leading-none ml-2 shrink-0">&times;</button>
           </div>
-          <button type="button" onClick={onClose} className="text-gray-500 hover:text-gray-700 text-xl leading-none">&times;</button>
+          {/* Tab bar */}
+          <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
+            {tabs.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key)}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  activeTab === tab.key
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
+
+        {/* Content */}
         <div className="p-4 overflow-y-auto flex-1">
           {isLoading ? (
             <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-primary-600" /></div>
           ) : !data ? (
             <p className="text-gray-500">Brak danych.</p>
           ) : (
-            <div className="space-y-4 text-sm">
-              {/* AI section */}
-              {data.aiStatus && data.aiStatus !== 'pending' && (
-                <div className={`rounded-lg p-3 ${
-                  data.aiStatus === 'rejected' ? 'bg-red-50 border border-red-200' :
-                  data.aiStatus === 'scored' ? 'bg-emerald-50 border border-emerald-200' :
-                  'bg-orange-50 border border-orange-200'
-                }`}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-semibold flex items-center gap-1.5">
-                      <Sparkles className="h-4 w-4" /> Analiza AI
-                    </span>
-                    {data.aiScore != null && <ScoreBar score={data.aiScore} />}
-                  </div>
-                  {data.aiAnalysis && <p className="text-sm">{data.aiAnalysis}</p>}
-                  {data.aiRejectionReason && <p className="text-sm text-red-600">{data.aiRejectionReason}</p>}
+            <>
+              {/* ──── TAB: Informacje ──── */}
+              {activeTab === 'info' && (
+                <div className="space-y-4 text-sm">
+                  {data.aiStatus && data.aiStatus !== 'pending' && (
+                    <div className={`rounded-lg p-3 ${
+                      data.aiStatus === 'rejected' ? 'bg-red-50 border border-red-200' :
+                      data.aiStatus === 'scored' ? 'bg-emerald-50 border border-emerald-200' :
+                      'bg-orange-50 border border-orange-200'
+                    }`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-semibold flex items-center gap-1.5">
+                          <Sparkles className="h-4 w-4" /> Ocena AI
+                        </span>
+                        {data.aiScore != null && <ScoreBar score={data.aiScore} />}
+                      </div>
+                      {data.aiAnalysis && <p className="text-sm">{data.aiAnalysis}</p>}
+                      {data.aiRejectionReason && <p className="text-sm text-red-600">{data.aiRejectionReason}</p>}
+                    </div>
+                  )}
+
+                  {/* Deep analysis trigger */}
+                  {canDeepAnalyze && !hasDeep && (
+                    <button
+                      type="button"
+                      onClick={() => deepMutation.mutate()}
+                      disabled={deepMutation.isLoading}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-50 text-sm font-medium"
+                    >
+                      {deepMutation.isLoading
+                        ? <><Loader2 className="h-4 w-4 animate-spin" /> Analizuję z Sonnet (może potrwać ~30s)...</>
+                        : <><BrainCircuit className="h-4 w-4" /> Uruchom głęboką analizę AI</>
+                      }
+                    </button>
+                  )}
+
+                  {/* Deep summary preview */}
+                  {hasDeep && (
+                    <div className="bg-violet-50 border border-violet-200 rounded-lg p-4">
+                      <div className="flex items-start gap-2 mb-2">
+                        <BrainCircuit className="h-5 w-5 text-violet-600 mt-0.5 shrink-0" />
+                        <div>
+                          <p className="font-semibold text-violet-900 text-sm">Głęboka analiza AI (Sonnet)</p>
+                          <p className="text-sm text-violet-800 mt-1">{deep.summary}</p>
+                        </div>
+                      </div>
+                      {deep.recommendation && (
+                        <p className="text-sm text-violet-700 mt-2 font-medium border-t border-violet-200 pt-2">
+                          Rekomendacja: {deep.recommendation}
+                        </p>
+                      )}
+                      <p className="text-xs text-violet-400 mt-2">Przełącz na zakładki „Analiza", „Kroki", „Draft oferty" po więcej.</p>
+                    </div>
+                  )}
+
+                  <DetailRow label="Przedmiot" value={data.title} />
+                  <DetailRow label="Zamawiający" value={data.investor} />
+                  {data.address && (
+                    <div className="flex items-start gap-2">
+                      <MapPin className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
+                      <span>{data.address}</span>
+                    </div>
+                  )}
+                  <DetailRow label="Województwo / powiat" value={data.voivodeshipDistrict || data.region} />
+                  {data.email && (
+                    <div>
+                      <span className="font-medium text-gray-500">E-mail:</span>
+                      <a href={`mailto:${data.email}`} className="mt-1 text-primary-600 hover:underline block">{data.email}</a>
+                    </div>
+                  )}
+                  <DetailRow label="Telefon / fax" value={data.phoneFax} />
+                  {data.website && (
+                    <div>
+                      <span className="font-medium text-gray-500">Strona www:</span>
+                      <a href={data.website} target="_blank" rel="noopener noreferrer" className="mt-1 text-primary-600 hover:underline block">{data.website}</a>
+                    </div>
+                  )}
+                  <DetailRow label="Opis" value={data.description} pre />
+                  <DetailRow label="Wymagania" value={data.requirements} pre />
+                  {(data.submissionPlaceAndDeadline || data.submissionDeadline) && (
+                    <div className="flex items-start gap-2">
+                      <Calendar className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
+                      <span>{data.submissionPlaceAndDeadline || (data.submissionDeadline ? `Termin składania: ${format(new Date(data.submissionDeadline), 'yyyy-MM-dd', { locale: pl })}` : '')}</span>
+                    </div>
+                  )}
+                  {data.placeAndTerm && (
+                    <div className="flex items-start gap-2">
+                      <Calendar className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
+                      <span>{data.placeAndTerm}</span>
+                    </div>
+                  )}
+                  <DetailRow label="Uwagi" value={data.remarks} pre />
+                  <DetailRow label="Kontakt" value={data.contact} pre />
+                  {data.detailUrl && (
+                    <a
+                      href={data.detailUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 text-primary-600 hover:underline"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      Otwórz na biznes-polska.pl
+                    </a>
+                  )}
                 </div>
               )}
 
-              <DetailRow label="Przedmiot" value={data.title} />
-              <DetailRow label="Zamawiający" value={data.investor} />
-              {data.address && (
-                <div className="flex items-start gap-2">
-                  <MapPin className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
-                  <span>{data.address}</span>
+              {/* ──── TAB: Analiza ──── */}
+              {activeTab === 'analysis' && hasDeep && (
+                <div className="space-y-6 text-sm">
+                  {/* Podsumowanie */}
+                  <DeepSection icon={Target} title="Podsumowanie" color="violet">
+                    <p>{deep.summary}</p>
+                  </DeepSection>
+
+                  {/* Zakres prac */}
+                  {deep.scope?.length > 0 && (
+                    <DeepSection icon={ClipboardList} title="Zakres prac" color="blue">
+                      <ul className="space-y-1.5">
+                        {deep.scope.map((item, i) => (
+                          <li key={i} className="flex items-start gap-2">
+                            <CheckCircle2 className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </DeepSection>
+                  )}
+
+                  {/* Kryteria oceny */}
+                  {deep.evaluationCriteria?.length > 0 && (
+                    <DeepSection icon={Target} title="Kryteria oceny ofert" color="amber">
+                      <div className="space-y-2">
+                        {deep.evaluationCriteria.map((c, i) => (
+                          <div key={i} className="flex items-start gap-3">
+                            <span className="font-bold text-amber-700 shrink-0 w-12 text-right">{c.weight}</span>
+                            <div>
+                              <span className="font-medium">{c.criterion}</span>
+                              {c.description && <p className="text-gray-500 text-xs mt-0.5">{c.description}</p>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </DeepSection>
+                  )}
+
+                  {/* Trudności */}
+                  {deep.potentialDifficulties?.length > 0 && (
+                    <DeepSection icon={AlertTriangle} title="Potencjalne trudności" color="red">
+                      <ul className="space-y-1.5">
+                        {deep.potentialDifficulties.map((item, i) => (
+                          <li key={i} className="flex items-start gap-2">
+                            <AlertTriangle className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </DeepSection>
+                  )}
+
+                  {/* Terminy */}
+                  {deep.deadlines?.length > 0 && (
+                    <DeepSection icon={Clock} title="Kluczowe terminy" color="orange">
+                      <div className="space-y-1.5">
+                        {deep.deadlines.map((d, i) => (
+                          <div key={i} className="flex items-center gap-3">
+                            <span className="font-mono text-xs bg-orange-100 text-orange-800 px-2 py-0.5 rounded shrink-0">{d.date}</span>
+                            <span>{d.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </DeepSection>
+                  )}
+
+                  {/* Szacowana wartość */}
+                  {deep.estimatedValue && (
+                    <DeepSection icon={FileText} title="Szacowana wartość" color="green">
+                      <p className="font-semibold text-green-800">{deep.estimatedValue}</p>
+                    </DeepSection>
+                  )}
+
+                  {/* Kontakt */}
+                  {deep.keyContacts && (
+                    <DeepSection icon={MapPin} title="Kontakt" color="gray">
+                      <p className="whitespace-pre-wrap">{deep.keyContacts}</p>
+                    </DeepSection>
+                  )}
+
+                  {/* Rekomendacja */}
+                  {deep.recommendation && (
+                    <div className="bg-violet-50 border-2 border-violet-300 rounded-lg p-4">
+                      <p className="font-semibold text-violet-900 flex items-center gap-2 mb-1">
+                        <BrainCircuit className="h-5 w-5" /> Rekomendacja
+                      </p>
+                      <p className="text-violet-800">{deep.recommendation}</p>
+                    </div>
+                  )}
                 </div>
               )}
-              <DetailRow label="Województwo / powiat" value={data.voivodeshipDistrict || data.region} />
-              {data.email && (
-                <div>
-                  <span className="font-medium text-gray-500">E-mail:</span>
-                  <a href={`mailto:${data.email}`} className="mt-1 text-primary-600 hover:underline block">{data.email}</a>
+
+              {/* ──── TAB: Kroki do złożenia oferty ──── */}
+              {activeTab === 'actions' && hasDeep && (
+                <div className="space-y-6 text-sm">
+                  {deep.requiredActions?.length > 0 && (
+                    <DeepSection icon={CheckCircle2} title="Kroki do złożenia oferty" color="emerald">
+                      <ol className="space-y-3">
+                        {deep.requiredActions.map((item, i) => (
+                          <li key={i} className="flex items-start gap-3">
+                            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold shrink-0 mt-0.5">{i + 1}</span>
+                            <span className="leading-relaxed">{item}</span>
+                          </li>
+                        ))}
+                      </ol>
+                    </DeepSection>
+                  )}
+
+                  {deep.requiredDocuments?.length > 0 && (
+                    <DeepSection icon={FileText} title="Wymagane dokumenty" color="blue">
+                      <ul className="space-y-1.5">
+                        {deep.requiredDocuments.map((item, i) => (
+                          <li key={i} className="flex items-start gap-2">
+                            <FileText className="h-4 w-4 text-blue-400 mt-0.5 shrink-0" />
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </DeepSection>
+                  )}
                 </div>
               )}
-              <DetailRow label="Telefon / fax" value={data.phoneFax} />
-              {data.website && (
-                <div>
-                  <span className="font-medium text-gray-500">Strona www:</span>
-                  <a href={data.website} target="_blank" rel="noopener noreferrer" className="mt-1 text-primary-600 hover:underline block">{data.website}</a>
+
+              {/* ──── TAB: Draft oferty ──── */}
+              {activeTab === 'draft' && hasDeep && (
+                <div className="space-y-4 text-sm">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-gray-500">Miejsca oznaczone [DO UZUPEŁNIENIA] wymagają edycji przed wysłaniem.</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(deep.offerDraft || '');
+                        toast.success('Skopiowano draft oferty');
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-700 font-medium"
+                    >
+                      <ClipboardList className="h-3.5 w-3.5" />
+                      Kopiuj do schowka
+                    </button>
+                  </div>
+                  <div className="bg-white border-2 border-gray-200 rounded-lg p-6">
+                    <pre className="whitespace-pre-wrap text-sm text-gray-800 leading-relaxed font-sans">
+                      {(deep.offerDraft || '').replace(/\[DO UZUPEŁNIENIA\]/g, '⬜ [DO UZUPEŁNIENIA]')}
+                    </pre>
+                  </div>
                 </div>
               )}
-              <DetailRow label="Opis" value={data.description} pre />
-              <DetailRow label="Wymagania" value={data.requirements} pre />
-              {(data.submissionPlaceAndDeadline || data.submissionDeadline) && (
-                <div className="flex items-start gap-2">
-                  <Calendar className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
-                  <span>{data.submissionPlaceAndDeadline || (data.submissionDeadline ? `Termin składania: ${format(new Date(data.submissionDeadline), 'yyyy-MM-dd', { locale: pl })}` : '')}</span>
-                </div>
-              )}
-              {data.placeAndTerm && (
-                <div className="flex items-start gap-2">
-                  <Calendar className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
-                  <span>{data.placeAndTerm}</span>
-                </div>
-              )}
-              <DetailRow label="Uwagi" value={data.remarks} pre />
-              <DetailRow label="Kontakt" value={data.contact} pre />
-              {data.detailFullText && (
-                <div className="border-t border-gray-200 pt-4 mt-4">
-                  <span className="font-medium text-gray-500">Pełna treść (do oceny AI):</span>
-                  <pre className="mt-2 p-3 bg-gray-50 rounded-lg text-xs text-gray-800 whitespace-pre-wrap overflow-x-auto max-h-64 overflow-y-auto">{data.detailFullText}</pre>
-                </div>
-              )}
-              {data.detailUrl && (
-                <a
-                  href={data.detailUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-primary-600 hover:underline"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  Otwórz na biznes-polska.pl
-                </a>
-              )}
-            </div>
+            </>
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function DeepSection({ icon: Icon, title, color, children }) {
+  const colorMap = {
+    violet: 'border-violet-200 bg-violet-50/50',
+    blue: 'border-blue-200 bg-blue-50/50',
+    emerald: 'border-emerald-200 bg-emerald-50/50',
+    red: 'border-red-200 bg-red-50/50',
+    orange: 'border-orange-200 bg-orange-50/50',
+    amber: 'border-amber-200 bg-amber-50/50',
+    green: 'border-green-200 bg-green-50/50',
+    gray: 'border-gray-200 bg-gray-50/50',
+  };
+  const iconColorMap = {
+    violet: 'text-violet-600', blue: 'text-blue-600', emerald: 'text-emerald-600',
+    red: 'text-red-600', orange: 'text-orange-600', amber: 'text-amber-600',
+    green: 'text-green-600', gray: 'text-gray-600',
+  };
+  return (
+    <div className={`border rounded-lg p-4 ${colorMap[color] || colorMap.gray}`}>
+      <p className={`font-semibold flex items-center gap-2 mb-3 ${iconColorMap[color] || 'text-gray-700'}`}>
+        <Icon className="h-5 w-5" /> {title}
+      </p>
+      {children}
     </div>
   );
 }

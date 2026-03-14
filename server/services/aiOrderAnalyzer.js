@@ -180,6 +180,135 @@ Odpowiadaj TYLKO JSON, bez markdown.`,
 }
 
 // ───────────────────────────────────────────────────────────────
+// FAZA 3 – Deep Analysis (Sonnet – ~$0.03-0.05/zlecenie, TYLKO score ≥ 5)
+//   Pobiera cały HTML strony, wysyła do Sonnet z promptem do:
+//   - analizy zakresu prac
+//   - listy kroków do złożenia oferty
+//   - wymaganych dokumentów
+//   - trudności / ryzyk
+//   - draftu oferty zgodnej z wymogami urzędowymi
+// ───────────────────────────────────────────────────────────────
+
+const DEEP_ANALYSIS_MIN_SCORE = 5;
+
+async function deepAnalyzeOrder(order, options = {}) {
+  const client = getClient();
+  const { rawPageHtml } = options;
+
+  let pageHtml = rawPageHtml || '';
+  if (!pageHtml && order.detailUrl) {
+    const cookies = process.env.BIZNES_POLSKA_COOKIES || BIZNES_POLSKA_COOKIES;
+    try {
+      const fresh = await fetchOfferDetail(order.detailUrl, cookies);
+      pageHtml = (fresh.rawPageHtml || '').trim();
+    } catch (e) {
+      console.error(`[deepAnalyze] Fetch failed for ${order.biznesPolskaId}:`, e.message);
+    }
+  }
+
+  const htmlContent = pageHtml.slice(0, MAX_HTML_CHARS);
+  const fallbackContent = !htmlContent.trim()
+    ? `Tytuł: ${order.title || ''}\nOpis: ${order.description || ''}\nWymagania: ${order.requirements || ''}\nUwagi: ${order.remarks || ''}\nKontakt: ${order.contact || ''}\nOrganizator: ${order.investor || ''}\nBranże: ${(order.branches || []).join(', ')}\nTermin: ${order.submissionPlaceAndDeadline || ''}\nPełna treść:\n${(order.detailFullText || '').slice(0, 20000)}`
+    : '';
+
+  const systemPrompt = `Jesteś seniorem konsultantem zamówień publicznych w Polsce z 20-letnim doświadczeniem. Pracujesz dla firmy web-designowej i pomagasz przygotowywać oferty na przetargi, zlecenia i zamówienia publiczne.
+
+${COMPANY_PROFILE}
+
+Twoje zadanie: na podstawie PEŁNEGO HTML strony ogłoszenia z biznes-polska.pl przeprowadzić dogłębną analizę zamówienia i przygotować materiały dla osoby decyzyjnej, tak żeby miała czarno na białym co trzeba zrobić.
+
+WAŻNE:
+- Pisz po polsku, profesjonalnie, konkretnie, bez lania wody
+- Wyciągnij WSZYSTKIE informacje ze strony HTML (tabele, opisy, wymagania, załączniki, terminy, kryteria, kody CPV)
+- Jeśli w HTML są linki do zewnętrznych źródeł (np. bazakonkurencyjnosci.funduszeeuropejskie.gov.pl) – zanotuj je
+- Draft oferty musi być zgodny z polskim prawem zamówień publicznych (PZP) i wymogami zamawiającego
+- Bądź szczery co do trudności – nie upiększaj
+
+Odpowiedz WYŁĄCZNIE poprawnym JSON (bez markdown, bez bloków kodu), w strukturze:
+{
+  "summary": "2-3 zdania: co to za zamówienie, kto zamawiający, czego szuka",
+  "scope": ["punkt 1: konkretna czynność do wykonania", "punkt 2: ...", "..."],
+  "requiredActions": ["krok 1: co zrobić żeby złożyć ofertę", "krok 2: ...", "..."],
+  "requiredDocuments": ["dokument 1", "dokument 2", "..."],
+  "deadlines": [{"label": "opis terminu", "date": "YYYY-MM-DD lub tekst"}, ...],
+  "evaluationCriteria": [{"criterion": "nazwa kryterium", "weight": "waga %", "description": "jak jest oceniane"}],
+  "potentialDifficulties": ["trudność 1", "trudność 2", "..."],
+  "estimatedValue": "szacowana wartość zamówienia jeśli podana, inaczej null",
+  "keyContacts": "imię, telefon, email osoby kontaktowej",
+  "recommendation": "1-2 zdania: czy startować, na co uważać, jaka strategia",
+  "offerDraft": "Pełny DRAFT oferty handlowej (min. 300 słów) zgodny z wymaganiami zamawiającego. Zawiera: dane oferenta [DO UZUPEŁNIENIA], odniesienie do nr ogłoszenia, przedmiot oferty, proponowane podejście/metodologię, harmonogram, cenę [DO UZUPEŁNIENIA], oświadczenia wymagane przez zamawiającego, podpis [DO UZUPEŁNIENIA]. Draft powinien być gotowy do edycji przez człowieka – miejsca do uzupełnienia oznacz [DO UZUPEŁNIENIA]."
+}`;
+
+  const userMessage = hasContentForDeep(htmlContent)
+    ? `Przeanalizuj dogłębnie to zamówienie publiczne. Poniżej cała strona HTML z biznes-polska.pl:
+
+ID: ${order.biznesPolskaId}
+URL: ${order.detailUrl || ''}
+Poprzednia ocena AI: ${order.aiScore || '?'}/10
+Poprzednia analiza AI: ${order.aiAnalysis || 'brak'}
+
+--- POCZĄTEK HTML STRONY ---
+${htmlContent}
+--- KONIEC HTML STRONY ---`
+    : `Przeanalizuj dogłębnie to zamówienie publiczne:
+
+ID: ${order.biznesPolskaId}
+URL: ${order.detailUrl || ''}
+Poprzednia ocena AI: ${order.aiScore || '?'}/10
+Poprzednia analiza AI: ${order.aiAnalysis || 'brak'}
+
+${fallbackContent}`;
+
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 4096,
+    temperature: 0.1,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userMessage }]
+  });
+
+  const text = response.content[0]?.text || '{}';
+  try {
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : text);
+
+    const requiredFields = ['summary', 'scope', 'requiredActions', 'offerDraft'];
+    for (const f of requiredFields) {
+      if (!parsed[f]) throw new Error(`Brak pola "${f}" w odpowiedzi AI`);
+    }
+
+    return {
+      ...parsed,
+      model: 'claude-sonnet-4-20250514',
+      analyzedAt: new Date().toISOString()
+    };
+  } catch (e) {
+    console.error('[AI deepAnalyze] Parse error:', text.slice(0, 1000));
+    return {
+      summary: 'Błąd parsowania głębokiej analizy AI – wymagana ręczna analiza',
+      scope: [],
+      requiredActions: [],
+      requiredDocuments: [],
+      deadlines: [],
+      evaluationCriteria: [],
+      potentialDifficulties: ['Nie udało się przetworzyć odpowiedzi AI: ' + e.message],
+      estimatedValue: null,
+      keyContacts: '',
+      recommendation: 'Wymaga ręcznej analizy',
+      offerDraft: '',
+      rawAiResponse: text.slice(0, 3000),
+      model: 'claude-sonnet-4-20250514',
+      analyzedAt: new Date().toISOString(),
+      error: true
+    };
+  }
+}
+
+function hasContentForDeep(html) {
+  return html && html.trim().length > 500;
+}
+
+// ───────────────────────────────────────────────────────────────
 // ORCHESTRATOR – uruchamia cały pipeline
 // ───────────────────────────────────────────────────────────────
 
@@ -196,7 +325,7 @@ async function runAiAnalysis(options = {}) {
   const PublicOrder = require('../models/PublicOrder');
   const { limit = 10, batchSize = 20, orderIds } = options;
 
-  const stats = { filtered: 0, rejected: 0, candidates: 0, scored: 0, errors: [] };
+  const stats = { filtered: 0, rejected: 0, candidates: 0, scored: 0, deepAnalyzed: 0, errors: [] };
 
   let pending;
   if (orderIds && orderIds.length > 0) {
@@ -308,6 +437,23 @@ async function runAiAnalysis(options = {}) {
         aiScoredAt: new Date()
       });
       stats.scored++;
+
+      // FAZA 3: Deep analysis – automatycznie dla score >= 5
+      if (score >= DEEP_ANALYSIS_MIN_SCORE) {
+        try {
+          console.log(`[AI] Deep analysis for ${order.biznesPolskaId} (score ${score})...`);
+          const deepResult = await deepAnalyzeOrder(order, {
+            rawPageHtml: fullPageHtmlForAi || undefined
+          });
+          await PublicOrder.findByIdAndUpdate(order._id, {
+            aiDeepAnalysis: deepResult,
+            aiDeepAnalyzedAt: new Date()
+          });
+          stats.deepAnalyzed++;
+        } catch (deepErr) {
+          stats.errors.push(`Deep ${order.biznesPolskaId}: ${deepErr.message}`);
+        }
+      }
     } catch (e) {
       stats.errors.push(`Score ${order.biznesPolskaId}: ${e.message}`);
     }
@@ -316,4 +462,4 @@ async function runAiAnalysis(options = {}) {
   return stats;
 }
 
-module.exports = { batchFilter, scoreOrder, runAiAnalysis, COMPANY_PROFILE };
+module.exports = { batchFilter, scoreOrder, deepAnalyzeOrder, runAiAnalysis, COMPANY_PROFILE, DEEP_ANALYSIS_MIN_SCORE };

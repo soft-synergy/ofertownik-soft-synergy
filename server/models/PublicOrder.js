@@ -80,7 +80,13 @@ const publicOrderSchema = new mongoose.Schema({
   /** Kiedy AI przetworzył batch-filter */
   aiBatchProcessedAt: { type: Date, default: null },
   /** Kiedy AI przydzielił score */
-  aiScoredAt: { type: Date, default: null }
+  aiScoredAt: { type: Date, default: null },
+
+  // ─── AI Deep Analysis (Faza 3 – Sonnet, tylko score >= 5) ───
+  /** Pełna głęboka analiza AI – wymagania, trudności, draft oferty */
+  aiDeepAnalysis: { type: mongoose.Schema.Types.Mixed, default: null },
+  /** Kiedy wykonano głęboką analizę */
+  aiDeepAnalyzedAt: { type: Date, default: null }
 }, {
   timestamps: true
 });
