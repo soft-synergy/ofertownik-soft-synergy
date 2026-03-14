@@ -1,6 +1,6 @@
 const Anthropic = require('@anthropic-ai/sdk');
 
-const ANTHROPIC_API_KEY = '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';
+const ANTHROPIC_API_KEY = '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';
 
 const COMPANY_PROFILE = `Jesteśmy firmą zajmującą się projektowaniem oraz wdrażaniem stron internetowych, systemów webowych oraz materiałów graficznych dla firm i instytucji publicznych. Specjalizujemy się w tworzeniu nowoczesnych interfejsów użytkownika, serwisów informacyjnych, landing page oraz portali internetowych.
 
@@ -66,7 +66,7 @@ Odpowiedz WYŁĄCZNIE poprawnym JSON (tablica):
 [{"id":"...","relevant":true/false,"reason":"max 1 zdanie"}]`;
 
   const response = await client.messages.create({
-    model: 'claude-3-5-haiku-20241022',
+    model: 'claude-haiku-4-5-20251001',
     max_tokens: 2048,
     temperature: 0,
     system: `Jesteś ekspertem od zamówień publicznych. Oceniasz czy podane zamówienia pasują do profilu firmy.
@@ -127,7 +127,7 @@ Odpowiedz WYŁĄCZNIE poprawnym JSON:
 {"score":N,"analysis":"2-3 zdania: co dokładnie obejmuje zamówienie, dlaczego pasuje/nie pasuje, jakie są ryzyka"}`;
 
   const response = await client.messages.create({
-    model: 'claude-3-5-haiku-20241022',
+    model: 'claude-haiku-4-5-20251001',
     max_tokens: 512,
     temperature: 0,
     system: `Jesteś ekspertem od zamówień publicznych w Polsce. Oceniasz dopasowanie zamówienia do profilu firmy web-designowej.
