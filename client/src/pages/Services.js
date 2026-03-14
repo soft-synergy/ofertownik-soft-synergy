@@ -14,6 +14,7 @@ import {
   GripVertical
 } from 'lucide-react';
 import { servicesAPI } from '../services/api';
+import { useI18n } from '../contexts/I18nContext';
 import toast from 'react-hot-toast';
 
 const categoryIcons = {
@@ -22,14 +23,6 @@ const categoryIcons = {
   hosting: Server,
   maintenance: Wrench,
   other: Settings
-};
-
-const categoryLabels = {
-  development: 'Rozwój',
-  consulting: 'Konsultacje',
-  hosting: 'Hosting',
-  maintenance: 'Utrzymanie',
-  other: 'Inne'
 };
 
 const SortableServiceItem = ({
@@ -43,7 +36,9 @@ const SortableServiceItem = ({
   onDrop,
   onDragEnd,
   isDragging,
-  dragIndex
+  dragIndex,
+  getCategoryLabel,
+  t
 }) => {
   const Icon = categoryIcons[item.category] || Settings;
   const isBeingDragged = isDragging && dragIndex === index;
@@ -94,13 +89,13 @@ const SortableServiceItem = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <Icon className="h-4 w-4 text-gray-400" />
-                <span className="text-xs text-gray-500">{categoryLabels[item.category] || item.category}</span>
+                <span className="text-xs text-gray-500">{getCategoryLabel(item.category)}</span>
               </div>
               <button
                 onClick={() => handleToggleStatus(item._id)}
                 className={`text-xs px-2 py-1 rounded-full ${item.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}
               >
-                {item.isActive ? 'Aktywna' : 'Nieaktywna'}
+                {item.isActive ? t('services.active') : t('services.inactive')}
               </button>
             </div>
             <h3 className="font-medium text-gray-900">{item.name}</h3>
@@ -110,13 +105,13 @@ const SortableServiceItem = ({
             )}
             <div className="flex items-center justify-between pt-3 border-t border-gray-200">
               <span className="text-xs text-gray-500">
-                Utworzył: {item.createdBy?.firstName} {item.createdBy?.lastName}
+                {t('services.createdBy')}: {item.createdBy?.firstName} {item.createdBy?.lastName}
               </span>
               <div className="flex items-center space-x-2">
-                <Link to={`/services/${item._id}/edit`} className="p-1 text-gray-400 hover:text-blue-600" title="Edytuj">
+                <Link to={`/services/${item._id}/edit`} className="p-1 text-gray-400 hover:text-blue-600" title={t('buttons.edit')}>
                   <Edit className="h-4 w-4" />
                 </Link>
-                <button onClick={() => handleDelete(item._id)} className="p-1 text-gray-400 hover:text-red-600" title="Usuń">
+                <button onClick={() => handleDelete(item._id)} className="p-1 text-gray-400 hover:text-red-600" title={t('buttons.delete')}>
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
@@ -129,24 +124,28 @@ const SortableServiceItem = ({
 };
 
 const Services = () => {
+  const { lang, t } = useI18n();
   const [filters, setFilters] = useState({ category: '', active: 'true' });
   const [items, setItems] = useState([]);
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
 
   const queryClient = useQueryClient();
+  const queryFilters = { ...filters, lang };
   const { data: services, isLoading } = useQuery(
-    ['services', filters],
-    () => servicesAPI.getAll(filters),
+    ['services', queryFilters],
+    () => servicesAPI.getAll(queryFilters),
     { onSuccess: (data) => setItems(data || []) }
   );
+
+  const getCategoryLabel = (cat) => t(`services.categories.${cat}`) || cat;
 
   const deleteMutation = useMutation(servicesAPI.delete, {
     onSuccess: () => {
       toast.success('Usługa została usunięta');
       queryClient.invalidateQueries('services');
     },
-    onError: () => toast.error('Błąd podczas usuwania usługi')
+    onError: () => toast.error(t('services.deleteError'))
   });
 
   const toggleMutation = useMutation(servicesAPI.toggleStatus, {
@@ -237,45 +236,45 @@ const Services = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Usługi</h1>
-          <p className="mt-1 text-sm text-gray-500">Zarządzaj oferowanymi usługami (zdjęcie, opis, zakres cenowy)</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('services.title')}</h1>
+          <p className="mt-1 text-sm text-gray-500">{lang === 'pl' ? 'Zarządzaj oferowanymi usługami (zdjęcie, opis, zakres cenowy)' : 'Manage services (image, description, price range)'}</p>
         </div>
         <Link to="/services/new" className="btn-primary flex items-center">
           <Plus className="h-4 w-4 mr-2" />
-          Dodaj usługę
+          {t('services.addService')}
         </Link>
       </div>
 
       <div className="card">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
-            <label className="form-label">Kategoria</label>
+            <label className="form-label">{t('services.category')}</label>
             <select
               value={filters.category}
               onChange={(e) => setFilters({ ...filters, category: e.target.value })}
               className="input-field"
             >
-              <option value="">Wszystkie kategorie</option>
-              {Object.entries(categoryLabels).map(([value, label]) => (
-                <option key={value} value={value}>{label}</option>
+              <option value="">{t('projects.allOption')} {t('services.category').toLowerCase()}</option>
+              {['development', 'consulting', 'hosting', 'maintenance', 'other'].map((value) => (
+                <option key={value} value={value}>{getCategoryLabel(value)}</option>
               ))}
             </select>
           </div>
           <div>
-            <label className="form-label">Status</label>
+            <label className="form-label">{t('projects.statusLabel')}</label>
             <select
               value={filters.active}
               onChange={(e) => setFilters({ ...filters, active: e.target.value })}
               className="input-field"
             >
-              <option value="true">Aktywne</option>
-              <option value="false">Nieaktywne</option>
-              <option value="">Wszystkie</option>
+              <option value="true">{t('services.active')}</option>
+              <option value="false">{t('services.inactive')}</option>
+              <option value="">{t('projects.allOption')}</option>
             </select>
           </div>
           <div className="flex items-end">
             <button onClick={() => setFilters({ category: '', active: 'true' })} className="btn-secondary w-full">
-              Wyczyść filtry
+              {t('services.clearFilters')}
             </button>
           </div>
         </div>
@@ -296,6 +295,8 @@ const Services = () => {
             onDragEnd={handleDragEnd}
             isDragging={isDragging}
             dragIndex={draggedIndex}
+            getCategoryLabel={getCategoryLabel}
+            t={t}
           />
         ))}
       </div>
@@ -303,17 +304,17 @@ const Services = () => {
       {items?.length === 0 && (
         <div className="text-center py-12">
           <ImageIcon className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">Brak usług</h3>
+          <h3 className="mt-2 text-sm font-medium text-gray-900">{t('services.emptyTitle')}</h3>
           <p className="mt-1 text-sm text-gray-500">
             {filters.category || filters.active !== 'true'
-              ? 'Zmień filtry lub dodaj pierwszą usługę.'
-              : 'Dodaj pierwszą usługę (nazwa, opis, zdjęcie, zakres cenowy).'}
+              ? (lang === 'pl' ? 'Zmień filtry lub dodaj pierwszą usługę.' : 'Change filters or add first service.')
+              : (lang === 'pl' ? 'Dodaj pierwszą usługę (nazwa, opis, zdjęcie, zakres cenowy).' : 'Add first service (name, description, image, price range).')}
           </p>
           {!filters.category && filters.active === 'true' && (
             <div className="mt-6">
               <Link to="/services/new" className="btn-primary">
                 <Plus className="h-4 w-4 mr-2" />
-                Dodaj usługę
+                {t('services.addService')}
               </Link>
             </div>
           )}

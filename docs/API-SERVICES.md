@@ -5,6 +5,8 @@ Dokumentacja API do zarządzania usługami: zdjęcie, opis, zakres cenowy, kateg
 **Bazowy URL:** `GET/POST/PUT/DELETE /api/services`  
 **Dokumentacja JSON (endpoint):** `GET /api/services/documentation` – zwraca opis endpointów w formacie JSON.
 
+**Wielojęzyczność (PL/EN):** obsługa parametru `?lang=pl` / `?lang=en` oraz pól `namePl`, `nameEn`, `descriptionPl`, `descriptionEn`, `priceLabelPl`, `priceLabelEn` – szczegóły w [API-I18N.md](./API-I18N.md).
+
 ---
 
 ## Autentykacja
@@ -23,17 +25,23 @@ Token uzyskujesz z `POST /api/auth/login`. Role: `admin` lub `manager` dla opera
 
 | Pole        | Typ     | Wymagane | Opis |
 |------------|---------|----------|------|
-| `name`     | string  | tak      | Nazwa usługi (min. 2 znaki) |
-| `description` | string | tak   | Opis (min. 10 znaków) |
+| `name`     | string  | legacy   | Nazwa (fallback gdy brak namePl/nameEn) |
+| `namePl`   | string  | *        | Nazwa po polsku (min. 2 znaki) |
+| `nameEn`   | string  | *        | Nazwa po angielsku |
+| `description` | string | legacy | Opis (fallback) |
+| `descriptionPl` | string | *      | Opis po polsku (min. 10 znaków) |
+| `descriptionEn` | string | *      | Opis po angielsku |
 | `category` | string  | tak      | `development` \| `consulting` \| `hosting` \| `maintenance` \| `other` |
 | `image`    | string  | nie      | Ścieżka do zdjęcia (np. `/uploads/services/plik.jpg`) – ustawiana przez serwer przy uploadzie |
 | `priceMin` | number  | nie      | Cena minimalna (zł) |
 | `priceMax` | number  | nie      | Cena maksymalna (zł) |
-| `priceLabel` | string | nie    | Dowolny tekst ceny (np. „od 500 zł”, „wycena indywidualna”) |
+| `priceLabel` \| `priceLabelPl` \| `priceLabelEn` | string | nie | Tekst ceny (np. „od 500 zł”) |
 | `isActive` | boolean | nie     | Czy usługa jest aktywna (domyślnie `true`) |
 | `order`    | number  | nie      | Kolejność wyświetlania (ustawiana przez serwer) |
 | `createdBy`| ObjectId | tak    | ID użytkownika (ustawiane przez serwer) |
 | `createdAt`, `updatedAt` | Date | – | Timestampy (automatyczne) |
+
+\* Wymagane co najmniej jedno z: name/namePl/nameEn oraz description/descriptionPl/descriptionEn. Przy odczycie z `?lang=pl` lub `?lang=en` zwracane są spłaszczone `name`, `description`, `priceLabel`.
 
 ---
 
@@ -52,6 +60,7 @@ GET /api/services
 |------------|------|
 | `category` | Filtruj po kategorii: `development`, `consulting`, `hosting`, `maintenance`, `other` |
 | `active`   | `true` / `false` – tylko aktywne / nieaktywne |
+| `lang`     | `pl` \| `en` – zwraca `name`, `description`, `priceLabel` w wybranym języku; bez `lang` zwraca pola `namePl`, `nameEn`, `descriptionPl`, `descriptionEn`, `priceLabelPl`, `priceLabelEn` |
 
 **Odpowiedź (200):** tablica obiektów usług z `createdBy` (firstName, lastName).
 

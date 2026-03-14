@@ -58,6 +58,20 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
+/** Usuń wszystkie zlecenia publiczne. Tylko admin. */
+router.delete('/all', auth, requireRole(['admin']), async (req, res) => {
+  try {
+    const result = await PublicOrder.deleteMany({});
+    res.json({
+      message: `Usunięto ${result.deletedCount} zleceń publicznych`,
+      deletedCount: result.deletedCount
+    });
+  } catch (e) {
+    console.error('Public orders delete all error:', e);
+    res.status(500).json({ message: 'Błąd usuwania zleceń' });
+  }
+});
+
 /** Jedno zlecenie po ID (Mongo _id lub biznesPolskaId) */
 router.get('/:id', auth, async (req, res) => {
   try {

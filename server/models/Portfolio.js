@@ -1,15 +1,15 @@
 const mongoose = require('mongoose');
 
 const portfolioSchema = new mongoose.Schema({
-  title: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  description: {
-    type: String,
-    required: true
-  },
+  title: { type: String, trim: true },
+  titlePl: { type: String, trim: true },
+  titleEn: { type: String, trim: true },
+  description: { type: String },
+  descriptionPl: { type: String },
+  descriptionEn: { type: String },
+  results: { type: String, trim: true },
+  resultsPl: { type: String, trim: true },
+  resultsEn: { type: String, trim: true },
   category: {
     type: String,
     required: true,
@@ -29,10 +29,6 @@ const portfolioSchema = new mongoose.Schema({
     trim: true
   },
   duration: {
-    type: String,
-    trim: true
-  },
-  results: {
     type: String,
     trim: true
   },

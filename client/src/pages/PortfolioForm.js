@@ -9,22 +9,27 @@ import {
   Image
 } from 'lucide-react';
 import { portfolioAPI } from '../services/api';
+import { useI18n } from '../contexts/I18nContext';
 import toast from 'react-hot-toast';
 
 const PortfolioForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { lang, t } = useI18n();
   const isEditing = !!id;
 
   const [formData, setFormData] = useState({
-    title: '',
-    description: '',
+    titlePl: '',
+    titleEn: '',
+    descriptionPl: '',
+    descriptionEn: '',
     category: 'web',
     technologies: [''],
     client: '',
     duration: '',
-    results: '',
+    resultsPl: '',
+    resultsEn: '',
     projectLink: '',
     apiLink: '',
     documentationLink: '',
@@ -42,7 +47,7 @@ const PortfolioForm = () => {
 
   const createMutation = useMutation(portfolioAPI.create, {
     onSuccess: () => {
-      toast.success('Element portfolio został utworzony pomyślnie!');
+      toast.success(t('portfolio.created'));
       queryClient.invalidateQueries('portfolio');
       navigate('/portfolio');
     },
@@ -68,7 +73,7 @@ const PortfolioForm = () => {
     (data) => portfolioAPI.update(id, data),
     {
       onSuccess: () => {
-        toast.success('Element portfolio został zaktualizowany pomyślnie!');
+        toast.success(t('portfolio.updated'));
         queryClient.invalidateQueries('portfolio');
         queryClient.invalidateQueries(['portfolio', id]);
         navigate('/portfolio');
@@ -95,13 +100,16 @@ const PortfolioForm = () => {
   useEffect(() => {
     if (portfolio) {
       setFormData({
-        title: portfolio.title,
-        description: portfolio.description,
+        titlePl: portfolio.titlePl || portfolio.title || '',
+        titleEn: portfolio.titleEn || portfolio.title || '',
+        descriptionPl: portfolio.descriptionPl || portfolio.description || '',
+        descriptionEn: portfolio.descriptionEn || portfolio.description || '',
         category: portfolio.category,
         technologies: portfolio.technologies && portfolio.technologies.length > 0 ? portfolio.technologies : [''],
         client: portfolio.client || '',
         duration: portfolio.duration || '',
-        results: portfolio.results || '',
+        resultsPl: portfolio.resultsPl || portfolio.results || '',
+        resultsEn: portfolio.resultsEn || portfolio.results || '',
         projectLink: portfolio.projectLink || '',
         apiLink: portfolio.apiLink || '',
         documentationLink: portfolio.documentationLink || '',
@@ -179,63 +187,31 @@ const PortfolioForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Client-side validation
-    if (!formData.title.trim()) {
-      toast.error('Tytuł jest wymagany');
+    const hasTitle = (formData.titlePl && formData.titlePl.trim().length >= 3) || (formData.titleEn && formData.titleEn.trim().length >= 3);
+    const hasDesc = (formData.descriptionPl && formData.descriptionPl.trim().length >= 10) || (formData.descriptionEn && formData.descriptionEn.trim().length >= 10);
+    if (!hasTitle) {
+      toast.error(lang === 'pl' ? 'Tytuł (PL lub EN) jest wymagany' : 'Title (PL or EN) is required');
       return;
     }
-    
-    if (!formData.description.trim()) {
-      toast.error('Opis jest wymagany');
+    if (!hasDesc) {
+      toast.error(lang === 'pl' ? 'Opis (PL lub EN) jest wymagany' : 'Description (PL or EN) is required');
       return;
     }
-    
     if (!formData.image && !isEditing) {
-      toast.error('Zdjęcie jest wymagane');
+      toast.error(lang === 'pl' ? 'Zdjęcie jest wymagane' : 'Image is required');
       return;
     }
-    
-    // For editing, image is not required if there's already an image
-    if (!formData.image && !isEditing) {
-      toast.error('Zdjęcie jest wymagane');
-      return;
-    }
-    
     const filteredTechnologies = formData.technologies.filter(tech => tech.trim() !== '');
     if (filteredTechnologies.length === 0) {
-      toast.error('Dodaj przynajmniej jedną technologię');
+      toast.error(lang === 'pl' ? 'Dodaj przynajmniej jedną technologię' : 'Add at least one technology');
       return;
     }
-    
     const submitData = new FormData();
-    Object.keys(formData).forEach(key => {
-      if (key === 'technologies') {
-        submitData.append(key, JSON.stringify(filteredTechnologies));
-      } else if (key === 'image' && formData[key]) {
-        submitData.append(key, formData[key]);
-      } else if (key !== 'image') {
-        submitData.append(key, formData[key]);
-      }
+    ['titlePl', 'titleEn', 'descriptionPl', 'descriptionEn', 'category', 'client', 'duration', 'resultsPl', 'resultsEn', 'projectLink', 'apiLink', 'documentationLink', 'isActive'].forEach(key => {
+      if (formData[key] !== undefined && formData[key] !== null) submitData.append(key, formData[key]);
     });
-    
-    // If editing and no new image selected, don't send image field
-    if (isEditing && !formData.image) {
-      submitData.delete('image');
-    }
-    
-    // If editing and no new image, but there's an existing image, don't send image field
-    if (isEditing && !formData.image && imagePreview) {
-      submitData.delete('image');
-    }
-
-    // Debug: log the data being sent
-    console.log('Form data:', formData);
-    console.log('Filtered technologies:', filteredTechnologies);
-    console.log('Submit data entries:');
-    for (let [key, value] of submitData.entries()) {
-      console.log(key, value);
-    }
+    submitData.append('technologies', JSON.stringify(filteredTechnologies));
+    if (formData.image) submitData.append('image', formData.image);
 
     if (isEditing) {
       updateMutation.mutate(submitData);
@@ -265,35 +241,43 @@ const PortfolioForm = () => {
           </button>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
-              {isEditing ? 'Edytuj projekt portfolio' : 'Nowy projekt portfolio'}
+              {isEditing ? t('portfolio.editItem') : t('portfolio.newItem')}
             </h1>
             <p className="mt-1 text-sm text-gray-500">
-              {isEditing ? 'Zaktualizuj dane projektu' : 'Dodaj nowy projekt do portfolio'}
+              {isEditing ? (lang === 'pl' ? 'Zaktualizuj dane projektu' : 'Update project data') : (lang === 'pl' ? 'Dodaj nowy projekt do portfolio' : 'Add new portfolio item')}
             </p>
           </div>
         </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-8">
-        {/* Basic Information */}
         <div className="card">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Informacje podstawowe</h2>
+          <h2 className="text-lg font-medium text-gray-900 mb-4">{t('services.basicInfo')}</h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="form-label">Tytuł projektu *</label>
+              <label className="form-label">{t('portfolio.titlePl')} *</label>
               <input
                 type="text"
-                name="title"
-                value={formData.title}
+                name="titlePl"
+                value={formData.titlePl}
                 onChange={handleChange}
-                required
                 className="input-field"
                 placeholder="Nazwa projektu"
               />
             </div>
-            
             <div>
-              <label className="form-label">Kategoria *</label>
+              <label className="form-label">{t('portfolio.titleEn')} *</label>
+              <input
+                type="text"
+                name="titleEn"
+                value={formData.titleEn}
+                onChange={handleChange}
+                className="input-field"
+                placeholder="Project name"
+              />
+            </div>
+            <div>
+              <label className="form-label">{t('services.category')} *</label>
               <select
                 name="category"
                 value={formData.category}
@@ -301,66 +285,83 @@ const PortfolioForm = () => {
                 required
                 className="input-field"
               >
-                <option value="web">Aplikacja webowa</option>
-                <option value="mobile">Aplikacja mobilna</option>
-                <option value="desktop">Aplikacja desktopowa</option>
-                <option value="api">API / Backend</option>
-                <option value="other">Inne</option>
+                {['web', 'mobile', 'desktop', 'api', 'other'].map((value) => (
+                  <option key={value} value={value}>{t(`portfolio.categories.${value}`)}</option>
+                ))}
               </select>
             </div>
           </div>
-          
-          <div className="mt-4">
-            <label className="form-label">Opis *</label>
-            <textarea
-              name="description"
-              value={formData.description}
-              onChange={handleChange}
-              required
-              rows={4}
-              className="input-field"
-              placeholder="Szczegółowy opis projektu..."
-            />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 mt-4">
+            <div>
+              <label className="form-label">{t('portfolio.descriptionPl')} *</label>
+              <textarea
+                name="descriptionPl"
+                value={formData.descriptionPl}
+                onChange={handleChange}
+                rows={4}
+                className="input-field"
+                placeholder="Szczegółowy opis projektu..."
+              />
+            </div>
+            <div>
+              <label className="form-label">{t('portfolio.descriptionEn')} *</label>
+              <textarea
+                name="descriptionEn"
+                value={formData.descriptionEn}
+                onChange={handleChange}
+                rows={4}
+                className="input-field"
+                placeholder="Detailed project description..."
+              />
+            </div>
           </div>
         </div>
 
-        {/* Project Details */}
         <div className="card">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Szczegóły projektu</h2>
+          <h2 className="text-lg font-medium text-gray-900 mb-4">{lang === 'pl' ? 'Szczegóły projektu' : 'Project details'}</h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="form-label">Klient</label>
+              <label className="form-label">{t('portfolio.client')}</label>
               <input
                 type="text"
                 name="client"
                 value={formData.client}
                 onChange={handleChange}
                 className="input-field"
-                placeholder="Nazwa klienta"
+                placeholder={lang === 'pl' ? 'Nazwa klienta' : 'Client name'}
               />
             </div>
-            
             <div>
-              <label className="form-label">Czas realizacji</label>
+              <label className="form-label">{t('portfolio.duration')}</label>
               <input
                 type="text"
                 name="duration"
                 value={formData.duration}
                 onChange={handleChange}
                 className="input-field"
-                placeholder="np. 3 miesiące"
+                placeholder={lang === 'pl' ? 'np. 3 miesiące' : 'e.g. 3 months'}
               />
             </div>
-            
-            <div className="sm:col-span-2">
-              <label className="form-label">Wyniki / Rezultaty</label>
+            <div>
+              <label className="form-label">{t('portfolio.resultsPl')}</label>
               <input
                 type="text"
-                name="results"
-                value={formData.results}
+                name="resultsPl"
+                value={formData.resultsPl}
                 onChange={handleChange}
                 className="input-field"
                 placeholder="np. Zwiększenie konwersji o 40%"
+              />
+            </div>
+            <div>
+              <label className="form-label">{t('portfolio.resultsEn')}</label>
+              <input
+                type="text"
+                name="resultsEn"
+                value={formData.resultsEn}
+                onChange={handleChange}
+                className="input-field"
+                placeholder="e.g. 40% conversion increase"
               />
             </div>
           </div>

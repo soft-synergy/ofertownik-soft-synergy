@@ -3,30 +3,27 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { Save, ArrowLeft, Image } from 'lucide-react';
 import { servicesAPI } from '../services/api';
+import { useI18n } from '../contexts/I18nContext';
 import toast from 'react-hot-toast';
-
-const categoryOptions = [
-  { value: 'development', label: 'Rozwój' },
-  { value: 'consulting', label: 'Konsultacje' },
-  { value: 'hosting', label: 'Hosting' },
-  { value: 'maintenance', label: 'Utrzymanie' },
-  { value: 'other', label: 'Inne' }
-];
 
 const ServiceForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { t } = useI18n();
   const isEditing = !!id;
 
   const [formData, setFormData] = useState({
-    name: '',
-    description: '',
+    namePl: '',
+    nameEn: '',
+    descriptionPl: '',
+    descriptionEn: '',
     category: 'development',
     image: null,
     priceMin: '',
     priceMax: '',
-    priceLabel: '',
+    priceLabelPl: '',
+    priceLabelEn: '',
     isActive: true
   });
   const [imagePreview, setImagePreview] = useState(null);
@@ -40,13 +37,16 @@ const ServiceForm = () => {
   useEffect(() => {
     if (service) {
       setFormData({
-        name: service.name,
-        description: service.description,
+        namePl: service.namePl || service.name || '',
+        nameEn: service.nameEn || service.name || '',
+        descriptionPl: service.descriptionPl || service.description || '',
+        descriptionEn: service.descriptionEn || service.description || '',
         category: service.category || 'development',
         image: null,
         priceMin: service.priceMin != null ? String(service.priceMin) : '',
         priceMax: service.priceMax != null ? String(service.priceMax) : '',
-        priceLabel: service.priceLabel || '',
+        priceLabelPl: service.priceLabelPl || service.priceLabel || '',
+        priceLabelEn: service.priceLabelEn || service.priceLabel || '',
         isActive: service.isActive !== false
       });
       if (service.image) {
@@ -88,7 +88,7 @@ const ServiceForm = () => {
 
   const createMutation = useMutation(servicesAPI.create, {
     onSuccess: () => {
-      toast.success('Usługa została utworzona.');
+      toast.success(t('services.created'));
       queryClient.invalidateQueries('services');
       navigate('/services');
     },
@@ -105,7 +105,7 @@ const ServiceForm = () => {
     (data) => servicesAPI.update(id, data),
     {
       onSuccess: () => {
-        toast.success('Usługa została zaktualizowana.');
+        toast.success(t('services.updated'));
         queryClient.invalidateQueries('services');
         queryClient.invalidateQueries(['service', id]);
         navigate('/services');
@@ -122,24 +122,28 @@ const ServiceForm = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!formData.name.trim()) {
-      toast.error('Nazwa usługi jest wymagana.');
+    const hasName = (formData.namePl && formData.namePl.trim().length >= 2) || (formData.nameEn && formData.nameEn.trim().length >= 2);
+    const hasDesc = (formData.descriptionPl && formData.descriptionPl.trim().length >= 10) || (formData.descriptionEn && formData.descriptionEn.trim().length >= 10);
+    if (!hasName) {
+      toast.error(t('services.nameRequired'));
       return;
     }
-    if (!formData.description.trim()) {
-      toast.error('Opis jest wymagany.');
+    if (!hasDesc) {
+      toast.error(t('services.descriptionRequired'));
       return;
     }
-    // Zdjęcie opcjonalne – można dodać później przy edycji
 
     const fd = new FormData();
-    fd.append('name', formData.name);
-    fd.append('description', formData.description);
+    if (formData.namePl) fd.append('namePl', formData.namePl);
+    if (formData.nameEn) fd.append('nameEn', formData.nameEn);
+    if (formData.descriptionPl) fd.append('descriptionPl', formData.descriptionPl);
+    if (formData.descriptionEn) fd.append('descriptionEn', formData.descriptionEn);
     fd.append('category', formData.category);
     fd.append('isActive', formData.isActive);
     if (formData.priceMin !== '') fd.append('priceMin', formData.priceMin);
     if (formData.priceMax !== '') fd.append('priceMax', formData.priceMax);
-    if (formData.priceLabel) fd.append('priceLabel', formData.priceLabel);
+    if (formData.priceLabelPl) fd.append('priceLabelPl', formData.priceLabelPl);
+    if (formData.priceLabelEn) fd.append('priceLabelEn', formData.priceLabelEn);
     if (formData.image) fd.append('image', formData.image);
 
     if (isEditing) {
@@ -166,10 +170,10 @@ const ServiceForm = () => {
           </button>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
-              {isEditing ? 'Edytuj usługę' : 'Nowa usługa'}
+              {isEditing ? t('services.editService') : t('services.newService')}
             </h1>
             <p className="mt-1 text-sm text-gray-500">
-              {isEditing ? 'Zaktualizuj dane usługi' : 'Dodaj usługę (zdjęcie, opis, zakres cenowy)'}
+              {isEditing ? (t('services.editService') + ' – ' + t('services.basicInfo')) : t('services.addService')}
             </p>
           </div>
         </div>
@@ -177,54 +181,76 @@ const ServiceForm = () => {
 
       <form onSubmit={handleSubmit} className="space-y-8">
         <div className="card">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Informacje podstawowe</h2>
+          <h2 className="text-lg font-medium text-gray-900 mb-4">{t('services.basicInfo')}</h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="form-label">Nazwa usługi *</label>
+              <label className="form-label">{t('services.namePl')} *</label>
               <input
                 type="text"
-                name="name"
-                value={formData.name}
+                name="namePl"
+                value={formData.namePl}
                 onChange={handleChange}
-                required
                 className="input-field"
                 placeholder="np. Aplikacja webowa"
               />
             </div>
             <div>
-              <label className="form-label">Kategoria *</label>
-              <select
-                name="category"
-                value={formData.category}
+              <label className="form-label">{t('services.nameEn')} *</label>
+              <input
+                type="text"
+                name="nameEn"
+                value={formData.nameEn}
                 onChange={handleChange}
-                required
                 className="input-field"
-              >
-                {categoryOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
+                placeholder="e.g. Web application"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 mt-4">
+            <div>
+              <label className="form-label">{t('services.descriptionPl')} *</label>
+              <textarea
+                name="descriptionPl"
+                value={formData.descriptionPl}
+                onChange={handleChange}
+                rows={4}
+                className="input-field"
+                placeholder="Szczegółowy opis usługi..."
+              />
+            </div>
+            <div>
+              <label className="form-label">{t('services.descriptionEn')} *</label>
+              <textarea
+                name="descriptionEn"
+                value={formData.descriptionEn}
+                onChange={handleChange}
+                rows={4}
+                className="input-field"
+                placeholder="Detailed service description..."
+              />
             </div>
           </div>
           <div className="mt-4">
-            <label className="form-label">Opis *</label>
-            <textarea
-              name="description"
-              value={formData.description}
+            <label className="form-label">{t('services.category')} *</label>
+            <select
+              name="category"
+              value={formData.category}
               onChange={handleChange}
               required
-              rows={4}
               className="input-field"
-              placeholder="Szczegółowy opis usługi..."
-            />
+            >
+              {['development', 'consulting', 'hosting', 'maintenance', 'other'].map((value) => (
+                <option key={value} value={value}>{t(`services.categories.${value}`)}</option>
+              ))}
+            </select>
           </div>
         </div>
 
         <div className="card">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Zakres cenowy</h2>
+          <h2 className="text-lg font-medium text-gray-900 mb-4">{t('services.priceRange')}</h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
-              <label className="form-label">Cena minimalna (zł)</label>
+              <label className="form-label">Cena min (zł)</label>
               <input
                 type="number"
                 name="priceMin"
@@ -237,7 +263,7 @@ const ServiceForm = () => {
               />
             </div>
             <div>
-              <label className="form-label">Cena maksymalna (zł)</label>
+              <label className="form-label">Cena max (zł)</label>
               <input
                 type="number"
                 name="priceMax"
@@ -250,26 +276,34 @@ const ServiceForm = () => {
               />
             </div>
             <div>
-              <label className="form-label">Tekst ceny (np. „od 500 zł”)</label>
+              <label className="form-label">{t('services.priceLabelPl')}</label>
               <input
                 type="text"
-                name="priceLabel"
-                value={formData.priceLabel}
+                name="priceLabelPl"
+                value={formData.priceLabelPl}
                 onChange={handleChange}
                 className="input-field"
-                placeholder="np. wycena indywidualna"
+                placeholder="np. od 500 zł"
+              />
+            </div>
+            <div>
+              <label className="form-label">{t('services.priceLabelEn')}</label>
+              <input
+                type="text"
+                name="priceLabelEn"
+                value={formData.priceLabelEn}
+                onChange={handleChange}
+                className="input-field"
+                placeholder="e.g. from 500 PLN"
               />
             </div>
           </div>
-          <p className="mt-2 text-sm text-gray-500">
-            Możesz podać min/max w zł lub dowolny tekst w polu „Tekst ceny”.
-          </p>
         </div>
 
         <div className="card">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Zdjęcie usługi</h2>
+          <h2 className="text-lg font-medium text-gray-900 mb-4">{t('services.serviceImage')}</h2>
           <div className="space-y-4">
-            <label className="form-label">Wybierz zdjęcie {!isEditing && '*'}</label>
+            <label className="form-label">{t('services.serviceImage')} {!isEditing && '*'}</label>
             <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg">
               <div className="space-y-1 text-center">
                 <Image className="mx-auto h-12 w-12 text-gray-400" />
@@ -313,14 +347,14 @@ const ServiceForm = () => {
               className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
             />
             <label htmlFor="isActive" className="ml-2 block text-sm text-gray-900">
-              Usługa aktywna (widoczna)
+              {t('services.serviceActive')}
             </label>
           </div>
         </div>
 
         <div className="flex justify-end space-x-4">
           <button type="button" onClick={() => navigate('/services')} className="btn-secondary">
-            Anuluj
+            {t('buttons.cancel')}
           </button>
           <button
             type="submit"
@@ -328,7 +362,7 @@ const ServiceForm = () => {
             className="btn-primary flex items-center"
           >
             <Save className="h-4 w-4 mr-2" />
-            {isEditing ? 'Zaktualizuj' : 'Utwórz'} usługę
+            {isEditing ? t('buttons.save') : t('buttons.add')} {t('services.title').toLowerCase()}
           </button>
         </div>
       </form>

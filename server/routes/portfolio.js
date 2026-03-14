@@ -7,6 +7,18 @@ const { auth, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 
+/** Zwraca obiekt portfolio z polami title, description, results w wybranym języku (pl/en). Bez lang zwraca surowe pola _pl/_en. */
+function resolvePortfolioForLang(portfolio, lang) {
+  if (!lang || !['pl', 'en'].includes(lang)) {
+    return portfolio;
+  }
+  const doc = portfolio.toObject ? portfolio.toObject() : { ...portfolio };
+  const title = lang === 'pl' ? (doc.titlePl || doc.title) : (doc.titleEn || doc.title);
+  const description = lang === 'pl' ? (doc.descriptionPl || doc.description) : (doc.descriptionEn || doc.description);
+  const results = lang === 'pl' ? (doc.resultsPl || doc.results || '') : (doc.resultsEn || doc.results || '');
+  return { ...doc, title: title || '', description: description || '', results };
+}
+
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -109,7 +121,8 @@ router.get('/documentation', (req, res) => {
         auth: false,
         queryParams: {
           category: 'Filter by category (web, mobile, desktop, api, other)',
-          active: 'Filter by active status (true, false)'
+          active: 'Filter by active status (true, false)',
+          lang: 'pl | en – returns title, description, results in chosen language; without lang returns titlePl, titleEn, descriptionPl, descriptionEn, resultsPl, resultsEn'
         },
         response: {
           type: 'array',
@@ -251,23 +264,16 @@ router.get('/documentation', (req, res) => {
 // Get all portfolio items
 router.get('/', async (req, res) => {
   try {
-    const { category, active } = req.query;
-    
+    const { category, active, lang } = req.query;
     let query = {};
-    
-    if (category) {
-      query.category = category;
-    }
-    
-    if (active !== undefined) {
-      query.isActive = active === 'true';
-    }
+    if (category) query.category = category;
+    if (active !== undefined) query.isActive = active === 'true';
 
     const portfolio = await Portfolio.find(query)
       .populate('createdBy', 'firstName lastName')
       .sort({ order: 1, createdAt: -1 });
-
-    res.json(portfolio);
+    const list = portfolio.map((p) => (lang === 'pl' || lang === 'en' ? resolvePortfolioForLang(p, lang) : p));
+    res.json(list);
   } catch (error) {
     console.error('Get portfolio error:', error);
     res.status(500).json({ message: 'Błąd serwera podczas pobierania portfolio' });
@@ -277,14 +283,14 @@ router.get('/', async (req, res) => {
 // Get single portfolio item
 router.get('/:id', async (req, res) => {
   try {
+    const { lang } = req.query;
     const portfolio = await Portfolio.findById(req.params.id)
       .populate('createdBy', 'firstName lastName');
-    
     if (!portfolio) {
       return res.status(404).json({ message: 'Element portfolio nie został znaleziony' });
     }
-
-    res.json(portfolio);
+    const out = lang === 'pl' || lang === 'en' ? resolvePortfolioForLang(portfolio, lang) : portfolio;
+    res.json(out);
   } catch (error) {
     console.error('Get portfolio item error:', error);
     res.status(500).json({ message: 'Błąd serwera podczas pobierania elementu portfolio' });
@@ -302,8 +308,12 @@ router.post('/', [
     next();
   },
   uploadMiddleware,
-  body('title').trim().isLength({ min: 3 }),
-  body('description').trim().isLength({ min: 10 }),
+  body('title').optional().trim().isLength({ min: 3 }),
+  body('titlePl').optional().trim().isLength({ min: 3 }),
+  body('titleEn').optional().trim().isLength({ min: 3 }),
+  body('description').optional().trim().isLength({ min: 10 }),
+  body('descriptionPl').optional().trim().isLength({ min: 10 }),
+  body('descriptionEn').optional().trim().isLength({ min: 10 }),
   body('category').isIn(['web', 'mobile', 'desktop', 'api', 'other'])
 ], async (req, res) => {
   console.log('POST /portfolio - Request received');
@@ -334,6 +344,11 @@ router.post('/', [
         errors: errors.array() 
       });
     }
+    const { title, titlePl, titleEn, description, descriptionPl, descriptionEn } = req.body;
+    const hasTitle = (title && title.trim().length >= 3) || (titlePl && titlePl.trim().length >= 3) || (titleEn && titleEn.trim().length >= 3);
+    const hasDesc = (description && description.trim().length >= 10) || (descriptionPl && descriptionPl.trim().length >= 10) || (descriptionEn && descriptionEn.trim().length >= 10);
+    if (!hasTitle) return res.status(400).json({ message: 'Wymagany tytuł (title, titlePl lub titleEn, min. 3 znaki)' });
+    if (!hasDesc) return res.status(400).json({ message: 'Wymagany opis (description, descriptionPl lub descriptionEn, min. 10 znaków)' });
 
     if (!req.file) {
       return res.status(400).json({ message: 'Obraz jest wymagany' });
@@ -380,6 +395,12 @@ router.post('/', [
       createdBy: req.user._id,
       order: newOrder
     };
+    if (!portfolioData.titlePl && portfolioData.title) portfolioData.titlePl = portfolioData.title;
+    if (!portfolioData.titleEn && portfolioData.title) portfolioData.titleEn = portfolioData.title;
+    if (!portfolioData.descriptionPl && portfolioData.description) portfolioData.descriptionPl = portfolioData.description;
+    if (!portfolioData.descriptionEn && portfolioData.description) portfolioData.descriptionEn = portfolioData.description;
+    if (!portfolioData.resultsPl && portfolioData.results) portfolioData.resultsPl = portfolioData.results;
+    if (!portfolioData.resultsEn && portfolioData.results) portfolioData.resultsEn = portfolioData.results;
 
     const portfolio = new Portfolio(portfolioData);
     await portfolio.save();
@@ -408,9 +429,13 @@ router.put('/:id', [
     next();
   },
   uploadMiddleware,
-  body('title').trim().isLength({ min: 3 }),
-  body('description').trim().isLength({ min: 10 }),
-  body('category').isIn(['web', 'mobile', 'desktop', 'api', 'other'])
+  body('title').optional().trim().isLength({ min: 3 }),
+  body('titlePl').optional().trim().isLength({ min: 3 }),
+  body('titleEn').optional().trim().isLength({ min: 3 }),
+  body('description').optional().trim().isLength({ min: 10 }),
+  body('descriptionPl').optional().trim().isLength({ min: 10 }),
+  body('descriptionEn').optional().trim().isLength({ min: 10 }),
+  body('category').optional().isIn(['web', 'mobile', 'desktop', 'api', 'other'])
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -422,12 +447,17 @@ router.put('/:id', [
     }
 
     const portfolio = await Portfolio.findById(req.params.id);
-    
     if (!portfolio) {
       return res.status(404).json({ message: 'Element portfolio nie został znaleziony' });
     }
 
     const updateData = { ...req.body };
+    if (updateData.title && !updateData.titlePl) updateData.titlePl = updateData.title;
+    if (updateData.title && !updateData.titleEn) updateData.titleEn = updateData.title;
+    if (updateData.description && !updateData.descriptionPl) updateData.descriptionPl = updateData.description;
+    if (updateData.description && !updateData.descriptionEn) updateData.descriptionEn = updateData.description;
+    if (updateData.results && !updateData.resultsPl) updateData.resultsPl = updateData.results;
+    if (updateData.results && !updateData.resultsEn) updateData.resultsEn = updateData.results;
     
     // Parse technologies from JSON string if needed
     if (req.body.technologies) {

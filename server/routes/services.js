@@ -8,6 +8,18 @@ const { auth, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 
+/** Zwraca obiekt usługi z polami name, description, priceLabel w wybranym języku (pl/en). Bez lang zwraca surowe pola _pl/_en. */
+function resolveServiceForLang(service, lang) {
+  if (!lang || !['pl', 'en'].includes(lang)) {
+    return service;
+  }
+  const doc = service.toObject ? service.toObject() : { ...service };
+  const name = lang === 'pl' ? (doc.namePl || doc.name) : (doc.nameEn || doc.name);
+  const description = lang === 'pl' ? (doc.descriptionPl || doc.description) : (doc.descriptionEn || doc.description);
+  const priceLabel = lang === 'pl' ? (doc.priceLabelPl || doc.priceLabel || '') : (doc.priceLabelEn || doc.priceLabel || '');
+  return { ...doc, name: name || '', description: description || '', priceLabel };
+}
+
 const uploadDir = 'uploads/services/';
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
@@ -59,7 +71,8 @@ router.get('/documentation', (req, res) => {
         auth: false,
         queryParams: {
           category: 'Filtruj po kategorii (development, consulting, hosting, maintenance, other)',
-          active: 'Filtruj po statusie (true, false)'
+          active: 'Filtruj po statusie (true, false)',
+          lang: 'pl | en – zwraca name, description, priceLabel w wybranym języku; bez lang zwraca namePl, nameEn, descriptionPl, descriptionEn, priceLabelPl, priceLabelEn'
         },
         response: { type: 'array', items: 'Service' }
       },
@@ -147,7 +160,7 @@ router.get('/documentation', (req, res) => {
 // GET /
 router.get('/', async (req, res) => {
   try {
-    const { category, active } = req.query;
+    const { category, active, lang } = req.query;
     const query = {};
     if (category) query.category = category;
     if (active !== undefined) query.isActive = active === 'true';
@@ -155,7 +168,8 @@ router.get('/', async (req, res) => {
     const services = await Service.find(query)
       .populate('createdBy', 'firstName lastName')
       .sort({ order: 1, createdAt: -1 });
-    res.json(services);
+    const list = services.map((s) => (lang === 'pl' || lang === 'en' ? resolveServiceForLang(s, lang) : s));
+    res.json(list);
   } catch (error) {
     console.error('Get services error:', error);
     res.status(500).json({ message: 'Błąd serwera podczas pobierania usług' });
@@ -165,12 +179,14 @@ router.get('/', async (req, res) => {
 // GET /:id
 router.get('/:id', async (req, res) => {
   try {
+    const { lang } = req.query;
     const service = await Service.findById(req.params.id)
       .populate('createdBy', 'firstName lastName');
     if (!service) {
       return res.status(404).json({ message: 'Usługa nie została znaleziona' });
     }
-    res.json(service);
+    const out = lang === 'pl' || lang === 'en' ? resolveServiceForLang(service, lang) : service;
+    res.json(out);
   } catch (error) {
     console.error('Get service error:', error);
     res.status(500).json({ message: 'Błąd serwera podczas pobierania usługi' });
@@ -183,8 +199,12 @@ router.post('/', [
   requireRole(['admin', 'manager']),
   (req, res, next) => { req.setTimeout(300000); res.setTimeout(300000); next(); },
   uploadMiddleware,
-  body('name').trim().isLength({ min: 2 }),
-  body('description').trim().isLength({ min: 10 }),
+  body('name').optional().trim().isLength({ min: 2 }),
+  body('namePl').optional().trim().isLength({ min: 2 }),
+  body('nameEn').optional().trim().isLength({ min: 2 }),
+  body('description').optional().trim().isLength({ min: 10 }),
+  body('descriptionPl').optional().trim().isLength({ min: 10 }),
+  body('descriptionEn').optional().trim().isLength({ min: 10 }),
   body('category').optional().isIn(['development', 'consulting', 'hosting', 'maintenance', 'other'])
 ], async (req, res) => {
   try {
@@ -192,18 +212,25 @@ router.post('/', [
     if (!errors.isEmpty()) {
       return res.status(400).json({ message: 'Nieprawidłowe dane usługi', errors: errors.array() });
     }
+    const { name, namePl, nameEn, description, descriptionPl, descriptionEn, priceLabel, priceLabelPl, priceLabelEn } = req.body;
+    const hasName = (name && name.trim().length >= 2) || (namePl && namePl.trim().length >= 2) || (nameEn && nameEn.trim().length >= 2);
+    const hasDesc = (description && description.trim().length >= 10) || (descriptionPl && descriptionPl.trim().length >= 10) || (descriptionEn && descriptionEn.trim().length >= 10);
+    if (!hasName) return res.status(400).json({ message: 'Wymagana nazwa (name, namePl lub nameEn, min. 2 znaki)' });
+    if (!hasDesc) return res.status(400).json({ message: 'Wymagany opis (description, descriptionPl lub descriptionEn, min. 10 znaków)' });
 
     const maxOrder = await Service.findOne().sort({ order: -1 });
     const newOrder = maxOrder ? maxOrder.order + 1 : 0;
 
-    const data = {
-      ...req.body,
-      createdBy: req.user._id,
-      order: newOrder
-    };
+    const data = { ...req.body, createdBy: req.user._id, order: newOrder };
     if (req.file) data.image = `/uploads/services/${req.file.filename}`;
     if (req.body.priceMin !== undefined && req.body.priceMin !== '') data.priceMin = Number(req.body.priceMin);
     if (req.body.priceMax !== undefined && req.body.priceMax !== '') data.priceMax = Number(req.body.priceMax);
+    if (!data.namePl && data.name) data.namePl = data.name;
+    if (!data.nameEn && data.name) data.nameEn = data.name;
+    if (!data.descriptionPl && data.description) data.descriptionPl = data.description;
+    if (!data.descriptionEn && data.description) data.descriptionEn = data.description;
+    if (!data.priceLabelPl && data.priceLabel) data.priceLabelPl = data.priceLabel;
+    if (!data.priceLabelEn && data.priceLabel) data.priceLabelEn = data.priceLabel;
 
     const service = new Service(data);
     await service.save();
@@ -222,7 +249,11 @@ router.put('/:id', [
   (req, res, next) => { req.setTimeout(300000); res.setTimeout(300000); next(); },
   uploadMiddleware,
   body('name').optional().trim().isLength({ min: 2 }),
+  body('namePl').optional().trim().isLength({ min: 2 }),
+  body('nameEn').optional().trim().isLength({ min: 2 }),
   body('description').optional().trim().isLength({ min: 10 }),
+  body('descriptionPl').optional().trim().isLength({ min: 10 }),
+  body('descriptionEn').optional().trim().isLength({ min: 10 }),
   body('category').optional().isIn(['development', 'consulting', 'hosting', 'maintenance', 'other'])
 ], async (req, res) => {
   try {
@@ -242,6 +273,12 @@ router.put('/:id', [
     if (req.body.priceMax !== undefined && req.body.priceMax !== '') updateData.priceMax = Number(req.body.priceMax);
     if (req.body.priceMin === '') updateData.priceMin = null;
     if (req.body.priceMax === '') updateData.priceMax = null;
+    if (updateData.name && !updateData.namePl) updateData.namePl = updateData.name;
+    if (updateData.name && !updateData.nameEn) updateData.nameEn = updateData.name;
+    if (updateData.description && !updateData.descriptionPl) updateData.descriptionPl = updateData.description;
+    if (updateData.description && !updateData.descriptionEn) updateData.descriptionEn = updateData.description;
+    if (updateData.priceLabel && !updateData.priceLabelPl) updateData.priceLabelPl = updateData.priceLabel;
+    if (updateData.priceLabel && !updateData.priceLabelEn) updateData.priceLabelEn = updateData.priceLabel;
 
     Object.assign(service, updateData);
     await service.save();

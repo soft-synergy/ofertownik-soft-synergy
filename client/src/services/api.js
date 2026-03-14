@@ -71,7 +71,7 @@ export const projectsAPI = {
 
 export const portfolioAPI = {
   getAll: (params) => api.get('/api/portfolio', { params }).then(res => res.data),
-  getById: (id) => api.get(`/api/portfolio/${id}`).then(res => res.data),
+  getById: (id, params) => api.get(`/api/portfolio/${id}`, { params }).then(res => res.data),
   create: (data) => {
     // If data is FormData, let browser set the Content-Type header automatically
     // Increase timeout and maxContentLength for file uploads
@@ -159,7 +159,7 @@ const uploadAxiosInterceptors = (instance) => {
 
 export const servicesAPI = {
   getAll: (params) => api.get('/api/services', { params }).then(res => res.data),
-  getById: (id) => api.get(`/api/services/${id}`).then(res => res.data),
+  getById: (id, params) => api.get(`/api/services/${id}`, { params }).then(res => res.data),
   create: (data) => {
     if (data instanceof FormData) {
       const instance = axios.create(uploadAxiosConfig());
@@ -203,6 +203,7 @@ export const publicOrdersAPI = {
   getConfigStatus: () => api.get('/api/public-orders/config/status').then(res => res.data),
   aiAnalyze: (limit = 10) => api.post('/api/public-orders/ai-analyze', { limit }).then(res => res.data),
   aiReset: (ids) => api.post('/api/public-orders/ai-reset', { ids }).then(res => res.data),
+  deleteAll: () => api.delete('/api/public-orders/all').then(res => res.data),
 };
 
 export const activityAPI = {

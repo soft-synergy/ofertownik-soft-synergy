@@ -15,7 +15,8 @@ import {
   ChevronRight,
   Loader2,
   Sparkles,
-  RotateCcw
+  RotateCcw,
+  Trash2
 } from 'lucide-react';
 
 const AI_STATUS_CONFIG = {
@@ -110,6 +111,15 @@ const ZleceniaPubliczne = () => {
     }
   );
 
+  const deleteAllMutation = useMutation(publicOrdersAPI.deleteAll, {
+    onSuccess: (res) => {
+      toast.success(res.message || 'Usunięto wszystkie zlecenia');
+      queryClient.invalidateQueries('publicOrders');
+      setSelectedId(null);
+    },
+    onError: (e) => toast.error(e.response?.data?.message || 'Błąd usuwania')
+  });
+
   const items = data?.items || [];
   const totalPages = data?.totalPages || 0;
   const total = data?.total || 0;
@@ -127,7 +137,7 @@ const ZleceniaPubliczne = () => {
   };
 
   const isAdmin = user?.role === 'admin';
-  const isBusy = syncMutation.isLoading || aiMutation.isLoading || resetMutation.isLoading;
+  const isBusy = syncMutation.isLoading || aiMutation.isLoading || resetMutation.isLoading || deleteAllMutation.isLoading;
 
   return (
     <div className="space-y-6">
@@ -169,6 +179,17 @@ const ZleceniaPubliczne = () => {
             >
               <RotateCcw className="h-4 w-4" />
               Reset AI
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm('Na pewno usunąć WSZYSTKIE zlecenia publiczne z bazy? Tej operacji nie można cofnąć.')) deleteAllMutation.mutate();
+              }}
+              disabled={isBusy || total === 0}
+              className="inline-flex items-center gap-2 px-3 py-2 border border-red-300 text-red-700 rounded-lg hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            >
+              {deleteAllMutation.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              Usuń wszystkie
             </button>
           </div>
         )}

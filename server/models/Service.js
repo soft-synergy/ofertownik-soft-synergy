@@ -1,15 +1,15 @@
 const mongoose = require('mongoose');
 
 const serviceSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  description: {
-    type: String,
-    required: true
-  },
+  name: { type: String, trim: true },
+  namePl: { type: String, trim: true },
+  nameEn: { type: String, trim: true },
+  description: { type: String },
+  descriptionPl: { type: String },
+  descriptionEn: { type: String },
+  priceLabel: { type: String, trim: true, default: '' },
+  priceLabelPl: { type: String, trim: true, default: '' },
+  priceLabelEn: { type: String, trim: true, default: '' },
   category: {
     type: String,
     required: true,
@@ -27,11 +27,6 @@ const serviceSchema = new mongoose.Schema({
   priceMax: {
     type: Number,
     default: null
-  },
-  priceLabel: {
-    type: String,
-    trim: true,
-    default: ''
   },
   isActive: {
     type: Boolean,
