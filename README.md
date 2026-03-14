@@ -43,7 +43,7 @@ npm run install-all
 3. **Skonfiguruj zmienne środowiskowe**
 ```bash
 cp .env.example .env
-# Edytuj .env i dodaj swoje dane MongoDB
+# Edytuj .env i dodaj swoje dane MongoDB oraz klucz do AI (OPENROUTER_API_KEY lub ANTHROPIC_API_KEY)
 ```
 
 4. **Utwórz użytkownika admin**

@@ -1,7 +1,17 @@
 const Anthropic = require('@anthropic-ai/sdk');
+const { OpenRouter } = require('@openrouter/sdk');
 const { fetchOfferDetail, BIZNES_POLSKA_COOKIES } = require('./biznesPolskaScraper');
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
+const AI_PROVIDER = (process.env.AI_PROVIDER || (OPENROUTER_API_KEY ? 'openrouter' : 'anthropic')).toLowerCase();
+
+// OpenRouter models (możesz override w .env)
+const OR_MODEL_FAST = process.env.OPENROUTER_MODEL_FAST || 'deepseek/deepseek-chat';
+const OR_MODEL_DEEP = process.env.OPENROUTER_MODEL_DEEP || 'deepseek/deepseek-r1';
+// Fallback models (używane tylko przy błędzie requestu)
+const OR_MODEL_FAST_FALLBACK = process.env.OPENROUTER_MODEL_FAST_FALLBACK || 'meta-llama/llama-3.3-70b-instruct';
+const OR_MODEL_DEEP_FALLBACK = process.env.OPENROUTER_MODEL_DEEP_FALLBACK || 'deepseek/deepseek-chat';
 
 const COMPANY_PROFILE = `Jesteśmy firmą zajmującą się projektowaniem oraz wdrażaniem stron internetowych, systemów webowych oraz materiałów graficznych dla firm i instytucji publicznych. Specjalizujemy się w tworzeniu nowoczesnych interfejsów użytkownika, serwisów informacyjnych, landing page oraz portali internetowych.
 
@@ -37,8 +47,65 @@ MOŻEMY realizować zamówienia dotyczące:
 - udziału jako podwykonawca odpowiedzialny za część graficzną/frontendową`;
 
 function getClient() {
+  if (AI_PROVIDER === 'openrouter') {
+    if (!OPENROUTER_API_KEY) throw new Error('Brak OPENROUTER_API_KEY w .env');
+    return new OpenRouter({
+      apiKey: OPENROUTER_API_KEY,
+      defaultHeaders: {
+        // opcjonalnie, ale pomaga przy debugowaniu i rankingach
+        'X-OpenRouter-Title': 'ofertownik-soft-synergy'
+      }
+    });
+  }
+
   if (!ANTHROPIC_API_KEY) throw new Error('Brak ANTHROPIC_API_KEY w .env');
   return new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+}
+
+async function llmCreate({ client, provider, model, system, messages, max_tokens, temperature }) {
+  if (provider === 'openrouter') {
+    // @openrouter/sdk
+    const combinedMessages = system
+      ? [{ role: 'system', content: system }, ...(messages || [])]
+      : (messages || []);
+    const pickFallback = (m) => {
+      if (m === OR_MODEL_FAST) return OR_MODEL_FAST_FALLBACK;
+      if (m === OR_MODEL_DEEP) return OR_MODEL_DEEP_FALLBACK;
+      return '';
+    };
+
+    const sendOnce = async (m) => {
+      const completion = await client.chat.send({
+        model: m,
+        messages: combinedMessages,
+        temperature,
+        max_tokens,
+        stream: false
+      });
+      const content = completion?.choices?.[0]?.message?.content;
+      return typeof content === 'string'
+        ? content
+        : (Array.isArray(content) ? content.map((c) => c?.text || '').join('') : '');
+    };
+
+    try {
+      return await sendOnce(model);
+    } catch (err) {
+      const fallbackModel = pickFallback(model);
+      if (!fallbackModel || fallbackModel === model) throw err;
+      return await sendOnce(fallbackModel);
+    }
+  }
+
+  // Anthropic
+  const response = await client.messages.create({
+    model,
+    max_tokens,
+    temperature,
+    system,
+    messages
+  });
+  return response.content?.[0]?.text || '';
 }
 
 // ───────────────────────────────────────────────────────────────
@@ -49,6 +116,7 @@ function getClient() {
 
 async function batchFilter(orders) {
   const client = getClient();
+  const provider = AI_PROVIDER;
 
   const ordersSummary = orders.map((o) => ({
     id: o.biznesPolskaId || o._id.toString(),
@@ -68,11 +136,7 @@ ${JSON.stringify(ordersSummary, null, 0)}
 Odpowiedz WYŁĄCZNIE poprawnym JSON (tablica):
 [{"id":"...","relevant":true/false,"reason":"max 1 zdanie"}]`;
 
-  const response = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 2048,
-    temperature: 0,
-    system: `Jesteś ekspertem od zamówień publicznych. Oceniasz czy podane zamówienia pasują do profilu firmy.
+  const systemPrompt = `Jesteś ekspertem od zamówień publicznych. Oceniasz czy podane zamówienia pasują do profilu firmy.
 
 ${COMPANY_PROFILE}
 
@@ -80,11 +144,17 @@ Zasady:
 - Jeśli zamówienie dotyczy stron www, portali, landing page, projektowania graficznego, UI/UX, CMS, WCAG, SEO, materiałów graficznych → relevant=true
 - Jeśli zamówienie wymaga autoryzacji producenta, serwisowania zamkniętych systemów, dostawy sprzętu, ERP/CRM, infrastruktury IT, utrzymania systemów dziedzinowych → relevant=false
 - W razie wątpliwości (może częściowo pasować) → relevant=true
-- Odpowiadaj TYLKO JSON, bez markdown, bez komentarzy.`,
+- Odpowiadaj TYLKO JSON, bez markdown, bez komentarzy.`;
+  const text = await llmCreate({
+    client,
+    provider,
+    model: provider === 'openrouter' ? OR_MODEL_FAST : 'claude-haiku-4-5-20251001',
+    max_tokens: 2048,
+    temperature: 0,
+    system: systemPrompt,
     messages: [{ role: 'user', content: userMessage }]
   });
 
-  const text = response.content[0]?.text || '[]';
   try {
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     return JSON.parse(jsonMatch ? jsonMatch[0] : text);
@@ -100,14 +170,15 @@ Zasady:
 
 // ───────────────────────────────────────────────────────────────
 // FAZA 2 – Scoring (Haiku)
-//   Do AI przekazywany jest CAŁY HTML strony ogłoszenia z biznes-polska.pl,
-//   żeby model miał 100% kontekstu (wszystkie tabele, opisy, wymagania, załączniki).
+//   Domyślnie: tylko tekst (Opis + Wymagania + detailFullText) – ~80% taniej, ta sama jakość.
+//   USE_HTML_FOR_SCORING=true w .env włącza wysyłanie pełnego HTML (drożej, ~30k tokenów/zlecenie).
 // ───────────────────────────────────────────────────────────────
 
 const MAX_HTML_CHARS = 120000;
 
 async function scoreOrder(order, options = {}) {
   const client = getClient();
+  const provider = AI_PROVIDER;
   const { fullPageHtmlOverride, fullTextOverride } = options;
 
   const hasFullHtml = fullPageHtmlOverride && fullPageHtmlOverride.trim().length > 0;
@@ -161,11 +232,7 @@ ${fallbackText || textFallback}`}
 Odpowiedz WYŁĄCZNIE poprawnym JSON:
 {"score":N,"analysis":"2-3 zdania: co dokładnie obejmuje zamówienie, dlaczego pasuje/nie pasuje, jakie są ryzyka"}`;
 
-  const response = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 512,
-    temperature: 0,
-    system: `Jesteś ekspertem od zamówień publicznych w Polsce. Oceniasz dopasowanie zamówienia do profilu firmy web-designowej.
+  const systemPrompt = `Jesteś ekspertem od zamówień publicznych w Polsce. Oceniasz dopasowanie zamówienia do profilu firmy web-designowej.
 
 ${COMPANY_PROFILE}
 
@@ -176,11 +243,16 @@ Scoring:
 7-8: Dobrze pasuje (strona www, portal, grafika, landing page, WCAG)
 9-10: Idealnie pasuje (dokładnie to co robimy, prosty zakres, realne szanse)
 
-Odpowiadaj TYLKO JSON, bez markdown.`,
+Odpowiadaj TYLKO JSON, bez markdown.`;
+  const text = await llmCreate({
+    client,
+    provider,
+    model: provider === 'openrouter' ? OR_MODEL_FAST : 'claude-haiku-4-5-20251001',
+    max_tokens: 512,
+    temperature: 0,
+    system: systemPrompt,
     messages: [{ role: 'user', content: userMessage }]
   });
-
-  const text = response.content[0]?.text || '{}';
   try {
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : text);
@@ -208,6 +280,7 @@ const DEEP_ANALYSIS_MIN_SCORE = 5;
 
 async function deepAnalyzeOrder(order, options = {}) {
   const client = getClient();
+  const provider = AI_PROVIDER;
   const { rawPageHtml } = options;
 
   let pageHtml = rawPageHtml || '';
@@ -299,15 +372,15 @@ Poprzednia analiza AI: ${order.aiAnalysis || 'brak'}
 
 ${fallbackContent}`;
 
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+  const text = await llmCreate({
+    client,
+    provider,
+    model: provider === 'openrouter' ? OR_MODEL_DEEP : 'claude-sonnet-4-20250514',
     max_tokens: 4096,
     temperature: 0.1,
     system: systemPrompt,
     messages: [{ role: 'user', content: userMessage }]
   });
-
-  const text = response.content[0]?.text || '{}';
   try {
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : text);
@@ -319,7 +392,7 @@ ${fallbackContent}`;
 
     return {
       ...parsed,
-      model: 'claude-sonnet-4-20250514',
+      model: provider === 'openrouter' ? OR_MODEL_DEEP : 'claude-sonnet-4-20250514',
       analyzedAt: new Date().toISOString()
     };
   } catch (e) {
@@ -337,7 +410,7 @@ ${fallbackContent}`;
       recommendation: 'Wymaga ręcznej analizy',
       offerDraft: '',
       rawAiResponse: text.slice(0, 3000),
-      model: 'claude-sonnet-4-20250514',
+      model: provider === 'openrouter' ? OR_MODEL_DEEP : 'claude-sonnet-4-20250514',
       analyzedAt: new Date().toISOString(),
       error: true
     };
@@ -438,6 +511,7 @@ async function runAiAnalysis(options = {}) {
 
   const cookies = process.env.BIZNES_POLSKA_COOKIES || BIZNES_POLSKA_COOKIES;
 
+  const useHtmlForScoring = process.env.USE_HTML_FOR_SCORING === 'true';
   for (const order of candidates) {
     try {
       let fullPageHtmlForAi = '';
@@ -467,7 +541,7 @@ async function runAiAnalysis(options = {}) {
       }
 
       const { score, analysis } = await scoreOrder(order, {
-        fullPageHtmlOverride: fullPageHtmlForAi || undefined,
+        fullPageHtmlOverride: useHtmlForScoring ? (fullPageHtmlForAi || undefined) : undefined,
         fullTextOverride: fullTextForAi || undefined
       });
       await PublicOrder.findByIdAndUpdate(order._id, {
