@@ -98,18 +98,23 @@ Zasady:
 }
 
 // ───────────────────────────────────────────────────────────────
-// FAZA 2 – Scoring (Haiku, ~$0.0005/zlecenie)
-//   Przed oceną pobieramy świeży HTML ze strony Biznes Polska (z cookies),
-//   potem wysyłamy pełną treść do AI. fullTextOverride = treść z pobranego HTML (jeśli podana).
+// FAZA 2 – Scoring (Haiku)
+//   Do AI przekazywany jest CAŁY HTML strony ogłoszenia z biznes-polska.pl,
+//   żeby model miał 100% kontekstu (wszystkie tabele, opisy, wymagania, załączniki).
 // ───────────────────────────────────────────────────────────────
+
+const MAX_HTML_CHARS = 120000;
 
 async function scoreOrder(order, options = {}) {
   const client = getClient();
-  const { fullTextOverride } = options;
+  const { fullPageHtmlOverride, fullTextOverride } = options;
 
-  const fullText = (fullTextOverride || order.detailFullText || '').trim();
-  const fullTextLimited = fullText.slice(0, 14000);
-  const fallback = !fullTextLimited.trim()
+  const hasFullHtml = fullPageHtmlOverride && fullPageHtmlOverride.trim().length > 0;
+  const htmlForPrompt = hasFullHtml
+    ? fullPageHtmlOverride.trim().slice(0, MAX_HTML_CHARS)
+    : '';
+  const fallbackText = (fullTextOverride || order.detailFullText || '').trim().slice(0, 14000);
+  const textFallback = !hasFullHtml
     ? `Tytuł: ${order.title}\nOpis: ${order.description || ''}\nUwagi: ${order.remarks || ''}\nKontakt: ${order.contact || ''}\nInwestor: ${order.investor || ''}\nBranże: ${(order.branches || []).join(', ')}`
     : '';
 
@@ -119,15 +124,24 @@ async function scoreOrder(order, options = {}) {
 - 7-9: dobrze pasuje do naszego profilu
 - 10: idealnie pasuje
 
-Dane zamówienia:
+${hasFullHtml
+  ? `Poniżej CAŁA strona HTML ogłoszenia z biznes-polska.pl. Wszystkie dane (przedmiot, organizator, opis, wymagania, termin, załączniki, kontakt) są w treści. Zignoruj skrypty i style – skup się na treści w <table>, <article>, sekcjach z danymi.
+
+ID zlecenia: ${order.biznesPolskaId}
+URL: ${order.detailUrl || ''}
+
+--- POCZĄTEK HTML STRONY ---
+${htmlForPrompt}
+--- KONIEC HTML STRONY ---`
+  : `Dane zamówienia (bez pełnego HTML):
 ID: ${order.biznesPolskaId}
 Tytuł: ${order.title}
 Kategoria: ${order.category || ''}
 Województwo: ${order.region || ''}
 Inwestor/Zamawiający: ${order.investor || ''}
 
-Pełna treść ogłoszenia (ze strony biznes-polska.pl):
-${fullTextLimited || fallback}
+Treść:
+${fallbackText || textFallback}`}
 
 Odpowiedz WYŁĄCZNIE poprawnym JSON:
 {"score":N,"analysis":"2-3 zdania: co dokładnie obejmuje zamówienie, dlaczego pasuje/nie pasuje, jakie są ryzyka"}`;
@@ -257,12 +271,14 @@ async function runAiAnalysis(options = {}) {
 
   for (const order of candidates) {
     try {
+      let fullPageHtmlForAi = '';
       let fullTextForAi = order.detailFullText || '';
       if (order.detailUrl) {
         try {
           const fresh = await fetchOfferDetail(order.detailUrl, cookies);
+          fullPageHtmlForAi = (fresh.rawPageHtml || '').trim();
           fullTextForAi = (fresh.detailFullText || '').trim();
-          if (fullTextForAi) {
+          if (fullTextForAi || fullPageHtmlForAi) {
             await PublicOrder.findByIdAndUpdate(order._id, {
               $set: {
                 detailFullText: fresh.detailFullText || '',
@@ -282,6 +298,7 @@ async function runAiAnalysis(options = {}) {
       }
 
       const { score, analysis } = await scoreOrder(order, {
+        fullPageHtmlOverride: fullPageHtmlForAi || undefined,
         fullTextOverride: fullTextForAi || undefined
       });
       await PublicOrder.findByIdAndUpdate(order._id, {

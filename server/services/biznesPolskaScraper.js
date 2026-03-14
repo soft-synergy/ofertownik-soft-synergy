@@ -204,7 +204,13 @@ async function fetchOfferDetail(detailUrl, cookies) {
   const $assoc = $('section.associations');
   if ($assoc.length) detailRawHtml += '\n\n' + ($assoc.parent().html() || $assoc.html() || '').trim();
 
+  /** Pełna odpowiedź HTTP – cały HTML strony (do przekazania do AI) */
+  const rawPageHtml = typeof res.data === 'string'
+    ? res.data
+    : (Buffer.isBuffer(res.data) ? res.data.toString('utf8') : '');
+
   return {
+    rawPageHtml,
     biznesPolskaId,
     category: raw('Kategoria ogłoszenia'),
     addedDate,
