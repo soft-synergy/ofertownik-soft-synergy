@@ -162,6 +162,39 @@ async function fetchOfferDetail(detailUrl, cookies) {
     if (!isNaN(d.getTime())) addedDate = d;
   }
 
+  // Pełna treść strony w jednym tekście (wszystkie pola tabeli) – do oceny AI
+  const fullTextLines = [];
+  $('article.offer-sheet table tr').each((_, tr) => {
+    const $tr = $(tr);
+    const th = normalizeLabel($tr.find('th').text());
+    let tdText = $tr.find('td').text().trim();
+    const $td = $tr.find('td');
+    const mailLink = $td.find('a.email').attr('href') || $td.find('a[href^="mailto:"]').attr('href');
+    if (mailLink) tdText = mailLink.replace('mailto:', '').trim();
+    const wwwLink = $td.find('a[href^="http"]').attr('href');
+    if (wwwLink) tdText = wwwLink;
+    if (th) fullTextLines.push(th + ': ' + tdText);
+  });
+  const offerStatus = $('.offer-status').text().trim();
+  if (offerStatus) fullTextLines.push('Status: ' + offerStatus);
+  if (branches.length) fullTextLines.push('Branże: ' + branches.join(', '));
+  $('section.associations ul li a').each((_, el) => {
+    const $a = $(el);
+    const href = $a.attr('href');
+    const text = $a.text().trim();
+    if (href) fullTextLines.push('Link: ' + (href.startsWith('http') ? href : BASE_URL + href) + (text ? ' | ' + text : ''));
+  });
+  let detailFullText = fullTextLines.join('\n');
+  if (!detailFullText.trim()) {
+    const fallback = $('article.offer-sheet').text() || $('#main').text() || $('body').text();
+    detailFullText = (fallback || '').trim().replace(/\s+/g, ' ');
+  }
+
+  // Surowy HTML całej sekcji ogłoszenia + powiązania – nic nie pominięte
+  let detailRawHtml = ($('article.offer-sheet').html() || '').trim();
+  const $assoc = $('section.associations');
+  if ($assoc.length) detailRawHtml += '\n\n' + ($assoc.parent().html() || $assoc.html() || '').trim();
+
   return {
     biznesPolskaId,
     category: raw('Kategoria ogłoszenia'),
@@ -184,7 +217,9 @@ async function fetchOfferDetail(detailUrl, cookies) {
     source: raw('Źródło'),
     branches,
     originalContentUrl: originalContentUrl || undefined,
-    offerStatus: $('.offer-status').text().trim() || undefined
+    offerStatus: offerStatus || undefined,
+    detailFullText,
+    detailRawHtml
   };
 }
 
@@ -267,7 +302,9 @@ async function runSync(cookies, options = {}) {
         source: detail.source,
         branches: detail.branches,
         originalContentUrl: detail.originalContentUrl,
-        offerStatus: detail.offerStatus
+        offerStatus: detail.offerStatus,
+        detailFullText: detail.detailFullText || '',
+        detailRawHtml: detail.detailRawHtml || ''
       });
       result.added++;
       existingIds.add(row.id);

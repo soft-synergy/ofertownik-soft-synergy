@@ -53,7 +53,30 @@ const publicOrderSchema = new mongoose.Schema({
   /** Link do oryginalnej treści ogłoszenia (jeśli jest) */
   originalContentUrl: { type: String, trim: true },
   /** Status ogłoszenia (np. aktualne) */
-  offerStatus: { type: String, trim: true }
+  offerStatus: { type: String, trim: true },
+
+  /** Pełna treść strony szczegółowej w formie tekstowej – wszystkie dane (do oceny AI) */
+  detailFullText: { type: String, default: '' },
+  /** Surowy HTML sekcji ogłoszenia (article.offer-sheet) – cała strona szczegółów, nic nie pominięte */
+  detailRawHtml: { type: String, default: '' },
+
+  // ─── AI Analysis ───
+  /** pending = nie analizowane, rejected = odrzucone (czerwone), candidate = potencjalnie pasujące (pomarańczowe), scored = ocenione z punktacją */
+  aiStatus: {
+    type: String,
+    enum: ['pending', 'rejected', 'candidate', 'scored'],
+    default: 'pending'
+  },
+  /** Wynik 1-10 (tylko dla scored) */
+  aiScore: { type: Number, default: null, min: 1, max: 10 },
+  /** Uzasadnienie AI (krótka analiza) */
+  aiAnalysis: { type: String, default: '' },
+  /** Powód odrzucenia (dla rejected) */
+  aiRejectionReason: { type: String, default: '' },
+  /** Kiedy AI przetworzył batch-filter */
+  aiBatchProcessedAt: { type: Date, default: null },
+  /** Kiedy AI przydzielił score */
+  aiScoredAt: { type: Date, default: null }
 }, {
   timestamps: true
 });
@@ -61,5 +84,7 @@ const publicOrderSchema = new mongoose.Schema({
 publicOrderSchema.index({ biznesPolskaId: 1 }, { unique: true });
 publicOrderSchema.index({ addedDate: -1 });
 publicOrderSchema.index({ region: 1 });
+publicOrderSchema.index({ aiStatus: 1 });
+publicOrderSchema.index({ aiScore: -1 });
 
 module.exports = mongoose.model('PublicOrder', publicOrderSchema);

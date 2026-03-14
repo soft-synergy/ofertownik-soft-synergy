@@ -201,6 +201,8 @@ export const publicOrdersAPI = {
   getById: (id) => api.get(`/api/public-orders/${id}`).then(res => res.data),
   sync: () => api.post('/api/public-orders/sync').then(res => res.data),
   getConfigStatus: () => api.get('/api/public-orders/config/status').then(res => res.data),
+  aiAnalyze: (limit = 10) => api.post('/api/public-orders/ai-analyze', { limit }).then(res => res.data),
+  aiReset: (ids) => api.post('/api/public-orders/ai-reset', { ids }).then(res => res.data),
 };
 
 export const activityAPI = {
