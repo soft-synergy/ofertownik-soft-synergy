@@ -74,15 +74,26 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
-/** Ręczna synchronizacja z Grupą Biznes Polska (tylko admin). Cookies w kodzie. */
+/** Ręczna synchronizacja z Grupą Biznes Polska (tylko admin). Po syncu od razu AI dla nowych. */
 router.post('/sync', auth, requireRole(['admin']), async (req, res) => {
   try {
     const result = await runSync(undefined, { maxListPages: 50 });
+    if (result.addedIds?.length > 0) {
+      try {
+        const aiStats = await runAiAnalysis({ orderIds: result.addedIds, batchSize: 20 });
+        result.ai = aiStats;
+      } catch (aiErr) {
+        console.error('AI po sync:', aiErr.message);
+        result.aiError = aiErr.message;
+      }
+    }
     res.json({
-      message: `Dodano ${result.added} zleceń.`,
+      message: `Dodano ${result.added} zleceń.${result.ai ? ` AI: ${result.ai.scored} ocenionych, ${result.ai.rejected} odrzuconych.` : ''}`,
       added: result.added,
       updated: result.updated,
-      errors: result.errors.length ? result.errors : undefined
+      errors: result.errors.length ? result.errors : undefined,
+      ai: result.ai,
+      aiError: result.aiError
     });
   } catch (e) {
     console.error('Public orders sync error:', e);

@@ -666,13 +666,21 @@ mongoose.connect(process.env.MONGODB_URI, {
   } catch (e) {
     console.error('Nie udało się uruchomić monitoringu certyfikatów SSL:', e);
   }
-  // Zlecenia publiczne – synchronizacja z Grupą Biznes Polska 5× dziennie (co ~4h 48min), cookies w kodzie
+  // Zlecenia publiczne – synchronizacja 5× dziennie, od razu AI tylko dla nowo dodanych (bez re-walidacji)
   const setupBiznesPolskaScheduler = () => {
     const { runSync } = require('./services/biznesPolskaScraper');
+    const { runAiAnalysis } = require('./services/aiOrderAnalyzer');
     const intervalMs = Math.floor((24 * 60 * 60 * 1000) / 5); // 5× daily
     const run = () => {
       runSync(undefined, { maxListPages: 50 })
-        .then((r) => console.log(`[Biznes Polska] Sync zakończony: dodano ${r.added} zleceń${r.errors.length ? `, błędy: ${r.errors.length}` : ''}`))
+        .then((r) => {
+          console.log(`[Biznes Polska] Sync zakończony: dodano ${r.added} zleceń${r.errors.length ? `, błędy: ${r.errors.length}` : ''}`);
+          if (r.addedIds?.length > 0) {
+            return runAiAnalysis({ orderIds: r.addedIds, batchSize: 20 })
+              .then((ai) => console.log(`[Biznes Polska] AI: ${ai.scored} ocenionych, ${ai.rejected} odrzuconych`))
+              .catch((e) => console.error('[Biznes Polska] AI po sync:', e.message));
+          }
+        })
         .catch((e) => console.error('[Biznes Polska] Błąd sync:', e.message));
     };
     setTimeout(run, 2 * 60 * 1000);

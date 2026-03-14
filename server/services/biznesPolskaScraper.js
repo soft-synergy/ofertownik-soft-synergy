@@ -233,7 +233,7 @@ async function fetchOfferDetail(detailUrl, cookies) {
 async function runSync(cookies, options = {}) {
   const PublicOrder = require('../models/PublicOrder');
   const { maxListPages = 50, skipDetails = false } = options;
-  const result = { added: 0, updated: 0, errors: [] };
+  const result = { added: 0, updated: 0, errors: [], addedIds: [] };
 
   let list;
   try {
@@ -252,7 +252,7 @@ async function runSync(cookies, options = {}) {
 
     if (skipDetails) {
       try {
-        await PublicOrder.create({
+        const doc = await PublicOrder.create({
           biznesPolskaId: row.id,
           category: row.category,
           addedDate: row.addedDate,
@@ -262,6 +262,7 @@ async function runSync(cookies, options = {}) {
           submissionDeadline: row.submissionDeadline
         });
         result.added++;
+        result.addedIds.push(doc._id);
         existingIds.add(row.id);
       } catch (e) {
         if (e.code === 11000) existingIds.add(row.id);
@@ -279,7 +280,7 @@ async function runSync(cookies, options = {}) {
     }
 
     try {
-      await PublicOrder.create({
+      const doc = await PublicOrder.create({
         biznesPolskaId: detail.biznesPolskaId || row.id,
         category: detail.category || row.category,
         addedDate: detail.addedDate || row.addedDate,
@@ -307,6 +308,7 @@ async function runSync(cookies, options = {}) {
         detailRawHtml: detail.detailRawHtml || ''
       });
       result.added++;
+      result.addedIds.push(doc._id);
       existingIds.add(row.id);
     } catch (e) {
       if (e.code === 11000) existingIds.add(row.id);

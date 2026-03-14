@@ -164,23 +164,36 @@ Odpowiadaj TYLKO JSON, bez markdown.`,
 // ORCHESTRATOR – uruchamia cały pipeline
 // ───────────────────────────────────────────────────────────────
 
+/** Warunek: tylko zlecenia jeszcze nie analizowane (nigdy nie re-walidujemy rejected/candidate/scored) */
+const PENDING_CONDITION = {
+  $or: [
+    { aiStatus: 'pending' },
+    { aiStatus: { $exists: false } },
+    { aiStatus: null }
+  ]
+};
+
 async function runAiAnalysis(options = {}) {
   const PublicOrder = require('../models/PublicOrder');
-  const { limit = 10, batchSize = 20 } = options;
+  const { limit = 10, batchSize = 20, orderIds } = options;
 
   const stats = { filtered: 0, rejected: 0, candidates: 0, scored: 0, errors: [] };
 
-  // Pobierz zlecenia do analizy: pending albo bez pola aiStatus (stare rekordy)
-  const pending = await PublicOrder.find({
-    $or: [
-      { aiStatus: 'pending' },
-      { aiStatus: { $exists: false } },
-      { aiStatus: null }
-    ]
-  })
-    .sort({ createdAt: -1 })
-    .limit(limit)
-    .lean();
+  let pending;
+  if (orderIds && orderIds.length > 0) {
+    // Tylko podane ID i tylko jeśli wciąż pending (zero re-walidacji)
+    pending = await PublicOrder.find({
+      _id: { $in: orderIds },
+      ...PENDING_CONDITION
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+  } else {
+    pending = await PublicOrder.find(PENDING_CONDITION)
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+  }
 
   if (!pending.length) return { ...stats, message: 'Brak zleceń do analizy (wszystkie już przetworzone lub brak rekordów)' };
 
@@ -226,8 +239,12 @@ async function runAiAnalysis(options = {}) {
     }
   }
 
-  // FAZA 2: Scoring kandydatów (freshly marked + any prior candidates without score)
-  const candidates = await PublicOrder.find({ aiStatus: 'candidate' })
+  // FAZA 2: Scoring kandydatów – tylko z tej puli (gdy orderIds: tylko nowe; inaczej wszystkie candidate)
+  const candidateQuery = { aiStatus: 'candidate' };
+  if (orderIds && orderIds.length > 0) {
+    candidateQuery._id = { $in: orderIds };
+  }
+  const candidates = await PublicOrder.find(candidateQuery)
     .sort({ createdAt: -1 })
     .lean();
 
