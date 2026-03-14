@@ -12,10 +12,12 @@
     "start": "node server/index.js",
     "create-admin": "node server/scripts/create-admin.js",
     "import-portfolio": "node server/scripts/import-portfolio.js",
-    "test-ssl": "node server/scripts/test-ssl-monitor.js"
+    "test-ssl": "node server/scripts/test-ssl-monitor.js",
+    "ai-analyze": "node server/scripts/run-ai-analyze.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
+    "axios": "^1.13.6",
     "bcryptjs": "^2.4.3",
     "cheerio": "^1.2.0",
     "cors": "^2.8.5",
