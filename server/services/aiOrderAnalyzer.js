@@ -169,13 +169,19 @@ async function runAiAnalysis(options = {}) {
 
   const stats = { filtered: 0, rejected: 0, candidates: 0, scored: 0, errors: [] };
 
-  // Pobierz zlecenia ze statusem 'pending' (jeszcze nie analizowane)
-  const pending = await PublicOrder.find({ aiStatus: 'pending' })
+  // Pobierz zlecenia do analizy: pending albo bez pola aiStatus (stare rekordy)
+  const pending = await PublicOrder.find({
+    $or: [
+      { aiStatus: 'pending' },
+      { aiStatus: { $exists: false } },
+      { aiStatus: null }
+    ]
+  })
     .sort({ createdAt: -1 })
     .limit(limit)
     .lean();
 
-  if (!pending.length) return { ...stats, message: 'Brak nowych zleceń do analizy' };
+  if (!pending.length) return { ...stats, message: 'Brak zleceń do analizy (wszystkie już przetworzone lub brak rekordów)' };
 
   // FAZA 1: Batch filtering
   for (let i = 0; i < pending.length; i += batchSize) {
