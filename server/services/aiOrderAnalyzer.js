@@ -75,13 +75,16 @@ async function llmCreate({ client, provider, model, system, messages, max_tokens
     };
 
     const sendOnce = async (m) => {
-      const completion = await client.chat.send({
-        model: m,
-        messages: combinedMessages,
-        temperature,
-        max_tokens,
-        stream: false
-      });
+      const request = {
+        chatGenerationParams: {
+          model: m,
+          messages: combinedMessages,
+          temperature,
+          max_tokens,
+          stream: false
+        }
+      };
+      const completion = await client.chat.send(request);
       const content = completion?.choices?.[0]?.message?.content;
       return typeof content === 'string'
         ? content
