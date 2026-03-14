@@ -1,6 +1,6 @@
 const Anthropic = require('@anthropic-ai/sdk');
 
-const ANTHROPIC_API_KEY = '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';
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 
 const COMPANY_PROFILE = `Jesteśmy firmą zajmującą się projektowaniem oraz wdrażaniem stron internetowych, systemów webowych oraz materiałów graficznych dla firm i instytucji publicznych. Specjalizujemy się w tworzeniu nowoczesnych interfejsów użytkownika, serwisów informacyjnych, landing page oraz portali internetowych.
 
@@ -36,6 +36,7 @@ MOŻEMY realizować zamówienia dotyczące:
 - udziału jako podwykonawca odpowiedzialny za część graficzną/frontendową`;
 
 function getClient() {
+  if (!ANTHROPIC_API_KEY) throw new Error('Brak ANTHROPIC_API_KEY w .env');
   return new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 }
 
