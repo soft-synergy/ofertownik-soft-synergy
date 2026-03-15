@@ -206,6 +206,8 @@ export const publicOrdersAPI = {
   deleteAll: () => api.delete('/api/public-orders/all').then(res => res.data),
   refreshDetails: (ids) => api.post('/api/public-orders/refresh-details', { ids }).then(res => res.data),
   deepAnalyze: (id) => api.post(`/api/public-orders/deep-analyze/${id}`).then(res => res.data),
+  getPrompts: () => api.get('/api/public-orders/prompts').then(res => res.data),
+  savePrompts: (sections) => api.put('/api/public-orders/prompts', { sections }).then(res => res.data),
 };
 
 export const activityAPI = {

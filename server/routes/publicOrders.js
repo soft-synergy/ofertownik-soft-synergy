@@ -1,8 +1,10 @@
 const express = require('express');
 const PublicOrder = require('../models/PublicOrder');
+const PublicOrderPrompts = require('../models/PublicOrderPrompts');
 const { auth, requireRole } = require('../middleware/auth');
 const { runSync, fetchOfferDetail, SEARCH_URL, BIZNES_POLSKA_COOKIES } = require('../services/biznesPolskaScraper');
 const { runAiAnalysis, deepAnalyzeOrder } = require('../services/aiOrderAnalyzer');
+const { getSectionsSync, setSectionsCache } = require('../config/companyProfile');
 
 const router = express.Router();
 
@@ -132,6 +134,44 @@ router.post('/refresh-details', auth, requireRole(['admin']), async (req, res) =
   } catch (e) {
     console.error('Refresh details error:', e);
     res.status(500).json({ message: e.message || 'Błąd odświeżania szczegółów' });
+  }
+});
+
+/** Pobierz sekcje promptów (profil firmy dla AI). Tylko admin. */
+router.get('/prompts', auth, requireRole(['admin']), async (req, res) => {
+  try {
+    const sections = getSectionsSync();
+    res.json({ sections });
+  } catch (e) {
+    console.error('Prompts get error:', e);
+    res.status(500).json({ message: 'Błąd pobierania promptów' });
+  }
+});
+
+/** Zapisz sekcje promptów. Tylko admin. */
+router.put('/prompts', auth, requireRole(['admin']), async (req, res) => {
+  try {
+    const { sections } = req.body || {};
+    if (!sections || typeof sections !== 'object') {
+      return res.status(400).json({ message: 'Wymagane body.sections (obiekt z polami: intro, uslugi, odpadaja, mozemy, dopiski)' });
+    }
+    const normalized = {
+      intro: String(sections.intro ?? '').trim(),
+      uslugi: String(sections.uslugi ?? '').trim(),
+      odpadaja: String(sections.odpadaja ?? '').trim(),
+      mozemy: String(sections.mozemy ?? '').trim(),
+      dopiski: String(sections.dopiski ?? '').trim()
+    };
+    await PublicOrderPrompts.findByIdAndUpdate(
+      'default',
+      { $set: { sections: normalized, updatedAt: new Date() } },
+      { upsert: true, new: true }
+    );
+    setSectionsCache(normalized);
+    res.json({ message: 'Prompty zapisane', sections: normalized });
+  } catch (e) {
+    console.error('Prompts put error:', e);
+    res.status(500).json({ message: 'Błąd zapisywania promptów' });
   }
 });
 

@@ -2,7 +2,8 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 
 const BASE_URL = 'https://www.biznes-polska.pl';
-const SEARCH_PATH = '/wyszukiwarka/beyJjYXRlZ29yeSI6IFsxLCA3LCAyLCA4LCA0LCAzLCA5XSwgImNpdHkiOiAiIiwgInN0ZW1fdGV4dCI6IHRydWUsICJzdWJtaXNzaW9uX2RlYWRsaW5lX3Njb3BlIjogMSwgIm9mZmVyX3R5cGUiOiBbMV0sICJwcm9maWxlX2lkIjogIiIsICJkZXBvc2l0X3R5cGUiOiAxLCAidmFsdWUiOiAiIiwgIm9yZ2FuaXNlciI6ICIiLCAic3VibWlzc2lvbl9kZWFkbGluZV9kYXlzIjogIiIsICJ2YWx1ZV90eXBlIjogMSwgImxvY2F0aW9uIjogIiIsICJicmFuY2giOiBbIjE5NzIsMTk3OCIsICIxOTcyLDE5NzYiLCAiMjM2MCwxMjU0NzYxMSJdLCAiY3B2X2NvZGUiOiAiIiwgImJyYW5jaF9tYWluIjogdHJ1ZSwgImRlcG9zaXQiOiAiIn0%3D/';
+/** Główny URL wyszukiwarki – lista ogłoszeń (strona 1 bez ?s=, dalsze jako ?s=2, ?s=3...) */
+const SEARCH_PATH = '/wyszukiwarka/k27844422/';
 
 /** Cookies z subskrypcji biznes-polska.pl – na sztywno (wymagane do pobrania opisu i wymagań) */
 const BIZNES_POLSKA_COOKIES = 'source_subscription=adw-konwersja; _gcl_aw=GCL.1773407841.CjwKCAjw687NBhB4EiwAQ645dq8ocN8DBp69wVFcUr8q0EsOyI60bvOu60gRaute7rbO8hVcgf8lXBoCHQ4QAvD_BwE; _gcl_gs=2.1.k1$i1773407808$u123207320; __utmc=123207320; __utmz=123207320.1773407841.1.1.utmgclid=CjwKCAjw687NBhB4EiwAQ645dq8ocN8DBp69wVFcUr8q0EsOyI60bvOu60gRaute7rbO8hVcgf8lXBoCHQ4QAvD_BwE|utmccn=(not%20set)|utmcmd=(not%20set)|utmctr=(not%20provided); _gac_UA-12962180-1=1.1773407841.CjwKCAjw687NBhB4EiwAQ645dq8ocN8DBp69wVFcUr8q0EsOyI60bvOu60gRaute7rbO8hVcgf8lXBoCHQ4QAvD_BwE; CookieConsent={stamp:%27-1%27%2Cnecessary:true%2Cpreferences:true%2Cstatistics:true%2Cmarketing:true%2Cmethod:%27implied%27%2Cver:1%2Cutc:1773407841657%2Cregion:%27VN%27}; _ga=GA1.1.265139833.1773407841; _gcl_au=1.1.2041128461.1773407841.2046683477.1773407924.1773407939; przetargi=39c6aadc41621bd47a4bbd93e557f2133229d6e0d76554301b60fda41edee90755fd1a5f; __utma=123207320.1402870305.1773407841.1773461408.1773468740.4; _ga_CZRV7LJQEM=GS2.1.s1773468124$o5$g1$t1773471814$j60$l0$h0';
@@ -12,6 +13,7 @@ function getCookieHeader(cookies) {
   return s || undefined;
 }
 
+/** Te same nagłówki (w tym Cookie) dla wyszukiwarki i stron szczegółów – wymagane, żeby lista i szczegóły działały z subskrypcją. */
 function buildRequestOptions(cookies) {
   const headers = {
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
@@ -37,20 +39,19 @@ function buildRequestOptions(cookies) {
  * @returns {{ id, title, detailUrl, region, addedDate, category, submissionDeadline }[]}
  */
 async function fetchSearchPage(cookies, page = 1) {
-  const url = page <= 1
-    ? BASE_URL + SEARCH_PATH
-    : BASE_URL + SEARCH_PATH + (SEARCH_PATH.includes('?') ? '&' : '?') + 's=' + page;
+  const pathWithPage = page <= 1 ? SEARCH_PATH : SEARCH_PATH + '?s=' + page;
+  const url = BASE_URL + pathWithPage;
   const res = await axios.get(url, buildRequestOptions(cookies));
   const $ = cheerio.load(res.data);
   const rows = [];
 
   $('table.std tbody tr').each((_, tr) => {
     const $tr = $(tr);
-    const $idCell = $tr.find('td.col-id span, td.nowrap.col-id span');
-    const id = ($idCell.text().trim() || $tr.find('input[name="selected"]').attr('value') || '').trim();
+    const $idCell = $tr.find('td.col-id, td.nowrap.col-id');
+    const id = ($idCell.text().trim() || $idCell.find('span').text().trim() || $tr.find('input[name="selected"]').attr('value') || '').trim();
     if (!id) return;
 
-    const $link = $tr.find('td.name a.title, a.title.show-more-title');
+    const $link = $tr.find('td.name a.title, td.name a.show-more-title, td.name a');
     const href = $link.attr('href') || '';
     const title = $link.text().trim() || '';
     const fullUrl = href.startsWith('http') ? href : BASE_URL + (href.startsWith('/') ? '' : '/') + href;
@@ -60,10 +61,14 @@ async function fetchSearchPage(cookies, page = 1) {
     const category = $idCell.attr('title') || '';
 
     let submissionDeadline = null;
-    const termText = $tr.find('.rwd-offer-info').text() || '';
-    const termMatch = termText.match(/termin:\s*(\d{4}-\d{2}-\d{2})/);
-    if (termMatch) {
-      submissionDeadline = new Date(termMatch[1]);
+    const deadlineCell = $tr.find('td.col-submission-deadline').text().trim();
+    const deadlineMatch = deadlineCell.match(/(\d{4}-\d{2}-\d{2})/);
+    if (deadlineMatch) {
+      submissionDeadline = new Date(deadlineMatch[1]);
+    } else {
+      const termText = $tr.find('.rwd-offer-info').text() || '';
+      const termMatch = termText.match(/termin:\s*(\d{4}-\d{2}-\d{2})/);
+      if (termMatch) submissionDeadline = new Date(termMatch[1]);
     }
 
     let addedDate = null;

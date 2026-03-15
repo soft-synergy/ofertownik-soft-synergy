@@ -1,6 +1,7 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const { OpenRouter } = require('@openrouter/sdk');
 const { fetchOfferDetail, BIZNES_POLSKA_COOKIES } = require('./biznesPolskaScraper');
+const { getCompanyProfile, COMPANY_PROFILE } = require('../config/companyProfile');
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
@@ -12,39 +13,6 @@ const OR_MODEL_DEEP = process.env.OPENROUTER_MODEL_DEEP || 'deepseek/deepseek-r1
 // Fallback models (używane tylko przy błędzie requestu)
 const OR_MODEL_FAST_FALLBACK = process.env.OPENROUTER_MODEL_FAST_FALLBACK || 'meta-llama/llama-3.3-70b-instruct';
 const OR_MODEL_DEEP_FALLBACK = process.env.OPENROUTER_MODEL_DEEP_FALLBACK || 'deepseek/deepseek-chat';
-
-const COMPANY_PROFILE = `Jesteśmy firmą zajmującą się projektowaniem oraz wdrażaniem stron internetowych, systemów webowych oraz materiałów graficznych dla firm i instytucji publicznych. Specjalizujemy się w tworzeniu nowoczesnych interfejsów użytkownika, serwisów informacyjnych, landing page oraz portali internetowych.
-
-Zakres naszych usług:
-- projektowanie graficzne (UI/UX) serwisów internetowych i aplikacji
-- tworzenie stron internetowych i portali informacyjnych
-- wdrożenia CMS (WordPress, WooCommerce i inne systemy zarządzania treścią)
-- projektowanie identyfikacji wizualnej oraz materiałów graficznych
-- modernizację i redesign istniejących serwisów
-- tworzenie landing page i stron kampanijnych
-- przygotowanie stron zgodnych z WCAG
-- optymalizację wydajności i SEO dla stron internetowych
-- integracje stron internetowych z zewnętrznymi API oraz systemami informatycznymi
-
-AUTOMATYCZNIE ODPADAJĄ zamówienia wymagające:
-- autoryzacji producenta konkretnego systemu informatycznego
-- licencji na serwisowanie zamkniętych systemów uczelnianych/administracyjnych (USOS, ERP, dedykowane systemy dziedzinowe)
-- certyfikacji partnera producenta oprogramowania
-- utrzymania infrastruktury IT lub zarządzania serwerownią
-- dostawy sprzętu komputerowego lub infrastruktury sieciowej
-- wdrożeń dużych systemów ERP, CRM lub systemów finansowo-księgowych
-- wieloletniego doświadczenia w utrzymaniu systemów dziedzinowych administracji publicznej
-
-MOŻEMY realizować zamówienia dotyczące:
-- wykonania nowej strony internetowej dla urzędu lub instytucji
-- modernizacji istniejących stron www
-- wykonania portalu informacyjnego lub serwisu tematycznego
-- przygotowania projektów graficznych i identyfikacji wizualnej
-- stworzenia landing page dla projektów unijnych
-- dostosowania strony do standardu WCAG
-- integracji strony z zewnętrznymi systemami (formularze, API, systemy płatności)
-- przygotowania materiałów graficznych i elementów UI
-- udziału jako podwykonawca odpowiedzialny za część graficzną/frontendową`;
 
 function getClient() {
   if (AI_PROVIDER === 'openrouter') {
@@ -120,6 +88,7 @@ async function llmCreate({ client, provider, model, system, messages, max_tokens
 async function batchFilter(orders) {
   const client = getClient();
   const provider = AI_PROVIDER;
+  const companyProfile = await getCompanyProfile();
 
   const ordersSummary = orders.map((o) => ({
     id: o.biznesPolskaId || o._id.toString(),
@@ -141,7 +110,7 @@ Odpowiedz WYŁĄCZNIE poprawnym JSON (tablica):
 
   const systemPrompt = `Jesteś ekspertem od zamówień publicznych. Oceniasz czy podane zamówienia pasują do profilu firmy.
 
-${COMPANY_PROFILE}
+${companyProfile}
 
 Zasady:
 - Jeśli zamówienie dotyczy stron www, portali, landing page, projektowania graficznego, UI/UX, CMS, WCAG, SEO, materiałów graficznych → relevant=true
@@ -182,6 +151,7 @@ const MAX_HTML_CHARS = 120000;
 async function scoreOrder(order, options = {}) {
   const client = getClient();
   const provider = AI_PROVIDER;
+  const companyProfile = await getCompanyProfile();
   const { fullPageHtmlOverride, fullTextOverride } = options;
 
   const hasFullHtml = fullPageHtmlOverride && fullPageHtmlOverride.trim().length > 0;
@@ -237,7 +207,7 @@ Odpowiedz WYŁĄCZNIE poprawnym JSON:
 
   const systemPrompt = `Jesteś ekspertem od zamówień publicznych w Polsce. Oceniasz dopasowanie zamówienia do profilu firmy web-designowej.
 
-${COMPANY_PROFILE}
+${companyProfile}
 
 Scoring:
 1-2: Zupełnie nie pasuje (wymaga autoryzacji producenta, sprzęt, ERP itp.)
@@ -280,10 +250,48 @@ Odpowiadaj TYLKO JSON, bez markdown.`;
 // ───────────────────────────────────────────────────────────────
 
 const DEEP_ANALYSIS_MIN_SCORE = 5;
+/** Przy ocenie >= 8 wysyłamy pełny raport na maila (na 100% składamy). */
+const SCORE_EMAIL_THRESHOLD = 8;
+
+function buildReportHtml(order, score, analysis, deep) {
+  const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+  const list = (arr) => (Array.isArray(arr) && arr.length ? `<ul>${arr.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>` : '<p>—</p>');
+  const lines = [
+    `<h2>Zlecenie: ${esc(order.title)}</h2>`,
+    `<p><strong>ID:</strong> ${esc(order.biznesPolskaId)} &bull; <strong>Ocena AI:</strong> ${score}/10</p>`,
+    order.detailUrl ? `<p><a href="${order.detailUrl}">Link do ogłoszenia</a></p>` : '',
+    `<h3>Krótka analiza AI</h3><p>${esc(analysis)}</p>`,
+    deep.summary ? `<h3>Podsumowanie</h3><p>${esc(deep.summary)}</p>` : '',
+    deep.scope ? `<h3>Zakres</h3>${list(deep.scope)}` : '',
+    deep.requiredActions ? `<h3>Kroki do złożenia oferty</h3>${list(deep.requiredActions)}` : '',
+    deep.requiredDocuments ? `<h3>Wymagane dokumenty</h3>${list(deep.requiredDocuments)}` : '',
+    deep.deadlines && deep.deadlines.length ? `<h3>Terminy</h3><ul>${deep.deadlines.map((d) => `<li>${esc(d.label)}: ${esc(d.date)}</li>`).join('')}</ul>` : '',
+    deep.evaluationCriteria && deep.evaluationCriteria.length ? `<h3>Kryteria oceny</h3><ul>${deep.evaluationCriteria.map((c) => `<li>${esc(c.criterion)} (${esc(c.weight)}) – ${esc(c.description)}</li>`).join('')}</ul>` : '',
+    deep.potentialDifficulties ? `<h3>Trudności / ryzyka</h3>${list(deep.potentialDifficulties)}` : '',
+    deep.estimatedValue ? `<p><strong>Szacowana wartość:</strong> ${esc(deep.estimatedValue)}</p>` : '',
+    deep.keyContacts ? `<p><strong>Kontakt:</strong> ${esc(deep.keyContacts)}</p>` : '',
+    deep.recommendation ? `<h3>Rekomendacja</h3><p>${esc(deep.recommendation)}</p>` : '',
+    deep.offerDraft ? `<h3>Draft oferty</h3><div style="white-space:pre-wrap; background:#f5f5f5; padding:1em; border-radius:6px;">${esc(deep.offerDraft)}</div>` : ''
+  ];
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:sans-serif; max-width:720px; margin:0 auto; padding:20px;">${lines.join('')}</body></html>`;
+}
+
+async function sendReportEmail(order, score, analysis, deepResult) {
+  const to = process.env.PUBLIC_ORDER_REPORT_EMAIL || process.env.NOTIFY_EMAIL;
+  if (!to || !to.trim()) {
+    console.log('[AI] PUBLIC_ORDER_REPORT_EMAIL nie ustawiony – pomijam wysyłkę raportu');
+    return;
+  }
+  const { sendEmail } = require('../utils/emailService');
+  const subject = `[Zlecenie ${score}/10] ${(order.title || '').slice(0, 60)} – raport AI`;
+  const html = buildReportHtml(order, score, analysis, deepResult);
+  await sendEmail({ to: to.trim(), subject, html });
+}
 
 async function deepAnalyzeOrder(order, options = {}) {
   const client = getClient();
   const provider = AI_PROVIDER;
+  const companyProfile = await getCompanyProfile();
   const { rawPageHtml } = options;
 
   let pageHtml = rawPageHtml || '';
@@ -321,7 +329,7 @@ ${(order.detailFullText || '').slice(0, 20000)}`
 
   const systemPrompt = `Jesteś seniorem konsultantem zamówień publicznych w Polsce z 20-letnim doświadczeniem. Pracujesz dla firmy web-designowej i pomagasz przygotowywać oferty na przetargi, zlecenia i zamówienia publiczne.
 
-${COMPANY_PROFILE}
+${companyProfile}
 
 Twoje zadanie: na podstawie PEŁNEGO HTML strony ogłoszenia z biznes-polska.pl przeprowadzić dogłębną analizę zamówienia i przygotować materiały dla osoby decyzyjnej, tak żeby miała czarno na białym co trzeba zrobić.
 
@@ -567,6 +575,13 @@ async function runAiAnalysis(options = {}) {
             aiDeepAnalyzedAt: new Date()
           });
           stats.deepAnalyzed++;
+          // Przy 8/10 lub więcej – wysyłka pełnego raportu na maila (na 100% składamy)
+          if (score >= SCORE_EMAIL_THRESHOLD && deepResult && !deepResult.error) {
+            sendReportEmail(order, score, analysis, deepResult).catch((e) => {
+              console.error(`[AI] Email raportu ${order.biznesPolskaId}:`, e.message);
+              stats.errors.push(`Email raportu ${order.biznesPolskaId}: ${e.message}`);
+            });
+          }
         } catch (deepErr) {
           stats.errors.push(`Deep ${order.biznesPolskaId}: ${deepErr.message}`);
         }
@@ -579,4 +594,4 @@ async function runAiAnalysis(options = {}) {
   return stats;
 }
 
-module.exports = { batchFilter, scoreOrder, deepAnalyzeOrder, runAiAnalysis, COMPANY_PROFILE, DEEP_ANALYSIS_MIN_SCORE };
+module.exports = { batchFilter, scoreOrder, deepAnalyzeOrder, runAiAnalysis, COMPANY_PROFILE, DEEP_ANALYSIS_MIN_SCORE, SCORE_EMAIL_THRESHOLD };

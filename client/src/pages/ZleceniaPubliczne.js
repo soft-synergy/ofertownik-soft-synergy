@@ -67,6 +67,100 @@ const AI_TABS = [
   { key: 'rejected',  label: 'Odrzucone' },
 ];
 
+function PromptsEditor({ onClose }) {
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useQuery(
+    'publicOrdersPrompts',
+    () => publicOrdersAPI.getPrompts(),
+    { enabled: true }
+  );
+  const [form, setForm] = useState({ intro: '', uslugi: '', odpadaja: '', mozemy: '', dopiski: '' });
+
+  React.useEffect(() => {
+    if (data?.sections) setForm((f) => ({ ...f, ...data.sections }));
+  }, [data?.sections]);
+
+  const saveMutation = useMutation(
+    (sections) => publicOrdersAPI.savePrompts(sections),
+    {
+      onSuccess: () => {
+        toast.success('Prompty zapisane. Kolejne analizy AI będą z nich korzystać.');
+        queryClient.invalidateQueries('publicOrdersPrompts');
+      },
+      onError: (e) => toast.error(e.response?.data?.message || 'Błąd zapisywania')
+    }
+  );
+
+  const handleSave = () => {
+    saveMutation.mutate({
+      intro: form.intro,
+      uslugi: form.uslugi,
+      odpadaja: form.odpadaja,
+      mozemy: form.mozemy,
+      dopiski: form.dopiski
+    });
+  };
+
+  if (isLoading && !data) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-8 flex justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between bg-gray-50">
+        <h2 className="text-lg font-semibold text-gray-900">Edycja promptów AI (profil firmy)</h2>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saveMutation.isLoading}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-50 text-sm"
+          >
+            {saveMutation.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            Zapisz
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 text-sm"
+          >
+            Wróć do listy
+          </button>
+        </div>
+      </div>
+      <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
+        <p className="text-sm text-gray-500">
+          Te sekcje są wstrzykiwane do wszystkich promptów AI (batch filter, scoring, głęboka analiza). Edytuj treść tak, aby AI dobrze oceniało zlecenia pod kątem Waszej firmy.
+        </p>
+        {PROMPT_SECTIONS.map(({ key, label, placeholder }) => (
+          <div key={key}>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+            <textarea
+              value={form[key] ?? ''}
+              onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+              placeholder={placeholder}
+              rows={key === 'intro' || key === 'dopiski' ? 4 : 12}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm font-mono"
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const PROMPT_SECTIONS = [
+  { key: 'intro', label: 'Intro (kim jesteśmy)', placeholder: 'Krótki opis firmy na początek każdego promptu AI…' },
+  { key: 'uslugi', label: 'Zakres usług', placeholder: 'Lista usług (w punktach)…' },
+  { key: 'odpadaja', label: 'AUTOMATYCZNIE ODPADAJĄ', placeholder: 'Zamówienia, na które nie startujemy…' },
+  { key: 'mozemy', label: 'MOŻEMY realizować', placeholder: 'Zamówienia, które chcemy i możemy robić…' },
+  { key: 'dopiski', label: 'Dopiski (doświadczenie, klienci)', placeholder: 'Opcjonalne – mocne strony, doświadczenie…' },
+];
+
 const ZleceniaPubliczne = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -75,6 +169,7 @@ const ZleceniaPubliczne = () => {
   const [region, setRegion] = useState('');
   const [aiTab, setAiTab] = useState('all');
   const [selectedId, setSelectedId] = useState(null);
+  const [showPrompts, setShowPrompts] = useState(false);
 
   const { data, isLoading } = useQuery(
     ['publicOrders', page, search, region, aiTab],
@@ -220,10 +315,24 @@ const ZleceniaPubliczne = () => {
               {refreshDetailsMutation.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               Odśwież szczegóły
             </button>
+            <button
+              type="button"
+              onClick={() => setShowPrompts(true)}
+              className="inline-flex items-center gap-2 px-3 py-2 border border-violet-300 text-violet-700 rounded-lg hover:bg-violet-50 text-sm"
+              title="Edytuj prompty AI (profil firmy)"
+            >
+              <FileText className="h-4 w-4" />
+              Prompty
+            </button>
           </div>
         )}
       </div>
 
+      {/* Ekran edycji promptów (tylko admin) – gdy włączony, reszta strony jest ukryta */}
+      {showPrompts && isAdmin ? (
+        <PromptsEditor onClose={() => setShowPrompts(false)} />
+      ) : (
+        <>
       {/* AI stats bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <StatCard label="Oczekujące" count={aiCounts.pending || 0} color="gray" />
@@ -383,6 +492,8 @@ const ZleceniaPubliczne = () => {
           </>
         )}
       </div>
+      </>
+    )}
     </div>
   );
 };
