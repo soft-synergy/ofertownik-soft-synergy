@@ -268,9 +268,22 @@ function buildReportHtml(order, score, analysis, deep) {
     deep.deadlines && deep.deadlines.length ? `<h3>Terminy</h3><ul>${deep.deadlines.map((d) => `<li>${esc(d.label)}: ${esc(d.date)}</li>`).join('')}</ul>` : '',
     deep.evaluationCriteria && deep.evaluationCriteria.length ? `<h3>Kryteria oceny</h3><ul>${deep.evaluationCriteria.map((c) => `<li>${esc(c.criterion)} (${esc(c.weight)}) – ${esc(c.description)}</li>`).join('')}</ul>` : '',
     deep.potentialDifficulties ? `<h3>Trudności / ryzyka</h3>${list(deep.potentialDifficulties)}` : '',
-    deep.estimatedValue ? `<p><strong>Szacowana wartość:</strong> ${esc(deep.estimatedValue)}</p>` : '',
+    deep.estimatedValue ? `<p><strong>Szacowana wartość zamówienia:</strong> ${esc(deep.estimatedValue)}</p>` : '',
     deep.keyContacts ? `<p><strong>Kontakt:</strong> ${esc(deep.keyContacts)}</p>` : '',
     deep.recommendation ? `<h3>Rekomendacja</h3><p>${esc(deep.recommendation)}</p>` : '',
+    (() => {
+      const ps = deep.pricingScenarios;
+      if (!ps || typeof ps !== 'object') return '';
+      const s = (key, title) => {
+        const x = ps[key];
+        if (!x || typeof x !== 'object') return '';
+        const a = esc(x.amount || '—');
+        const d = esc(x.description || '');
+        const r = esc(x.rationale || '');
+        return `<div style="margin-bottom:1em; padding:1em; border:1px solid #e5e7eb; border-radius:8px;"><strong>${title}</strong><p style="margin:0.25em 0;"><strong>Kwota:</strong> ${a}</p>${d ? `<p style="margin:0.25em 0;">${d}</p>` : ''}${r ? `<p style="margin:0.25em 0; font-size:0.95em; color:#4b5563;">${r}</p>` : ''}</div>`;
+      };
+      return `<h3>Scenariusze wyceny</h3>${s('ekstremalnieAgresywna', 'Ekstremalnie agresywna (ok. 99% szans na wygraną)')}${s('agresywna', 'Agresywna')}${s('standardowa', 'Standardowa')}`;
+    })(),
     deep.offerDraft ? `<h3>Draft oferty</h3><div style="white-space:pre-wrap; background:#f5f5f5; padding:1em; border-radius:6px;">${esc(deep.offerDraft)}</div>` : ''
   ];
   return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:sans-serif; max-width:720px; margin:0 auto; padding:20px;">${lines.join('')}</body></html>`;
@@ -339,6 +352,7 @@ WAŻNE:
 - Jeśli w HTML są linki do zewnętrznych źródeł (np. bazakonkurencyjnosci.funduszeeuropejskie.gov.pl) – zanotuj je
 - Draft oferty musi być zgodny z polskim prawem zamówień publicznych (PZP) i wymogami zamawiającego
 - Bądź szczery co do trudności – nie upiększaj
+- OBLIGATORYJNIE przygotuj 3 scenariusze wyceny (patrz pricingScenarios poniżej) – na podstawie opisu zamówienia i kryteriów oceny zaplanuj konkretne kwoty/strategię.
 
 Odpowiedz WYŁĄCZNIE poprawnym JSON (bez markdown, bez bloków kodu), w strukturze:
 {
@@ -352,7 +366,12 @@ Odpowiedz WYŁĄCZNIE poprawnym JSON (bez markdown, bez bloków kodu), w struktu
   "estimatedValue": "szacowana wartość zamówienia jeśli podana, inaczej null",
   "keyContacts": "imię, telefon, email osoby kontaktowej",
   "recommendation": "1-2 zdania: czy startować, na co uważać, jaka strategia",
-  "offerDraft": "Pełny DRAFT oferty handlowej (min. 300 słów) zgodny z wymaganiami zamawiającego. Zawiera: dane oferenta [DO UZUPEŁNIENIA], odniesienie do nr ogłoszenia, przedmiot oferty, proponowane podejście/metodologię, harmonogram, cenę [DO UZUPEŁNIENIA], oświadczenia wymagane przez zamawiającego, podpis [DO UZUPEŁNIENIA]. Draft powinien być gotowy do edycji przez człowieka – miejsca do uzupełnienia oznacz [DO UZUPEŁNIENIA]."
+  "pricingScenarios": {
+    "ekstremalnieAgresywna": { "amount": "konkretna kwota lub przedział w PLN netto", "description": "1-2 zdania: na czym polega ta strategia", "rationale": "dlaczego szansa na wygraną ok. 99%" },
+    "agresywna": { "amount": "konkretna kwota lub przedział w PLN netto", "description": "1-2 zdania: na czym polega", "rationale": "szansa na wygraną, kompromis cena/ryzyko" },
+    "standardowa": { "amount": "konkretna kwota lub przedział w PLN netto", "description": "1-2 zdania: wycena standardowa", "rationale": "kiedy wybrać ten wariant" }
+  },
+  "offerDraft": "Pełny DRAFT oferty handlowej (min. 300 słów) zgodny z wymaganiami zamawiającego. Zawiera: dane oferenta [DO UZUPEŁNIENIA], odniesienie do nr ogłoszenia, przedmiot oferty, proponowane podejście/metodologię, harmonogram, cenę [DO UZUPEŁNIENIA] – możesz wpisać wybrany scenariusz wyceny, oświadczenia wymagane przez zamawiającego, podpis [DO UZUPEŁNIENIA]. Draft gotowy do edycji – miejsca do uzupełnienia oznacz [DO UZUPEŁNIENIA]."
 }`;
 
   const opisForDeep = (order.description || '').trim();
@@ -400,6 +419,9 @@ ${fallbackContent}`;
     for (const f of requiredFields) {
       if (!parsed[f]) throw new Error(`Brak pola "${f}" w odpowiedzi AI`);
     }
+    if (!parsed.pricingScenarios || typeof parsed.pricingScenarios !== 'object') {
+      parsed.pricingScenarios = { ekstremalnieAgresywna: {}, agresywna: {}, standardowa: {} };
+    }
 
     return {
       ...parsed,
@@ -419,6 +441,7 @@ ${fallbackContent}`;
       estimatedValue: null,
       keyContacts: '',
       recommendation: 'Wymaga ręcznej analizy',
+      pricingScenarios: { ekstremalnieAgresywna: {}, agresywna: {}, standardowa: {} },
       offerDraft: '',
       rawAiResponse: text.slice(0, 3000),
       model: provider === 'openrouter' ? OR_MODEL_DEEP : 'claude-sonnet-4-20250514',

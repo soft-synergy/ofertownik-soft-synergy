@@ -542,11 +542,13 @@ function OrderDetailPopup({ id, onClose }) {
   const isAdmin = user?.role === 'admin';
   const canDeepAnalyze = isAdmin && data?.aiScore >= 5;
 
+  const hasPricing = hasDeep && deep?.pricingScenarios && typeof deep.pricingScenarios === 'object';
   const tabs = [
     { key: 'info', label: 'Informacje' },
     ...(hasDeep ? [
       { key: 'analysis', label: 'Analiza' },
       { key: 'actions', label: 'Kroki' },
+      ...(hasPricing ? [{ key: 'pricing', label: 'Wycena' }] : []),
       { key: 'draft', label: 'Draft oferty' },
     ] : [])
   ];
@@ -648,7 +650,7 @@ function OrderDetailPopup({ id, onClose }) {
                           Rekomendacja: {deep.recommendation}
                         </p>
                       )}
-                      <p className="text-xs text-violet-400 mt-2">Przełącz na zakładki „Analiza", „Kroki", „Draft oferty" po więcej.</p>
+                      <p className="text-xs text-violet-400 mt-2">Przełącz na zakładki „Analiza", „Kroki"{hasPricing ? ', „Wycena"' : ''}, „Draft oferty" po więcej.</p>
                     </div>
                   )}
 
@@ -825,6 +827,31 @@ function OrderDetailPopup({ id, onClose }) {
                       </ul>
                     </DeepSection>
                   )}
+                </div>
+              )}
+
+              {/* ──── TAB: Scenariusze wyceny ──── */}
+              {activeTab === 'pricing' && hasDeep && deep.pricingScenarios && (
+                <div className="space-y-6 text-sm">
+                  <p className="text-gray-500 text-xs">AI przygotowało 3 scenariusze wyceny. Wybierz jeden do draftu oferty.</p>
+                  {[
+                    { key: 'ekstremalnieAgresywna', title: 'Ekstremalnie agresywna (~99% szans na wygraną)', color: 'emerald', border: 'border-emerald-300', bg: 'bg-emerald-50' },
+                    { key: 'agresywna', title: 'Agresywna', color: 'amber', border: 'border-amber-300', bg: 'bg-amber-50' },
+                    { key: 'standardowa', title: 'Standardowa', color: 'blue', border: 'border-blue-300', bg: 'bg-blue-50' },
+                  ].map(({ key, title, border, bg }) => {
+                    const s = deep.pricingScenarios[key];
+                    if (!s || typeof s !== 'object') return null;
+                    return (
+                      <div key={key} className={`rounded-xl border-2 ${border} ${bg} p-4 space-y-2`}>
+                        <h4 className="font-semibold text-gray-900">{title}</h4>
+                        {s.amount && (
+                          <p className="text-base font-bold text-gray-800">Kwota: {s.amount}</p>
+                        )}
+                        {s.description && <p className="text-gray-700">{s.description}</p>}
+                        {s.rationale && <p className="text-xs text-gray-600 italic">{s.rationale}</p>}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
