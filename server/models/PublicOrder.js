@@ -105,7 +105,20 @@ const publicOrderSchema = new mongoose.Schema({
     path: { type: String, required: true },
     uploadedAt: { type: Date, default: Date.now },
     uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
-  }]
+  }],
+  /** Status oferty: none = brak, sent = wysłane, won = wygrane, lost = przegrane */
+  offerResultStatus: {
+    type: String,
+    enum: ['none', 'sent', 'won', 'lost'],
+    default: 'none',
+    index: true
+  },
+  /** Ręcznie przeniesione do archiwum (np. "nie ma szans") */
+  archivedManually: {
+    type: Boolean,
+    default: false,
+    index: true
+  }
 }, {
   timestamps: true
 });
@@ -116,5 +129,6 @@ publicOrderSchema.index({ region: 1 });
 publicOrderSchema.index({ aiStatus: 1 });
 publicOrderSchema.index({ aiScore: -1 });
 publicOrderSchema.index({ weDoIt: 1, customDeadline: 1 });
+publicOrderSchema.index({ archivedManually: 1 });
 
 module.exports = mongoose.model('PublicOrder', publicOrderSchema);

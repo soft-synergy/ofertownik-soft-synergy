@@ -38,6 +38,13 @@ const AI_STATUS_CONFIG = {
   scored:    { label: 'Ocenione',   bg: 'bg-emerald-50',  text: 'text-emerald-700',dot: 'bg-emerald-500' },
 };
 
+const OFFER_STATUS_CONFIG = {
+  none:   { label: 'Brak',      bg: 'bg-gray-100',    text: 'text-gray-600',   dot: 'bg-gray-400' },
+  sent:   { label: 'Wysłane',   bg: 'bg-blue-50',     text: 'text-blue-700',   dot: 'bg-blue-500' },
+  won:    { label: 'Wygrane',   bg: 'bg-emerald-50',  text: 'text-emerald-700',dot: 'bg-emerald-500' },
+  lost:   { label: 'Przegrane', bg: 'bg-red-50',      text: 'text-red-700',    dot: 'bg-red-500' },
+};
+
 function AiBadge({ status, score }) {
   const cfg = AI_STATUS_CONFIG[status] || AI_STATUS_CONFIG.pending;
   return (
@@ -47,6 +54,16 @@ function AiBadge({ status, score }) {
       {status === 'scored' && score != null && (
         <span className="font-bold ml-0.5">{score}/10</span>
       )}
+    </span>
+  );
+}
+
+function OfferStatusBadge({ status }) {
+  const cfg = OFFER_STATUS_CONFIG[status] || OFFER_STATUS_CONFIG.none;
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${cfg.bg} ${cfg.text}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+      {cfg.label}
     </span>
   );
 }
@@ -94,12 +111,40 @@ function WeDoItToggle({ order, onToggled }) {
   );
 }
 
+function NoChanceButton({ orderId, disabled, onDone }) {
+  const queryClient = useQueryClient();
+  const mutation = useMutation(
+    () => publicOrdersAPI.patch(orderId, { archivedManually: true }),
+    {
+      onSuccess: () => {
+        toast.success('Oznaczono: nie ma szans – przeniesione do archiwum');
+        queryClient.invalidateQueries('publicOrders');
+        if (onDone) onDone();
+      },
+      onError: (e) => toast.error(e.response?.data?.message || 'Błąd archiwizacji')
+    }
+  );
+  return (
+    <button
+      type="button"
+      onClick={() => mutation.mutate()}
+      disabled={disabled || mutation.isLoading}
+      className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium bg-red-50 text-red-600 hover:bg-red-100 disabled:opacity-60"
+      title="Oznacz, że nie ma szans na wygraną i przenieś do archiwum"
+    >
+      {mutation.isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
+      Nie ma szans
+    </button>
+  );
+}
+
 const AI_TABS = [
-  { key: 'all',       label: 'Wszystkie' },
+  { key: 'all',       label: 'Wszystkie (bieżące)' },
   { key: 'weDoIt',    label: 'Robimy' },
   { key: 'scored',    label: 'Ocenione AI' },
   { key: 'pending',   label: 'Oczekujące' },
   { key: 'rejected',  label: 'Odrzucone' },
+  { key: 'archived',  label: 'Archiwum (po terminie)' },
 ];
 
 function PromptsEditor({ onClose }) {
@@ -214,7 +259,8 @@ const ZleceniaPubliczne = () => {
       search: search || undefined,
       region: region || undefined,
       weDoIt: aiTab === 'weDoIt' ? true : undefined,
-      aiStatus: (aiTab !== 'all' && aiTab !== 'weDoIt') ? aiTab : undefined
+      aiStatus: (aiTab !== 'all' && aiTab !== 'weDoIt' && aiTab !== 'archived') ? aiTab : undefined,
+      archived: aiTab === 'archived' ? true : undefined
     }),
     { keepPreviousData: true }
   );
@@ -436,6 +482,8 @@ const ZleceniaPubliczne = () => {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Robimy</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Brak szans</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status oferty</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">AI</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Score</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
@@ -450,6 +498,12 @@ const ZleceniaPubliczne = () => {
                     <tr key={row._id} className={`hover:bg-gray-50/50 ${rowBgClass(row)} ${row.weDoIt ? 'bg-emerald-50/70' : ''}`}>
                       <td className="px-3 py-3">
                         <WeDoItToggle order={row} onToggled={() => queryClient.invalidateQueries('publicOrders')} />
+                      </td>
+                      <td className="px-3 py-3">
+                        <NoChanceButton orderId={row._id} />
+                      </td>
+                      <td className="px-3 py-3">
+                        <OfferStatusBadge status={row.offerResultStatus} />
                       </td>
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-1.5">
@@ -561,9 +615,11 @@ function OrderWeDoItTab({ orderId, data, onUpdate }) {
   const [deadlineVal, setDeadlineVal] = useState(
     data?.customDeadline ? format(new Date(data.customDeadline), 'yyyy-MM-dd') : ''
   );
+  const [offerStatus, setOfferStatus] = useState(data?.offerResultStatus || 'none');
   React.useEffect(() => {
     setDeadlineVal(data?.customDeadline ? format(new Date(data.customDeadline), 'yyyy-MM-dd') : '');
-  }, [data?.customDeadline]);
+    setOfferStatus(data?.offerResultStatus || 'none');
+  }, [data?.customDeadline, data?.offerResultStatus]);
 
   const patchMutation = useMutation(
     (payload) => publicOrdersAPI.patch(orderId, payload),
@@ -583,6 +639,11 @@ function OrderWeDoItTab({ orderId, data, onUpdate }) {
   );
 
   const handleWeDoItToggle = () => patchMutation.mutate({ weDoIt: !data?.weDoIt });
+  const handleOfferStatusChange = (e) => {
+    const value = e.target.value;
+    setOfferStatus(value);
+    patchMutation.mutate({ offerResultStatus: value });
+  };
   const handleDeadlineBlur = () => {
     if (deadlineVal) patchMutation.mutate({ customDeadline: deadlineVal });
     else patchMutation.mutate({ customDeadline: null });
@@ -622,15 +683,30 @@ function OrderWeDoItTab({ orderId, data, onUpdate }) {
             {data?.weDoIt ? 'Robimy' : 'Oznacz jako Robimy'}
           </button>
         </div>
-        <div className="flex items-center gap-2">
-          <label className="text-gray-600">Termin (własny):</label>
-          <input
-            type="date"
-            value={deadlineVal}
-            onChange={(e) => setDeadlineVal(e.target.value)}
-            onBlur={handleDeadlineBlur}
-            className="px-3 py-1.5 border border-gray-300 rounded-lg"
-          />
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2">
+            <label className="text-gray-600">Termin (własny):</label>
+            <input
+              type="date"
+              value={deadlineVal}
+              onChange={(e) => setDeadlineVal(e.target.value)}
+              onBlur={handleDeadlineBlur}
+              className="px-3 py-1.5 border border-gray-300 rounded-lg"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-gray-600">Status oferty:</label>
+            <select
+              value={offerStatus}
+              onChange={handleOfferStatusChange}
+              className="px-3 py-1.5 border border-gray-300 rounded-lg bg-white text-sm"
+            >
+              <option value="none">Brak</option>
+              <option value="sent">Wysłane</option>
+              <option value="won">Wygrane</option>
+              <option value="lost">Przegrane</option>
+            </select>
+          </div>
         </div>
       </div>
 

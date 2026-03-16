@@ -28,22 +28,44 @@ const upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024 } }); // 2
 /** Lista zleceń publicznych (z paginacją) */
 router.get('/', auth, async (req, res) => {
   try {
-    const { page = 1, limit = 20, region, search, aiStatus, weDoIt } = req.query;
+    const { page = 1, limit = 20, region, search, aiStatus, weDoIt, archived } = req.query;
     const pageNum = Math.max(1, parseInt(page, 10) || 1);
     const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
 
-    const query = {};
-    if (region) query.region = new RegExp(region, 'i');
-    if (aiStatus && aiStatus !== 'all') query.aiStatus = aiStatus;
-    if (weDoIt === 'true' || weDoIt === true) query.weDoIt = true;
+    const now = new Date();
+    const andConditions = [];
+
+    if (region) andConditions.push({ region: new RegExp(region, 'i') });
+    if (aiStatus && aiStatus !== 'all') andConditions.push({ aiStatus });
+    if (weDoIt === 'true' || weDoIt === true) andConditions.push({ weDoIt: true });
     if (search) {
-      query.$or = [
-        { title: new RegExp(search, 'i') },
-        { description: new RegExp(search, 'i') },
-        { investor: new RegExp(search, 'i') },
-        { biznesPolskaId: search }
-      ];
+      andConditions.push({
+        $or: [
+          { title: new RegExp(search, 'i') },
+          { description: new RegExp(search, 'i') },
+          { investor: new RegExp(search, 'i') },
+          { biznesPolskaId: search }
+        ]
+      });
     }
+    // Archiwum: zlecenia z przeszłym terminem składania LUB ręcznie zarchiwizowane
+    if (archived === 'true' || archived === true) {
+      andConditions.push({
+        $or: [
+          { submissionDeadline: { $lt: now } },
+          { archivedManually: true }
+        ]
+      });
+    } else {
+      andConditions.push({
+        $or: [
+          { archivedManually: false },
+          { archivedManually: { $exists: false } }
+        ]
+      });
+    }
+
+    const query = andConditions.length ? { $and: andConditions } : {};
 
     const sortRule = weDoIt === 'true' || weDoIt === true
       ? { customDeadline: 1, addedDate: -1 }
@@ -222,9 +244,25 @@ router.patch('/:id', auth, async (req, res) => {
     const order = await PublicOrder.findById(req.params.id);
     if (!order) return res.status(404).json({ message: 'Nie znaleziono zlecenia' });
     const prevWeDoIt = order.weDoIt;
-    const { weDoIt, customDeadline } = req.body || {};
+    const { weDoIt, customDeadline, offerResultStatus, archivedManually } = req.body || {};
     if (typeof weDoIt === 'boolean') order.weDoIt = weDoIt;
     if (customDeadline !== undefined) order.customDeadline = customDeadline ? new Date(customDeadline) : null;
+    if (typeof offerResultStatus === 'string') {
+      const allowed = ['none', 'sent', 'won', 'lost'];
+      if (allowed.includes(offerResultStatus)) {
+        order.offerResultStatus = offerResultStatus;
+      }
+    }
+    if (typeof archivedManually === 'boolean') {
+      order.archivedManually = archivedManually;
+      // Gdy ręcznie archiwizujemy – sensownie ustawić też aiStatus na rejected (jeśli jeszcze nie ustawione)
+      if (archivedManually && order.aiStatus !== 'rejected') {
+        order.aiStatus = 'rejected';
+        if (!order.aiRejectionReason) {
+          order.aiRejectionReason = 'Ręcznie oznaczone: nie ma szans w przetargu';
+        }
+      }
+    }
     await order.save();
     if (weDoIt === true && !prevWeDoIt) {
       const lean = await PublicOrder.findById(order._id).lean();
