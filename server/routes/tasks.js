@@ -7,6 +7,14 @@ const { notifyTaskWatchers } = require('../utils/taskNotifications');
 
 const router = express.Router();
 
+// Human-readable labels for statuses (used in notifications)
+const STATUS_LABELS = {
+  todo: 'Do zrobienia',
+  in_progress: 'W trakcie',
+  done: 'Zrobione',
+  cancelled: 'Anulowane'
+};
+
 // List tasks with filters
 router.get('/', auth, async (req, res) => {
   try {
