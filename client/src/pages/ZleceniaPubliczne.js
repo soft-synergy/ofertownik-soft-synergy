@@ -247,9 +247,11 @@ const ZleceniaPubliczne = () => {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [region, setRegion] = useState('');
-  const [aiTab, setAiTab] = useState('all');
+  const [aiTab, setAiTab] = useState('scored');
   const [selectedId, setSelectedId] = useState(null);
   const [showPrompts, setShowPrompts] = useState(false);
+  const [showTinder, setShowTinder] = useState(false);
+  const [tinderIndex, setTinderIndex] = useState(0);
 
   const { data, isLoading } = useQuery(
     ['publicOrders', page, search, region, aiTab],
@@ -335,6 +337,28 @@ const ZleceniaPubliczne = () => {
 
   const isAdmin = user?.role === 'admin';
   const isBusy = syncMutation.isLoading || aiMutation.isLoading || resetMutation.isLoading || deleteAllMutation.isLoading || refreshDetailsMutation.isLoading;
+
+  const tinderItems = (items || []).filter((row) => row.aiStatus === 'scored');
+  const hasTinder = aiTab === 'scored' && tinderItems.length > 0;
+
+  const openTinder = () => {
+    if (!hasTinder) return;
+    setTinderIndex(0);
+    setShowTinder(true);
+  };
+
+  const closeTinder = () => {
+    setShowTinder(false);
+  };
+
+  const goNextTinder = () => {
+    const next = tinderIndex + 1;
+    if (next >= tinderItems.length) {
+      setShowTinder(false);
+    } else {
+      setTinderIndex(next);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -444,6 +468,17 @@ const ZleceniaPubliczne = () => {
           onChange={(e) => { setRegion(e.target.value); setPage(1); }}
           className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 w-40"
         />
+        {hasTinder && (
+          <button
+            type="button"
+            onClick={openTinder}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium shadow-sm hover:bg-emerald-700"
+            title="Szybkie ocenianie zleceń jedno po drugim na podstawie analizy AI"
+          >
+            <Sparkles className="h-4 w-4" />
+            Tryb Tinder ({tinderItems.length})
+          </button>
+        )}
       </div>
 
       {/* AI tabs */}
@@ -558,6 +593,16 @@ const ZleceniaPubliczne = () => {
 
             {selectedId && (
               <OrderDetailPopup id={selectedId} onClose={() => setSelectedId(null)} />
+            )}
+
+            {showTinder && hasTinder && tinderItems[tinderIndex] && (
+              <TinderModeModal
+                order={tinderItems[tinderIndex]}
+                index={tinderIndex}
+                total={tinderItems.length}
+                onClose={closeTinder}
+                onNext={goNextTinder}
+              />
             )}
 
             {totalPages > 1 && (
@@ -754,6 +799,167 @@ function OrderWeDoItTab({ orderId, data, onUpdate }) {
           <span>Wybierz plik</span>
           <input type="file" className="hidden" onChange={handleFileUpload} disabled={uploadMutation.isLoading} />
         </label>
+      </div>
+    </div>
+  );
+}
+
+function TinderModeModal({ order, index, total, onClose, onNext }) {
+  const queryClient = useQueryClient();
+
+  const markMutation = useMutation(
+    ({ payload }) => publicOrdersAPI.patch(order._id, payload),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('publicOrders');
+        queryClient.invalidateQueries(['publicOrder', order._id]);
+        onNext();
+      },
+      onError: (e) => toast.error(e.response?.data?.message || 'Błąd zapisu')
+    }
+  );
+
+  const handleWeDoIt = () => {
+    if (!order) return;
+    markMutation.mutate({ payload: { weDoIt: true } });
+  };
+
+  const handleNoChance = () => {
+    if (!order) return;
+    markMutation.mutate({ payload: { archivedManually: true } });
+  };
+
+  if (!order) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={onClose}>
+      <div
+        className="relative bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              Tryb Tinder • {index + 1} / {total}
+            </span>
+            {order.aiScore != null && (
+              <span className="text-xs font-semibold text-gray-600 flex items-center gap-1">
+                <Sparkles className="h-3.5 w-3.5 text-violet-500" />
+                AI score: {order.aiScore}/10
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-4 text-sm">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <AiBadge status={order.aiStatus} score={order.aiScore} />
+              {order.weDoIt && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-600 text-white">
+                  <ThumbsUp className="h-3 w-3" />
+                  Już oznaczone: Robimy
+                </span>
+              )}
+            </div>
+            <h2 className="text-base font-semibold text-gray-900">
+              {order.title}
+            </h2>
+            <p className="text-xs text-gray-500">
+              ID: {order.biznesPolskaId} • {order.region || 'brak województwa'}
+            </p>
+          </div>
+
+          {order.aiAnalysis && (
+            <div className="rounded-lg border border-violet-200 bg-violet-50/60 p-3">
+              <p className="text-[11px] font-semibold text-violet-800 flex items-center gap-1.5 mb-1">
+                <BrainCircuit className="h-3.5 w-3.5" />
+                Krótka analiza AI
+              </p>
+              <p className="text-sm text-violet-900 whitespace-pre-wrap">{order.aiAnalysis}</p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {order.description && (
+              <div className="rounded-lg border border-gray-200 bg-gray-50/60 p-3">
+                <p className="text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1.5">
+                  <FileText className="h-3.5 w-3.5" />
+                  Opis
+                </p>
+                <p className="text-xs text-gray-700 whitespace-pre-wrap max-h-40 overflow-y-auto">
+                  {order.description}
+                </p>
+              </div>
+            )}
+            {order.requirements && (
+              <div className="rounded-lg border border-gray-200 bg-gray-50/60 p-3">
+                <p className="text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1.5">
+                  <ClipboardList className="h-3.5 w-3.5" />
+                  Wymagania
+                </p>
+                <p className="text-xs text-gray-700 whitespace-pre-wrap max-h-40 overflow-y-auto">
+                  {order.requirements}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {order.detailUrl && (
+            <a
+              href={order.detailUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs text-primary-600 hover:text-primary-700"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Otwórz pełne ogłoszenie w nowej karcie
+            </a>
+          )}
+        </div>
+
+        <div className="px-5 py-4 border-t border-gray-200 bg-gray-50">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <span>Strzałkami / przyciskami przechodzisz zlecenie po zleceniu.</span>
+            </div>
+            <div className="flex flex-wrap gap-2 justify-end">
+              <button
+                type="button"
+                onClick={onNext}
+                disabled={markMutation.isLoading}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-300 text-xs font-medium text-gray-700 hover:bg-gray-100"
+              >
+                Pomiń
+              </button>
+              <button
+                type="button"
+                onClick={handleNoChance}
+                disabled={markMutation.isLoading}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"
+              >
+                <X className="h-3.5 w-3.5" />
+                Nie ma szans
+              </button>
+              <button
+                type="button"
+                onClick={handleWeDoIt}
+                disabled={markMutation.isLoading}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700"
+              >
+                <ThumbsUp className="h-3.5 w-3.5" />
+                Robimy
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
