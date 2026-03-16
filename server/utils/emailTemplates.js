@@ -736,6 +736,68 @@ function taskChangeNotificationTemplate({ taskTitle, taskId, changeType, changeD
 `.trim();
 }
 
+/**
+ * Szablon: powiadomienie o przetargu (Robimy / update / deadline)
+ */
+function publicOrderNotificationTemplate({ type, title, orderTitle, orderId, deadlineFormatted, updateText, changedBy, ordersUrl }) {
+  const orderUrl = ordersUrl ? `${ordersUrl}#order-${orderId}` : `${APP_URL}/zlecenia-publiczne`;
+  const typeConfig = {
+    we_do_it: { emoji: '✅', heading: 'Na pewno składamy', desc: 'Zlecenie zostało oznaczone jako „Robimy” – na pewno składamy ofertę.' },
+    update: { emoji: '💬', heading: 'Nowy update w przetargu', desc: updateText ? `Dodano notatkę: „${escapeHtml(updateText.slice(0, 120))}${updateText.length > 120 ? '…' : ''}”` : 'Dodano update do zlecenia.' },
+    deadline_reminder: { emoji: '⏰', heading: 'Przypomnienie: zbliża się termin', desc: deadlineFormatted ? `Termin składania: ${escapeHtml(deadlineFormatted)}` : 'Zbliża się termin składania oferty.' }
+  };
+  const cfg = typeConfig[type] || typeConfig.update;
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(cfg.heading)}</title>
+</head>
+<body style="margin:0;padding:0;font-family:${baseStyles.fontFamily};background-color:${baseStyles.backgroundColor};color:${baseStyles.color};">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f1f5f9;">
+    <tr>
+      <td align="center" style="padding:40px 20px;">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;background:#ffffff;border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,0.08);overflow:hidden;">
+          <tr>
+            <td style="background:linear-gradient(135deg,#0f172a 0%,#059669 100%);padding:32px 36px;text-align:center;">
+              <p style="margin:0 0 8px 0;font-size:32px;">${cfg.emoji}</p>
+              <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;">${escapeHtml(cfg.heading)}</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px 36px;">
+              <p style="margin:0 0 16px 0;font-size:16px;line-height:1.6;color:#475569;">${cfg.desc}</p>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0;margin:20px 0 24px 0;">
+                <tr>
+                  <td style="padding:20px;">
+                    <p style="margin:0 0 8px 0;font-size:12px;color:#15803d;text-transform:uppercase;font-weight:600;">Zlecenie</p>
+                    <p style="margin:0;font-size:16px;font-weight:600;color:#14532d;">${escapeHtml(orderTitle || 'Przetarg')}</p>
+                    ${deadlineFormatted && type === 'deadline_reminder' ? `<p style="margin:12px 0 0 0;font-size:14px;color:#166534;">Termin: <strong>${escapeHtml(deadlineFormatted)}</strong></p>` : ''}
+                    ${changedBy ? `<p style="margin:8px 0 0 0;font-size:13px;color:#64748b;">Zmiana: ${escapeHtml(changedBy)}</p>` : ''}
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0;text-align:center;">
+                <a href="${orderUrl}" style="${objectToInlineStyle({ ...buttonPrimary, backgroundColor: '#059669' })}">Otwórz zlecenia publiczne →</a>
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 32px;background:#f8fafc;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;">
+              Soft Synergy Ofertownik · Powiadomienie o przetargu
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`.trim();
+}
+
 module.exports = {
   followUpReminderTemplate,
   quoteRequestTemplate,
@@ -746,5 +808,6 @@ module.exports = {
   hostingReminder3DaysOverdueTemplate,
   tasksDailyDigestTemplate,
   tasksOverdueTemplate,
-  taskChangeNotificationTemplate
+  taskChangeNotificationTemplate,
+  publicOrderNotificationTemplate
 };

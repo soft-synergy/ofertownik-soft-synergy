@@ -8,7 +8,7 @@ const { auth, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 
-/** Zwraca obiekt usługi z polami name, description, priceLabel w wybranym języku (pl/en). Bez lang zwraca surowe pola _pl/_en. */
+/** Zwraca obiekt usługi z polami name, description, priceLabel, image w wybranym języku (pl/en). Bez lang zwraca surowe pola _pl/_en. */
 function resolveServiceForLang(service, lang) {
   if (!lang || !['pl', 'en'].includes(lang)) {
     return service;
@@ -17,7 +17,8 @@ function resolveServiceForLang(service, lang) {
   const name = lang === 'pl' ? (doc.namePl || doc.name) : (doc.nameEn || doc.name);
   const description = lang === 'pl' ? (doc.descriptionPl || doc.description) : (doc.descriptionEn || doc.description);
   const priceLabel = lang === 'pl' ? (doc.priceLabelPl || doc.priceLabel || '') : (doc.priceLabelEn || doc.priceLabel || '');
-  return { ...doc, name: name || '', description: description || '', priceLabel };
+  const image = lang === 'pl' ? (doc.imagePl || doc.image) : (doc.imageEn || doc.image);
+  return { ...doc, name: name || '', description: description || '', priceLabel, image: image || null };
 }
 
 const uploadDir = 'uploads/services/';
@@ -43,7 +44,11 @@ const upload = multer({
     if (mime && ext) return cb(null, true);
     cb(new Error('Tylko pliki obrazów (jpeg, jpg, png, webp) są dozwolone.'));
   }
-}).single('image');
+}).fields([
+  { name: 'image', maxCount: 1 },
+  { name: 'imagePl', maxCount: 1 },
+  { name: 'imageEn', maxCount: 1 }
+]);
 
 const uploadMiddleware = (req, res, next) => {
   upload(req, res, (err) => {
@@ -222,7 +227,9 @@ router.post('/', [
     const newOrder = maxOrder ? maxOrder.order + 1 : 0;
 
     const data = { ...req.body, createdBy: req.user._id, order: newOrder };
-    if (req.file) data.image = `/uploads/services/${req.file.filename}`;
+    if (req.files?.image?.[0]) data.image = `/uploads/services/${req.files.image[0].filename}`;
+    if (req.files?.imagePl?.[0]) data.imagePl = `/uploads/services/${req.files.imagePl[0].filename}`;
+    if (req.files?.imageEn?.[0]) data.imageEn = `/uploads/services/${req.files.imageEn[0].filename}`;
     if (req.body.priceMin !== undefined && req.body.priceMin !== '') data.priceMin = Number(req.body.priceMin);
     if (req.body.priceMax !== undefined && req.body.priceMax !== '') data.priceMax = Number(req.body.priceMax);
     if (!data.namePl && data.name) data.namePl = data.name;
@@ -268,7 +275,9 @@ router.put('/:id', [
     }
 
     const updateData = { ...req.body };
-    if (req.file) updateData.image = `/uploads/services/${req.file.filename}`;
+    if (req.files?.image?.[0]) updateData.image = `/uploads/services/${req.files.image[0].filename}`;
+    if (req.files?.imagePl?.[0]) updateData.imagePl = `/uploads/services/${req.files.imagePl[0].filename}`;
+    if (req.files?.imageEn?.[0]) updateData.imageEn = `/uploads/services/${req.files.imageEn[0].filename}`;
     if (req.body.priceMin !== undefined && req.body.priceMin !== '') updateData.priceMin = Number(req.body.priceMin);
     if (req.body.priceMax !== undefined && req.body.priceMax !== '') updateData.priceMax = Number(req.body.priceMax);
     if (req.body.priceMin === '') updateData.priceMin = null;

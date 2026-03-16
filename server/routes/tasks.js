@@ -10,7 +10,7 @@ const router = express.Router();
 // List tasks with filters
 router.get('/', auth, async (req, res) => {
   try {
-    const { assignee, project, status, priority, dateFrom, dateTo, limit = 200, includeTemplates } = req.query;
+    const { assignee, project, publicOrder, status, priority, dateFrom, dateTo, limit = 200, includeTemplates } = req.query;
     const query = {};
 
     // Hide recurring templates by default (they are "meta" tasks)
@@ -32,6 +32,10 @@ router.get('/', auth, async (req, res) => {
 
     if (project) {
       query.project = project;
+    }
+
+    if (publicOrder) {
+      query.publicOrder = publicOrder;
     }
 
     if (status) {
@@ -58,6 +62,7 @@ router.get('/', auth, async (req, res) => {
       .populate('assignees', 'firstName lastName email')
       .populate('watchers', 'firstName lastName email')
       .populate('project', 'name clientName status')
+      .populate('publicOrder', 'title biznesPolskaId weDoIt customDeadline')
       .populate('createdBy', 'firstName lastName')
       .sort({ dueDate: 1, createdAt: 1 })
       .limit(limitNum)
@@ -78,6 +83,7 @@ router.get('/:id', auth, async (req, res) => {
       .populate('assignees', 'firstName lastName email')
       .populate('watchers', 'firstName lastName email')
       .populate('project', 'name clientName status')
+      .populate('publicOrder', 'title biznesPolskaId weDoIt customDeadline')
       .populate('createdBy', 'firstName lastName')
       .populate('updates.author', 'firstName lastName');
     if (!task) {
@@ -125,7 +131,7 @@ router.post('/:id/updates', auth, async (req, res) => {
 // Create task
 router.post('/', auth, async (req, res) => {
   try {
-    const { title, description, status, priority, assignee, assignees, project, dueDate, dueTimeMinutes, durationMinutes, recurrence, watchers } = req.body;
+    const { title, description, status, priority, assignee, assignees, project, publicOrder, dueDate, dueTimeMinutes, durationMinutes, recurrence, watchers } = req.body;
     if (!title || !dueDate) {
       return res.status(400).json({ message: 'Tytuł i termin są wymagane' });
     }
@@ -143,6 +149,7 @@ router.post('/', auth, async (req, res) => {
       assignees: assigneesArray, // New array field
       watchers: watchersArray, // Watchers array
       project: project || null,
+      publicOrder: publicOrder || null,
       dueDate: new Date(dueDate),
       dueTimeMinutes: dueTimeMinutes != null ? dueTimeMinutes : null,
       durationMinutes: durationMinutes != null ? durationMinutes : 60,
@@ -187,6 +194,7 @@ router.post('/', auth, async (req, res) => {
         { path: 'assignees', select: 'firstName lastName email' },
         { path: 'watchers', select: 'firstName lastName email' },
         { path: 'project', select: 'name clientName status' },
+        { path: 'publicOrder', select: 'title biznesPolskaId weDoIt customDeadline' },
         { path: 'createdBy', select: 'firstName lastName' }
       ]);
       
@@ -205,6 +213,7 @@ router.post('/', auth, async (req, res) => {
       { path: 'assignees', select: 'firstName lastName email' },
       { path: 'watchers', select: 'firstName lastName email' },
       { path: 'project', select: 'name clientName status' },
+      { path: 'publicOrder', select: 'title biznesPolskaId weDoIt customDeadline' },
       { path: 'createdBy', select: 'firstName lastName' }
     ]);
     
@@ -242,6 +251,7 @@ router.put('/:id', auth, async (req, res) => {
       task.watchers = Array.isArray(watchers) ? watchers.filter(Boolean) : [];
     }
     if (project !== undefined) task.project = project || null;
+    if (req.body.publicOrder !== undefined) task.publicOrder = req.body.publicOrder || null;
     const dueDateChanged = dueDate != null && prevDueDate && new Date(dueDate).getTime() !== prevDueDate.getTime();
     if (dueDate != null) task.dueDate = new Date(dueDate);
     if (dueTimeMinutes !== undefined) task.dueTimeMinutes = dueTimeMinutes;
@@ -267,6 +277,7 @@ router.put('/:id', auth, async (req, res) => {
       { path: 'assignees', select: 'firstName lastName email' },
       { path: 'watchers', select: 'firstName lastName email' },
       { path: 'project', select: 'name clientName status' },
+      { path: 'publicOrder', select: 'title biznesPolskaId weDoIt customDeadline' },
       { path: 'createdBy', select: 'firstName lastName' }
     ]);
     

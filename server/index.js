@@ -87,6 +87,7 @@ const setCorsHeaders = (req, res, next) => {
 app.use('/uploads/portfolio', setCorsHeaders, express.static(path.join(__dirname, '../uploads/portfolio')));
 app.use('/uploads/services', setCorsHeaders, express.static(path.join(__dirname, '../uploads/services')));
 app.use('/uploads/documents', setCorsHeaders, express.static(path.join(__dirname, '../uploads/documents')));
+app.use('/uploads/public-orders', setCorsHeaders, express.static(path.join(__dirname, '../uploads/public-orders')));
 app.use('/uploads/monitoring', setCorsHeaders, express.static(path.join(__dirname, '../uploads/monitoring')));
 
 // Generated offers with cache-busting and CORS
@@ -691,6 +692,16 @@ mongoose.connect(process.env.MONGODB_URI, {
     console.log('📋 Zlecenia publiczne (Biznes Polska) – synchronizacja 5× dziennie');
   } catch (e) {
     console.error('Nie udało się uruchomić schedulera zleceń publicznych:', e);
+  }
+  // Przypomnienia o terminach przetargów „Robimy” (co 24 h)
+  try {
+    const { sendDeadlineReminders } = require('./utils/publicOrderNotifications');
+    const runDeadlineReminders = () => sendDeadlineReminders().catch((e) => console.error('[Przetargi] Błąd przypomnień deadline:', e));
+    setTimeout(runDeadlineReminders, 5 * 60 * 1000);
+    setInterval(runDeadlineReminders, 24 * 60 * 60 * 1000);
+    console.log('⏰ Przypomnienia deadline przetargów „Robimy” – co 24 h');
+  } catch (e) {
+    console.error('Nie udało się uruchomić przypomnień deadline przetargów:', e);
   }
 })
 .catch((err) => {

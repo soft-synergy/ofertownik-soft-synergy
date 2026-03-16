@@ -199,6 +199,11 @@ export const offersAPI = {
 export const publicOrdersAPI = {
   getAll: (params) => api.get('/api/public-orders', { params }).then(res => res.data),
   getById: (id) => api.get(`/api/public-orders/${id}`).then(res => res.data),
+  patch: (id, data) => api.patch(`/api/public-orders/${id}`, data).then(res => res.data),
+  addUpdate: (id, text) => api.post(`/api/public-orders/${id}/updates`, { text }).then(res => res.data),
+  uploadAttachment: (id, formData) => api.post(`/api/public-orders/${id}/attachments`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(res => res.data),
+  deleteAttachment: (id, index) => api.delete(`/api/public-orders/${id}/attachments/${index}`).then(res => res.data),
+  getTasks: (id) => api.get(`/api/public-orders/${id}/tasks`).then(res => res.data),
   sync: () => api.post('/api/public-orders/sync').then(res => res.data),
   getConfigStatus: () => api.get('/api/public-orders/config/status').then(res => res.data),
   aiAnalyze: (limit = 10) => api.post('/api/public-orders/ai-analyze', { limit }).then(res => res.data),

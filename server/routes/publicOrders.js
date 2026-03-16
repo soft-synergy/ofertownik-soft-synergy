@@ -1,23 +1,41 @@
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const PublicOrder = require('../models/PublicOrder');
 const PublicOrderPrompts = require('../models/PublicOrderPrompts');
+const Task = require('../models/Task');
 const { auth, requireRole } = require('../middleware/auth');
 const { runSync, fetchOfferDetail, SEARCH_URL, BIZNES_POLSKA_COOKIES } = require('../services/biznesPolskaScraper');
 const { runAiAnalysis, deepAnalyzeOrder } = require('../services/aiOrderAnalyzer');
 const { getSectionsSync, setSectionsCache } = require('../config/companyProfile');
-
+const { notifyPublicOrderSubscribers } = require('../utils/publicOrderNotifications');
 const router = express.Router();
+
+const uploadDir = path.join(__dirname, '../uploads/public-orders');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => {
+    const safe = (file.originalname || 'file').replace(/[^a-zA-Z0-9._-]/g, '_');
+    cb(null, `${Date.now()}-${safe}`);
+  }
+});
+const upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024 } }); // 25MB
 
 /** Lista zleceń publicznych (z paginacją) */
 router.get('/', auth, async (req, res) => {
   try {
-    const { page = 1, limit = 20, region, search, aiStatus } = req.query;
+    const { page = 1, limit = 20, region, search, aiStatus, weDoIt } = req.query;
     const pageNum = Math.max(1, parseInt(page, 10) || 1);
     const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
 
     const query = {};
     if (region) query.region = new RegExp(region, 'i');
     if (aiStatus && aiStatus !== 'all') query.aiStatus = aiStatus;
+    if (weDoIt === 'true' || weDoIt === true) query.weDoIt = true;
     if (search) {
       query.$or = [
         { title: new RegExp(search, 'i') },
@@ -27,11 +45,13 @@ router.get('/', auth, async (req, res) => {
       ];
     }
 
-    const sortRule = aiStatus === 'scored'
-      ? { aiScore: -1, addedDate: -1 }
-      : { addedDate: -1, createdAt: -1 };
+    const sortRule = weDoIt === 'true' || weDoIt === true
+      ? { customDeadline: 1, addedDate: -1 }
+      : aiStatus === 'scored'
+        ? { aiScore: -1, addedDate: -1 }
+        : { addedDate: -1, createdAt: -1 };
 
-    const [items, total, aiCounts] = await Promise.all([
+    const [items, total, aiCounts, weDoItCount] = await Promise.all([
       PublicOrder.find(query)
         .sort(sortRule)
         .skip((pageNum - 1) * limitNum)
@@ -40,7 +60,8 @@ router.get('/', auth, async (req, res) => {
       PublicOrder.countDocuments(query),
       PublicOrder.aggregate([
         { $group: { _id: '$aiStatus', count: { $sum: 1 } } }
-      ])
+      ]),
+      PublicOrder.countDocuments({ weDoIt: true })
     ]);
 
     const counts = { pending: 0, rejected: 0, candidate: 0, scored: 0 };
@@ -52,7 +73,8 @@ router.get('/', auth, async (req, res) => {
       page: pageNum,
       totalPages: Math.ceil(total / limitNum),
       limit: limitNum,
-      aiCounts: counts
+      aiCounts: counts,
+      weDoItCount
     });
   } catch (e) {
     console.error('Public orders list error:', e);
@@ -175,14 +197,132 @@ router.put('/prompts', auth, requireRole(['admin']), async (req, res) => {
   }
 });
 
+/** Zadania przypisane do zlecenia (tylko dla „Robimy”) */
+router.get('/:id/tasks', auth, async (req, res) => {
+  try {
+    const order = await PublicOrder.findById(req.params.id).select('weDoIt').lean();
+    if (!order) return res.status(404).json({ message: 'Nie znaleziono zlecenia' });
+    if (!order.weDoIt) return res.json([]);
+    const tasks = await Task.find({ publicOrder: req.params.id })
+      .populate('assignee', 'firstName lastName email')
+      .populate('assignees', 'firstName lastName email')
+      .populate('createdBy', 'firstName lastName')
+      .sort({ dueDate: 1 })
+      .lean();
+    res.json(tasks);
+  } catch (e) {
+    console.error('Public order tasks error:', e);
+    res.status(500).json({ message: 'Błąd pobierania zadań' });
+  }
+});
+
+/** Aktualizacja zlecenia (Robimy, deadline, bez update’ów/załączników – te osobno) */
+router.patch('/:id', auth, async (req, res) => {
+  try {
+    const order = await PublicOrder.findById(req.params.id);
+    if (!order) return res.status(404).json({ message: 'Nie znaleziono zlecenia' });
+    const prevWeDoIt = order.weDoIt;
+    const { weDoIt, customDeadline } = req.body || {};
+    if (typeof weDoIt === 'boolean') order.weDoIt = weDoIt;
+    if (customDeadline !== undefined) order.customDeadline = customDeadline ? new Date(customDeadline) : null;
+    await order.save();
+    if (weDoIt === true && !prevWeDoIt) {
+      const lean = await PublicOrder.findById(order._id).lean();
+      notifyPublicOrderSubscribers(lean, 'we_do_it', {
+        changedBy: req.user ? `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() : null
+      }).catch(err => console.error('[PATCH public order] notify:', err));
+    }
+    const doc = await PublicOrder.findById(order._id).lean();
+    res.json(doc);
+  } catch (e) {
+    console.error('Public order patch error:', e);
+    res.status(500).json({ message: 'Błąd aktualizacji zlecenia' });
+  }
+});
+
+/** Dodanie update’u (notatki) do zlecenia */
+router.post('/:id/updates', auth, async (req, res) => {
+  try {
+    const order = await PublicOrder.findById(req.params.id);
+    if (!order) return res.status(404).json({ message: 'Nie znaleziono zlecenia' });
+    const text = (req.body?.text || '').trim();
+    if (!text) return res.status(400).json({ message: 'Treść update\'u jest wymagana' });
+    order.internalUpdates = order.internalUpdates || [];
+    order.internalUpdates.push({
+      text,
+      author: req.user._id,
+      createdAt: new Date()
+    });
+    await order.save();
+    await order.populate('internalUpdates.author', 'firstName lastName');
+    const doc = await PublicOrder.findById(order._id).populate('internalUpdates.author', 'firstName lastName').lean();
+    if (order.weDoIt) {
+      notifyPublicOrderSubscribers(doc, 'update', {
+        updateText: text,
+        changedBy: req.user ? `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() : null
+      }).catch(err => console.error('[POST public order update] notify:', err));
+    }
+    res.status(201).json(doc);
+  } catch (e) {
+    console.error('Public order updates error:', e);
+    res.status(500).json({ message: 'Błąd dodawania update\'u' });
+  }
+});
+
+/** Upload załącznika do zlecenia */
+router.post('/:id/attachments', auth, upload.single('file'), async (req, res) => {
+  try {
+    const order = await PublicOrder.findById(req.params.id);
+    if (!order) return res.status(404).json({ message: 'Nie znaleziono zlecenia' });
+    if (!req.file) return res.status(400).json({ message: 'Brak pliku' });
+    const name = (req.body?.name || req.file.originalname || req.file.filename || 'plik').trim() || 'plik';
+    order.attachments = order.attachments || [];
+    order.attachments.push({
+      name,
+      path: `/uploads/public-orders/${req.file.filename}`,
+      uploadedAt: new Date(),
+      uploadedBy: req.user._id
+    });
+    await order.save();
+    const doc = await PublicOrder.findById(order._id).lean();
+    res.status(201).json(doc);
+  } catch (e) {
+    console.error('Public order attachment upload error:', e);
+    res.status(500).json({ message: 'Błąd dodawania załącznika' });
+  }
+});
+
+/** Usunięcie załącznika (index w tablicy) */
+router.delete('/:id/attachments/:index', auth, async (req, res) => {
+  try {
+    const order = await PublicOrder.findById(req.params.id);
+    if (!order) return res.status(404).json({ message: 'Nie znaleziono zlecenia' });
+    const idx = parseInt(req.params.index, 10);
+    if (!Number.isFinite(idx) || idx < 0 || !order.attachments || !order.attachments[idx]) {
+      return res.status(400).json({ message: 'Nieprawidłowy indeks załącznika' });
+    }
+    const filePath = path.join(__dirname, '..', order.attachments[idx].path.replace(/^\//, ''));
+    if (fs.existsSync(filePath)) {
+      try { fs.unlinkSync(filePath); } catch (_) {}
+    }
+    order.attachments.splice(idx, 1);
+    await order.save();
+    const doc = await PublicOrder.findById(order._id).lean();
+    res.json(doc);
+  } catch (e) {
+    console.error('Public order attachment delete error:', e);
+    res.status(500).json({ message: 'Błąd usuwania załącznika' });
+  }
+});
+
 /** Jedno zlecenie po ID (Mongo _id lub biznesPolskaId) */
 router.get('/:id', auth, async (req, res) => {
   try {
     const { id } = req.params;
     const isMongoId = /^[a-fA-F0-9]{24}$/.test(id);
     const doc = isMongoId
-      ? await PublicOrder.findById(id).lean()
-      : await PublicOrder.findOne({ biznesPolskaId: id }).lean();
+      ? await PublicOrder.findById(id).populate('internalUpdates.author', 'firstName lastName').lean()
+      : await PublicOrder.findOne({ biznesPolskaId: id }).populate('internalUpdates.author', 'firstName lastName').lean();
     if (!doc) return res.status(404).json({ message: 'Nie znaleziono zlecenia' });
     res.json(doc);
   } catch (e) {

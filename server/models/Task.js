@@ -41,6 +41,13 @@ const taskSchema = new mongoose.Schema({
     ref: 'Project',
     default: null
   },
+  /** Przypisanie do zlecenia publicznego (przetarg) – tylko gdy weDoIt=true */
+  publicOrder: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'PublicOrder',
+    default: null,
+    index: true
+  },
   /**
    * Optional: source entity that created/owns this task (e.g. hosting payment).
    * Used for automatic sync (upsert) with other modules.

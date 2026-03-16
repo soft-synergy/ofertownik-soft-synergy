@@ -20,6 +20,8 @@ const serviceSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  imagePl: { type: String, default: null },
+  imageEn: { type: String, default: null },
   priceMin: {
     type: Number,
     default: null

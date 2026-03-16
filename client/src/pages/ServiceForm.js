@@ -19,20 +19,27 @@ const ServiceForm = () => {
     descriptionPl: '',
     descriptionEn: '',
     category: 'development',
-    image: null,
+    imagePl: null,
+    imageEn: null,
     priceMin: '',
     priceMax: '',
     priceLabelPl: '',
     priceLabelEn: '',
     isActive: true
   });
-  const [imagePreview, setImagePreview] = useState(null);
+  const [imagePreviewPl, setImagePreviewPl] = useState(null);
+  const [imagePreviewEn, setImagePreviewEn] = useState(null);
 
   const { data: service, isLoading } = useQuery(
     ['service', id],
     () => servicesAPI.getById(id),
     { enabled: isEditing }
   );
+
+  const toAbsoluteUrl = (path) => {
+    if (!path) return null;
+    return path.startsWith('http') ? path : `${process.env.REACT_APP_API_URL || 'https://oferty.soft-synergy.com'}${path.startsWith('/') ? path : '/' + path}`;
+  };
 
   useEffect(() => {
     if (service) {
@@ -42,21 +49,16 @@ const ServiceForm = () => {
         descriptionPl: service.descriptionPl || service.description || '',
         descriptionEn: service.descriptionEn || service.description || '',
         category: service.category || 'development',
-        image: null,
+        imagePl: null,
+        imageEn: null,
         priceMin: service.priceMin != null ? String(service.priceMin) : '',
         priceMax: service.priceMax != null ? String(service.priceMax) : '',
         priceLabelPl: service.priceLabelPl || service.priceLabel || '',
         priceLabelEn: service.priceLabelEn || service.priceLabel || '',
         isActive: service.isActive !== false
       });
-      if (service.image) {
-        const url = service.image.startsWith('http')
-          ? service.image
-          : `${process.env.REACT_APP_API_URL || 'https://oferty.soft-synergy.com'}${service.image.startsWith('/') ? service.image : '/' + service.image}`;
-        setImagePreview(url);
-      } else {
-        setImagePreview(null);
-      }
+      setImagePreviewPl(toAbsoluteUrl(service.imagePl || service.image) || null);
+      setImagePreviewEn(toAbsoluteUrl(service.imageEn || service.image) || null);
     }
   }, [service]);
 
@@ -65,7 +67,7 @@ const ServiceForm = () => {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleImageChange = (e) => {
+  const handleImageChange = (field) => (e) => {
     const file = e.target.files[0];
     if (file) {
       if (file.size > 10 * 1024 * 1024) {
@@ -79,9 +81,9 @@ const ServiceForm = () => {
         e.target.value = '';
         return;
       }
-      setFormData((prev) => ({ ...prev, image: file }));
+      setFormData((prev) => ({ ...prev, [field]: file }));
       const reader = new FileReader();
-      reader.onload = (ev) => setImagePreview(ev.target.result);
+      reader.onload = (ev) => (field === 'imagePl' ? setImagePreviewPl(ev.target.result) : setImagePreviewEn(ev.target.result));
       reader.readAsDataURL(file);
     }
   };
@@ -144,7 +146,8 @@ const ServiceForm = () => {
     if (formData.priceMax !== '') fd.append('priceMax', formData.priceMax);
     if (formData.priceLabelPl) fd.append('priceLabelPl', formData.priceLabelPl);
     if (formData.priceLabelEn) fd.append('priceLabelEn', formData.priceLabelEn);
-    if (formData.image) fd.append('image', formData.image);
+    if (formData.imagePl) fd.append('imagePl', formData.imagePl);
+    if (formData.imageEn) fd.append('imageEn', formData.imageEn);
 
     if (isEditing) {
       updateMutation.mutate(fd);
@@ -302,37 +305,60 @@ const ServiceForm = () => {
 
         <div className="card">
           <h2 className="text-lg font-medium text-gray-900 mb-4">{t('services.serviceImage')}</h2>
-          <div className="space-y-4">
-            <label className="form-label">{t('services.serviceImage')} {!isEditing && '*'}</label>
-            <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg">
-              <div className="space-y-1 text-center">
-                <Image className="mx-auto h-12 w-12 text-gray-400" />
-                <div className="flex text-sm text-gray-600">
-                  <label className="relative cursor-pointer bg-white rounded-md font-medium text-primary-600 hover:text-primary-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-primary-500">
+          <p className="text-sm text-gray-500 mb-4">Osobne zdjęcie dla wersji polskiej (PL) i angielskiej (EN) strony.</p>
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+            <div className="space-y-2">
+              <label className="form-label">Zdjęcie PL</label>
+              <div className="flex justify-center px-4 pt-4 pb-5 border-2 border-gray-300 border-dashed rounded-lg">
+                <div className="space-y-1 text-center">
+                  <Image className="mx-auto h-10 w-10 text-gray-400" />
+                  <label className="cursor-pointer text-sm font-medium text-primary-600 hover:text-primary-500">
                     <span>Wybierz plik</span>
                     <input
-                      name="image"
+                      name="imagePl"
                       type="file"
                       accept="image/*"
-                      onChange={handleImageChange}
+                      onChange={handleImageChange('imagePl')}
                       className="sr-only"
                     />
                   </label>
-                  <p className="pl-1">lub przeciągnij i upuść</p>
+                  <p className="text-xs text-gray-500">PNG, JPG, WEBP do 10MB</p>
                 </div>
-                <p className="text-xs text-gray-500">PNG, JPG, WEBP do 10MB</p>
               </div>
-            </div>
-            {imagePreview && (
-              <div>
-                <label className="form-label">Podgląd</label>
+              {imagePreviewPl && (
                 <img
-                  src={imagePreview}
-                  alt="Podgląd"
-                  className="mt-1 w-full h-48 object-cover rounded-lg border border-gray-200"
+                  src={imagePreviewPl}
+                  alt="Podgląd PL"
+                  className="w-full h-40 object-cover rounded-lg border border-gray-200"
                 />
+              )}
+            </div>
+            <div className="space-y-2">
+              <label className="form-label">Zdjęcie EN</label>
+              <div className="flex justify-center px-4 pt-4 pb-5 border-2 border-gray-300 border-dashed rounded-lg">
+                <div className="space-y-1 text-center">
+                  <Image className="mx-auto h-10 w-10 text-gray-400" />
+                  <label className="cursor-pointer text-sm font-medium text-primary-600 hover:text-primary-500">
+                    <span>Wybierz plik</span>
+                    <input
+                      name="imageEn"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageChange('imageEn')}
+                      className="sr-only"
+                    />
+                  </label>
+                  <p className="text-xs text-gray-500">PNG, JPG, WEBP do 10MB</p>
+                </div>
               </div>
-            )}
+              {imagePreviewEn && (
+                <img
+                  src={imagePreviewEn}
+                  alt="Podgląd EN"
+                  className="w-full h-40 object-cover rounded-lg border border-gray-200"
+                />
+              )}
+            </div>
           </div>
         </div>
 

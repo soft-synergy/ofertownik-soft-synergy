@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
-import { publicOrdersAPI } from '../services/api';
+import { publicOrdersAPI, tasksAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -23,7 +23,12 @@ import {
   Clock,
   ClipboardList,
   Target,
-  BrainCircuit
+  BrainCircuit,
+  ThumbsUp,
+  Paperclip,
+  ListTodo,
+  Plus,
+  X
 } from 'lucide-react';
 
 const AI_STATUS_CONFIG = {
@@ -60,8 +65,38 @@ function ScoreBar({ score }) {
   );
 }
 
+function WeDoItToggle({ order, onToggled }) {
+  const patchMutation = useMutation(
+    () => publicOrdersAPI.patch(order._id, { weDoIt: !order.weDoIt }),
+    {
+      onSuccess: () => {
+        toast.success(order.weDoIt ? 'Odznaczono „Robimy"' : 'Oznaczono „Robimy" – na pewno składamy');
+        onToggled?.();
+      },
+      onError: (e) => toast.error(e.response?.data?.message || 'Błąd zapisu')
+    }
+  );
+  return (
+    <button
+      type="button"
+      onClick={() => patchMutation.mutate()}
+      disabled={patchMutation.isLoading}
+      title={order.weDoIt ? 'Na pewno składamy – kliknij aby odznaczyć' : 'Kliknij jeśli na pewno składamy ofertę'}
+      className={`inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+        order.weDoIt
+          ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+      } ${patchMutation.isLoading ? 'opacity-70' : ''}`}
+    >
+      {patchMutation.isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ThumbsUp className="h-3.5 w-3.5" />}
+      {order.weDoIt ? 'Robimy' : 'Robimy?'}
+    </button>
+  );
+}
+
 const AI_TABS = [
   { key: 'all',       label: 'Wszystkie' },
+  { key: 'weDoIt',    label: 'Robimy' },
   { key: 'scored',    label: 'Ocenione AI' },
   { key: 'pending',   label: 'Oczekujące' },
   { key: 'rejected',  label: 'Odrzucone' },
@@ -178,7 +213,8 @@ const ZleceniaPubliczne = () => {
       limit: 20,
       search: search || undefined,
       region: region || undefined,
-      aiStatus: aiTab !== 'all' ? aiTab : undefined
+      weDoIt: aiTab === 'weDoIt' ? true : undefined,
+      aiStatus: (aiTab !== 'all' && aiTab !== 'weDoIt') ? aiTab : undefined
     }),
     { keepPreviousData: true }
   );
@@ -238,6 +274,7 @@ const ZleceniaPubliczne = () => {
   const totalPages = data?.totalPages || 0;
   const total = data?.total || 0;
   const aiCounts = data?.aiCounts || {};
+  const weDoItCount = data?.weDoItCount ?? 0;
 
   const rowBgClass = (row) => {
     if (row.aiStatus === 'rejected') return 'bg-red-50/60';
@@ -334,7 +371,8 @@ const ZleceniaPubliczne = () => {
       ) : (
         <>
       {/* AI stats bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <StatCard label="Robimy" count={weDoItCount} color="emerald" />
         <StatCard label="Oczekujące" count={aiCounts.pending || 0} color="gray" />
         <StatCard label="Odrzucone AI" count={aiCounts.rejected || 0} color="red" />
         <StatCard label="Kandydaci" count={aiCounts.candidate || 0} color="orange" />
@@ -388,7 +426,7 @@ const ZleceniaPubliczne = () => {
           </div>
         ) : items.length === 0 ? (
           <div className="py-16 text-center text-gray-500">
-            Brak zleceń{aiTab !== 'all' ? ` w kategorii "${AI_TABS.find(t => t.key === aiTab)?.label}"` : ''}.
+            Brak zleceń{aiTab !== 'all' ? ` w kategorii „${AI_TABS.find(t => t.key === aiTab)?.label}”` : ''}.
             {isAdmin && aiTab === 'all' && ' Kliknij „Aktualizuj", aby pobrać ogłoszenia z Biznes Polska.'}
           </div>
         ) : (
@@ -397,6 +435,7 @@ const ZleceniaPubliczne = () => {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Robimy</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">AI</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Score</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
@@ -408,7 +447,10 @@ const ZleceniaPubliczne = () => {
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {items.map((row) => (
-                    <tr key={row._id} className={`hover:bg-gray-50/50 ${rowBgClass(row)}`}>
+                    <tr key={row._id} className={`hover:bg-gray-50/50 ${rowBgClass(row)} ${row.weDoIt ? 'bg-emerald-50/70' : ''}`}>
+                      <td className="px-3 py-3">
+                        <WeDoItToggle order={row} onToggled={() => queryClient.invalidateQueries('publicOrders')} />
+                      </td>
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-1.5">
                           <AiBadge status={row.aiStatus} score={row.aiScore} />
@@ -513,6 +555,224 @@ function StatCard({ label, count, color }) {
   );
 }
 
+function OrderWeDoItTab({ orderId, data, onUpdate }) {
+  const queryClient = useQueryClient();
+  const [updateText, setUpdateText] = useState('');
+  const [deadlineVal, setDeadlineVal] = useState(
+    data?.customDeadline ? format(new Date(data.customDeadline), 'yyyy-MM-dd') : ''
+  );
+  React.useEffect(() => {
+    setDeadlineVal(data?.customDeadline ? format(new Date(data.customDeadline), 'yyyy-MM-dd') : '');
+  }, [data?.customDeadline]);
+
+  const patchMutation = useMutation(
+    (payload) => publicOrdersAPI.patch(orderId, payload),
+    { onSuccess: () => { queryClient.invalidateQueries(['publicOrder', orderId]); queryClient.invalidateQueries('publicOrders'); onUpdate?.(); } }
+  );
+  const addUpdateMutation = useMutation(
+    (text) => publicOrdersAPI.addUpdate(orderId, text),
+    { onSuccess: () => { queryClient.invalidateQueries(['publicOrder', orderId]); setUpdateText(''); onUpdate?.(); } }
+  );
+  const uploadMutation = useMutation(
+    (formData) => publicOrdersAPI.uploadAttachment(orderId, formData),
+    { onSuccess: () => { queryClient.invalidateQueries(['publicOrder', orderId]); onUpdate?.(); } }
+  );
+  const deleteAttachmentMutation = useMutation(
+    (index) => publicOrdersAPI.deleteAttachment(orderId, index),
+    { onSuccess: () => { queryClient.invalidateQueries(['publicOrder', orderId]); onUpdate?.(); } }
+  );
+
+  const handleWeDoItToggle = () => patchMutation.mutate({ weDoIt: !data?.weDoIt });
+  const handleDeadlineBlur = () => {
+    if (deadlineVal) patchMutation.mutate({ customDeadline: deadlineVal });
+    else patchMutation.mutate({ customDeadline: null });
+  };
+  const handleAddUpdate = () => {
+    const t = updateText.trim();
+    if (t) addUpdateMutation.mutate(t);
+  };
+  const handleFileUpload = (e) => {
+    const file = e.target?.files?.[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('name', file.name);
+    uploadMutation.mutate(fd);
+    e.target.value = '';
+  };
+
+  const updates = data?.internalUpdates || [];
+  const attachments = data?.attachments || [];
+  const baseUrl = window.location.origin || '';
+
+  return (
+    <div className="space-y-6 text-sm">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <span className="font-medium text-gray-700">Na pewno składamy?</span>
+          <button
+            type="button"
+            onClick={handleWeDoItToggle}
+            disabled={patchMutation.isLoading}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+              data?.weDoIt ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-700'
+            }`}
+          >
+            <ThumbsUp className="h-4 w-4" />
+            {data?.weDoIt ? 'Robimy' : 'Oznacz jako Robimy'}
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-gray-600">Termin (własny):</label>
+          <input
+            type="date"
+            value={deadlineVal}
+            onChange={(e) => setDeadlineVal(e.target.value)}
+            onBlur={handleDeadlineBlur}
+            className="px-3 py-1.5 border border-gray-300 rounded-lg"
+          />
+        </div>
+      </div>
+
+      <div>
+        <h4 className="font-semibold text-gray-800 mb-2 flex items-center gap-2"><ClipboardList className="h-4 w-4" /> Update'y / notatki</h4>
+        <div className="space-y-2 mb-3">
+          {updates.map((u, i) => (
+            <div key={i} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+              <p className="text-gray-800">{u.text}</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {u.author?.firstName} {u.author?.lastName} · {format(new Date(u.createdAt), 'd MMM y, HH:mm', { locale: pl })}
+              </p>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={updateText}
+            onChange={(e) => setUpdateText(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAddUpdate()}
+            placeholder="Dodaj notatkę..."
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg"
+          />
+          <button type="button" onClick={handleAddUpdate} disabled={!updateText.trim() || addUpdateMutation.isLoading} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50">
+            Dodaj
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <h4 className="font-semibold text-gray-800 mb-2 flex items-center gap-2"><Paperclip className="h-4 w-4" /> Załączniki</h4>
+        <ul className="space-y-2 mb-3">
+          {attachments.map((att, i) => (
+            <li key={i} className="flex items-center justify-between gap-2 bg-gray-50 rounded-lg px-3 py-2">
+              <a href={baseUrl + att.path} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline truncate">{att.name}</a>
+              <button type="button" onClick={() => deleteAttachmentMutation.mutate(i)} disabled={deleteAttachmentMutation.isLoading} className="text-red-600 hover:text-red-700 shrink-0">
+                <X className="h-4 w-4" />
+              </button>
+            </li>
+          ))}
+        </ul>
+        <label className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg cursor-pointer hover:bg-gray-200">
+          <Paperclip className="h-4 w-4" />
+          <span>Wybierz plik</span>
+          <input type="file" className="hidden" onChange={handleFileUpload} disabled={uploadMutation.isLoading} />
+        </label>
+      </div>
+    </div>
+  );
+}
+
+function OrderTasksTab({ orderId, orderTitle, onUpdate }) {
+  const queryClient = useQueryClient();
+  const [showAdd, setShowAdd] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newDueDate, setNewDueDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+
+  const { data: tasks, isLoading } = useQuery(
+    ['publicOrderTasks', orderId],
+    () => publicOrdersAPI.getTasks(orderId),
+    { enabled: !!orderId }
+  );
+  const createTaskMutation = useMutation(
+    () => tasksAPI.create({
+      title: newTitle.trim() || `Zadanie: ${(orderTitle || '').slice(0, 50)}`,
+      dueDate: newDueDate,
+      publicOrder: orderId
+    }),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['publicOrderTasks', orderId]);
+        setShowAdd(false);
+        setNewTitle('');
+        setNewDueDate(format(new Date(), 'yyyy-MM-dd'));
+        onUpdate?.();
+        toast.success('Zadanie dodane');
+      },
+      onError: (e) => toast.error(e.response?.data?.message || 'Błąd dodawania zadania')
+    }
+  );
+
+  const handleAddTask = () => {
+    createTaskMutation.mutate();
+  };
+
+  return (
+    <div className="space-y-4 text-sm">
+      <div className="flex items-center justify-between">
+        <h4 className="font-semibold text-gray-800 flex items-center gap-2"><ListTodo className="h-4 w-4" /> Zadania do tego przetargu</h4>
+        <button
+          type="button"
+          onClick={() => setShowAdd(!showAdd)}
+          className="inline-flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm"
+        >
+          <Plus className="h-4 w-4" /> Dodaj zadanie
+        </button>
+      </div>
+      {showAdd && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 space-y-3">
+          <input
+            type="text"
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            placeholder="Tytuł zadania"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+          />
+          <input
+            type="date"
+            value={newDueDate}
+            onChange={(e) => setNewDueDate(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-lg"
+          />
+          <div className="flex gap-2">
+            <button type="button" onClick={handleAddTask} disabled={createTaskMutation.isLoading} className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50">
+              {createTaskMutation.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Zapisz
+            </button>
+            <button type="button" onClick={() => setShowAdd(false)} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100">Anuluj</button>
+          </div>
+        </div>
+      )}
+      {isLoading ? (
+        <div className="flex justify-center py-4"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div>
+      ) : !tasks?.length ? (
+        <p className="text-gray-500 py-4">Brak zadań. Dodaj zadanie powiązane z tym przetargiem.</p>
+      ) : (
+        <ul className="space-y-2">
+          {tasks.map((t) => (
+            <li key={t._id} className="flex items-center justify-between gap-2 bg-gray-50 rounded-lg px-4 py-3 border border-gray-100">
+              <div>
+                <p className="font-medium text-gray-800">{t.title}</p>
+                <p className="text-xs text-gray-500">Termin: {format(new Date(t.dueDate), 'd MMM y', { locale: pl })}</p>
+              </div>
+              <a href={`/tasks`} className="text-primary-600 hover:underline text-sm">Otwórz zadania →</a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function OrderDetailPopup({ id, onClose }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -545,6 +805,8 @@ function OrderDetailPopup({ id, onClose }) {
   const hasPricing = hasDeep && deep?.pricingScenarios && typeof deep.pricingScenarios === 'object';
   const tabs = [
     { key: 'info', label: 'Informacje' },
+    { key: 'weDoIt', label: 'Robimy & terminy' },
+    ...(data?.weDoIt ? [{ key: 'tasks', label: 'Zadania' }] : []),
     ...(hasDeep ? [
       { key: 'analysis', label: 'Analiza' },
       { key: 'actions', label: 'Kroki' },
@@ -564,6 +826,11 @@ function OrderDetailPopup({ id, onClose }) {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3 min-w-0">
               <h2 className="text-lg font-semibold text-gray-900 truncate">{data?.title || 'Szczegóły zlecenia'}</h2>
+              {data?.weDoIt && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-600 text-white">
+                  <ThumbsUp className="h-3 w-3" /> Robimy
+                </span>
+              )}
               {data && <AiBadge status={data.aiStatus} score={data.aiScore} />}
               {hasDeep && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-violet-50 text-violet-700">
@@ -704,6 +971,16 @@ function OrderDetailPopup({ id, onClose }) {
                     </a>
                   )}
                 </div>
+              )}
+
+              {/* ──── TAB: Robimy & terminy ──── */}
+              {activeTab === 'weDoIt' && (
+                <OrderWeDoItTab orderId={id} data={data} onUpdate={() => queryClient.invalidateQueries(['publicOrder', id])} />
+              )}
+
+              {/* ──── TAB: Zadania (tylko gdy Robimy) ──── */}
+              {activeTab === 'tasks' && data?.weDoIt && (
+                <OrderTasksTab orderId={id} orderTitle={data.title} onUpdate={() => queryClient.invalidateQueries(['publicOrder', id])} />
               )}
 
               {/* ──── TAB: Analiza ──── */}

@@ -86,7 +86,26 @@ const publicOrderSchema = new mongoose.Schema({
   /** Pełna głęboka analiza AI – wymagania, trudności, draft oferty */
   aiDeepAnalysis: { type: mongoose.Schema.Types.Mixed, default: null },
   /** Kiedy wykonano głęboką analizę */
-  aiDeepAnalyzedAt: { type: Date, default: null }
+  aiDeepAnalyzedAt: { type: Date, default: null },
+
+  // ─── Robimy (na pewno składamy) ───
+  /** Zaznaczone = na pewno składamy ofertę */
+  weDoIt: { type: Boolean, default: false, index: true },
+  /** Własny deadline (do śledzenia / powiadomień) – może być inny niż submissionDeadline */
+  customDeadline: { type: Date, default: null },
+  /** Wewnętrzne notatki / update'y (np. "Dopisałem wycenę", "Wysłane") */
+  internalUpdates: [{
+    text: { type: String, required: true },
+    author: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    createdAt: { type: Date, default: Date.now }
+  }],
+  /** Załączniki (oferty robocze, dokumenty) – path względem serwera */
+  attachments: [{
+    name: { type: String, required: true },
+    path: { type: String, required: true },
+    uploadedAt: { type: Date, default: Date.now },
+    uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
+  }]
 }, {
   timestamps: true
 });
@@ -96,5 +115,6 @@ publicOrderSchema.index({ addedDate: -1 });
 publicOrderSchema.index({ region: 1 });
 publicOrderSchema.index({ aiStatus: 1 });
 publicOrderSchema.index({ aiScore: -1 });
+publicOrderSchema.index({ weDoIt: 1, customDeadline: 1 });
 
 module.exports = mongoose.model('PublicOrder', publicOrderSchema);
