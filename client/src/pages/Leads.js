@@ -45,8 +45,14 @@ export default function Leads() {
     { keepPreviousData: true }
   );
 
-  const items = data?.items ?? [];
-  const total = data?.total ?? 0;
+  // API zwraca { items, total, ... }; zabezpieczenie gdy odpowiedź to tablica lub brak .items
+  const raw = data != null ? data : {};
+  const items = Array.isArray(raw.items)
+    ? raw.items
+    : Array.isArray(raw)
+      ? raw
+      : [];
+  const total = typeof raw.total === 'number' ? raw.total : items.length;
 
   const createMutation = useMutation(leadsAPI.create, {
     onSuccess: () => {
