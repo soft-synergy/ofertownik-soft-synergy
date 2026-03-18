@@ -291,3 +291,14 @@ export const leadsAPI = {
   reject: (id, reviewComment) => api.patch(`/api/leads/${id}/reject`, { reviewComment }).then(res => res.data),
   saveOffer: (id, data) => api.patch(`/api/leads/${id}/offer`, data).then(res => res.data),
 };
+
+const API_BASE = process.env.REACT_APP_API_URL || 'https://oferty.soft-synergy.com';
+export const getDocumentPublicUrl = (slug) => `${API_BASE}/dokumenty/${slug}`;
+
+export const documentsAPI = {
+  getAll: () => api.get('/api/documents').then(res => res.data),
+  getById: (id) => api.get(`/api/documents/${id}`).then(res => res.data),
+  create: (data) => api.post('/api/documents', data).then(res => res.data),
+  update: (id, data) => api.put(`/api/documents/${id}`, data).then(res => res.data),
+  delete: (id) => api.delete(`/api/documents/${id}`).then(res => res.data),
+};

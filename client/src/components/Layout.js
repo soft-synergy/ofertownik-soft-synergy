@@ -12,7 +12,8 @@ import {
   LogOut,
   CheckSquare,
   Wrench,
-  FileCheck
+  FileCheck,
+  FileText
 } from 'lucide-react';
 import SearchCommandPalette from './SearchCommandPalette';
 
@@ -46,6 +47,7 @@ const Layout = () => {
     { path: '/portfolio', label: t('nav.portfolio'), icon: Briefcase },
     { path: '/services', label: t('nav.services'), icon: Wrench },
     { path: '/activity', label: 'Aktywność', icon: Activity },
+    { path: '/dokumenty', label: 'Dokumenty i playbooki', icon: FileText },
   ];
 
   // Add admin-only items

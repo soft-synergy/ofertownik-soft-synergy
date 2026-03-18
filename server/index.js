@@ -21,6 +21,7 @@ const searchRoutes = require('./routes/search');
 const servicesRoutes = require('./routes/services');
 const publicOrdersRoutes = require('./routes/publicOrders');
 const leadsRoutes = require('./routes/leads');
+const documentsRoutes = require('./routes/documents');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -121,7 +122,28 @@ app.use('/api/search', searchRoutes);
 app.use('/api/services', servicesRoutes);
 app.use('/api/public-orders', publicOrdersRoutes);
 app.use('/api/leads', leadsRoutes);
+app.use('/api/documents', documentsRoutes);
 app.use('/cal', calWebhookRoutes);
+
+// Publiczny podgląd dokumentu/playbooka po slug – zwraca HTML (bez auth)
+app.get('/dokumenty/:slug', async (req, res) => {
+  try {
+    const Document = require('./models/Document');
+    const doc = await Document.findOne({ slug: req.params.slug }).lean();
+    if (!doc) {
+      res.status(404).send('<!DOCTYPE html><html><body><h1>Nie znaleziono dokumentu</h1></body></html>');
+      return;
+    }
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    // Luźne CSP, żeby wklejony HTML (prezentacje, skrypty) mógł się wyświetlać
+    res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;");
+    res.send(doc.content || '<!DOCTYPE html><html><body><p>Brak treści.</p></body></html>');
+  } catch (e) {
+    console.error('Public document error:', e);
+    res.status(500).send('<!DOCTYPE html><html><body><h1>Błąd serwera</h1></body></html>');
+  }
+});
 
 // Activities endpoint (recent)
 const Activity = require('./models/Activity');
