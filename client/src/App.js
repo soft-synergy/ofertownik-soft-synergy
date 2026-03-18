@@ -21,6 +21,7 @@ import Clients from './pages/Clients';
 import ZleceniaPubliczne from './pages/ZleceniaPubliczne';
 import ClientPortal from './pages/ClientPortal';
 import Tasks from './pages/Tasks';
+import Leads from './pages/Leads';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import AuthLayout from './components/AuthLayout';
@@ -61,6 +62,7 @@ function AppContent() {
           <Route path="services/:id/edit" element={<ServiceForm />} />
           <Route path="employees" element={<Employees />} />
           <Route path="tasks" element={<Tasks />} />
+          <Route path="leads" element={<Leads />} />
           <Route path="activity" element={<Activity />} />
           <Route path="hosting" element={<Hosting />} />
           <Route path="zlecenia-publiczne" element={<ZleceniaPubliczne />} />

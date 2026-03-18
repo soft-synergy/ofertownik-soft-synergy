@@ -41,6 +41,7 @@ const Layout = () => {
   const navItems = [
     { path: '/dashboard', label: t('nav.dashboard'), icon: LayoutDashboard },
     { path: '/projects', label: t('nav.projects'), icon: FolderOpen },
+    { path: '/leads', label: 'Leady', icon: Users },
     { path: '/tasks', label: 'Zadania', icon: CheckSquare },
     { path: '/portfolio', label: t('nav.portfolio'), icon: Briefcase },
     { path: '/services', label: t('nav.services'), icon: Wrench },

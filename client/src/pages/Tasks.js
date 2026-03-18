@@ -42,7 +42,7 @@ const STATUS_LABELS = { todo: 'Do zrobienia', in_progress: 'W toku', done: 'Zrob
 const PRIORITY_LABELS = { low: 'Niski', normal: 'Normalny', high: 'Wysoki', urgent: 'Pilny' };
 const PRIORITY_COLORS = { low: 'bg-gray-100 text-gray-700', normal: 'bg-blue-100 text-blue-800', high: 'bg-orange-100 text-orange-800', urgent: 'bg-red-100 text-red-800' };
 
-function DraggableTaskChip({ task, isOverdue, onOpen, onToggleDone, onOpenContextMenu }) {
+function DraggableTaskChip({ task, isOverdue, onOpen, onToggleDone, onOpenContextMenu, fullTitle }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useDraggable({
     id: task._id,
     data: { taskId: task._id }
@@ -96,7 +96,15 @@ function DraggableTaskChip({ task, isOverdue, onOpen, onToggleDone, onOpenContex
       >
         <GripVertical className="h-4 w-4" />
       </button>
-      <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left line-clamp-2 break-words">
+      <button
+        type="button"
+        onClick={onOpen}
+        className={
+          fullTitle
+            ? 'min-w-0 flex-1 text-left break-words whitespace-pre-wrap'
+            : 'min-w-0 flex-1 text-left line-clamp-2 break-words'
+        }
+      >
         <span className={`px-1.5 py-0.5 rounded text-xs shrink-0 ${PRIORITY_COLORS[task.priority] ?? 'bg-gray-200'}`}>
           {PRIORITY_LABELS[task.priority]?.[0] ?? ''}
         </span>
@@ -1255,6 +1263,7 @@ export default function Tasks() {
                               onOpen={() => openEdit(t)}
                               onToggleDone={handleToggleDone}
                               onOpenContextMenu={openContextMenu}
+                              fullTitle
                             />
                           ))}
                         </div>

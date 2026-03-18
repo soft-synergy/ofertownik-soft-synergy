@@ -283,3 +283,11 @@ export const waitlistAPI = {
   update: (id, data) => api.patch(`/api/waitlist/${id}`, data).then(res => res.data),
   delete: (id) => api.delete(`/api/waitlist/${id}`).then(res => res.data),
 }; 
+
+export const leadsAPI = {
+  getAll: (params) => api.get('/api/leads', { params }).then(res => res.data),
+  create: (data) => api.post('/api/leads', data).then(res => res.data),
+  approve: (id, reviewComment) => api.patch(`/api/leads/${id}/approve`, { reviewComment }).then(res => res.data),
+  reject: (id, reviewComment) => api.patch(`/api/leads/${id}/reject`, { reviewComment }).then(res => res.data),
+  saveOffer: (id, data) => api.patch(`/api/leads/${id}/offer`, data).then(res => res.data),
+};
