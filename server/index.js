@@ -20,6 +20,7 @@ const calWebhookRoutes = require('./routes/cal');
 const searchRoutes = require('./routes/search');
 const servicesRoutes = require('./routes/services');
 const publicOrdersRoutes = require('./routes/publicOrders');
+const leadsRoutes = require('./routes/leads');
 const documentsRoutes = require('./routes/documents');
 
 const app = express();
@@ -120,6 +121,7 @@ app.use('/api/tasks', tasksRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/services', servicesRoutes);
 app.use('/api/public-orders', publicOrdersRoutes);
+app.use('/api/leads', leadsRoutes);
 app.use('/api/documents', documentsRoutes);
 app.use('/cal', calWebhookRoutes);
 
