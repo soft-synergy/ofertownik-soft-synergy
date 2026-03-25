@@ -158,6 +158,11 @@ const projectSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  // Ryzyka do pokazania przy przygotowaniu oferty finalnej (wynik analizy AI)
+  finalOfferRisks: {
+    type: [String],
+    default: []
+  },
   // Doprecyzowanie – ostatnie żądanie (kompatybilność wsteczna, ustawiane z ostatniego wpisu w clarificationHistory)
   clarificationRequest: {
     text: { type: String, default: null },

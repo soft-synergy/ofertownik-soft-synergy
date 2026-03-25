@@ -47,30 +47,58 @@ async function generateFullOfferDraftFromPreliminary(project) {
     .filter(Boolean)
     .join('\n\n---\n\n');
 
-  const system = `Jesteś ekspertem od ofert IT dla software house (strony www, aplikacje web, UI/UX, CMS).
-Na podstawie notatek z konsultacji przygotuj treść profesjonalnej oferty finalnej po polsku.
-Odpowiedz WYŁĄCZNIE jednym obiektem JSON (bez markdown, bez komentarzy, bez tekstu przed ani po), struktura:
+  const system = `Jesteś ekspertem od ofert IT. Tworzysz finalną ofertę handlową dla klienta końcowego, który nie jest programistą.
+Pisz prostym, zrozumiałym językiem biznesowym, profesjonalnie i konkretnie.
+Nie używaj emotek.
+Nie używaj słowa "spółka".
+W wiadomości do klienta nie ujawniaj żadnych wewnętrznych zasad kalkulacji ani narzutów.
+
+Przygotuj finalną ofertę po polsku i odpowiedz WYŁĄCZNIE jednym obiektem JSON (bez markdown, bez komentarzy, bez tekstu przed ani po), struktura:
 {
-  "description": "string, 2–6 akapitów oddzielonych \\n\\n",
-  "mainBenefit": "string, jedna zwięzła korzyść biznesowa",
-  "modules": [ { "name": "string", "description": "string", "color": "blue" } ],
+  "description": "string, szczegółowy opis finalnej oferty (zawiera: nazwę/tytuł projektu, cel projektu, zakres prac prostym językiem, 4-8 akapitów oddzielonych \\n\\n)",
+  "mainBenefit": "string, jedna konkretna korzyść biznesowa dla klienta",
+  "modules": [ { "name": "string", "description": "string (spójny opis modułu, bez list punktowanych)", "color": "blue" } ],
   "timeline": {
-    "phase1": { "name": "string", "duration": "string" },
-    "phase2": { "name": "string", "duration": "string" },
-    "phase3": { "name": "string", "duration": "string" },
-    "phase4": { "name": "string", "duration": "string" }
+    "phase1": { "name": "string (nazwa fazy inna niż nazwy modułów)", "duration": "string (dni robocze lub tygodnie robocze)" },
+    "phase2": { "name": "string (nazwa fazy inna niż nazwy modułów)", "duration": "string (dni robocze lub tygodnie robocze)" },
+    "phase3": { "name": "string (nazwa fazy inna niż nazwy modułów)", "duration": "string (dni robocze lub tygodnie robocze)" },
+    "phase4": { "name": "string (nazwa fazy inna niż nazwy modułów)", "duration": "string (dni robocze lub tygodnie robocze)" }
   },
   "pricing": { "phase1": number, "phase2": number, "phase3": number, "phase4": number },
   "priceRange": { "min": number|null, "max": number|null },
-  "customPaymentTerms": "string — warunki płatności",
+  "customPaymentTerms": "string — profesjonalne warunki płatności dla oferty finalnej",
   "customReservations": ["string", "..."],
   "technologies": { "stack": ["string"], "methodologies": ["string"] },
-  "technologyExplanation": "string lub pusty"
+  "technologyExplanation": "string, opis technologii jako normalny tekst (bez punktów): jak budujemy, dlaczego ten wybór, jaka alternatywa i jak zostanie użyta"
 }
-Zasady: "color" modułu jeden z: blue, green, purple, orange, red. Ceny w PLN netto, realistyczne dla polskiego rynku.`;
+
+Zasady biznesowe i format:
+- "color" modułu: jeden z blue, green, purple, orange, red.
+- Moduły wypisz jako lista obiektów, ale opis każdego modułu ma być jedną spójną treścią.
+- W technologies.stack wpisz konkretne nazwy technologii (np. React, Node.js, PostgreSQL, Docker, AWS).
+- W technologies.methodologies używaj wyłącznie technicznych nazw metodyk (np. Agile, Scrum, Kanban, CI/CD, TDD).
+- Podaj dokładnie 4 fazy projektu i przypisz im kwoty tak, aby suma faz = całość wyceny.
+- Timeline ma być wydłużony 1.5x względem typowej realizacji software house dla podobnego zakresu.
+- Wycena ma odpowiadać stawce 100 PLN/h i poziomowi cenowemu 60% typowej oferty software house, ale NIE WOLNO o tym wspominać w treści oferty.
+- Ceny podawaj jako wartości netto w PLN, realistyczne i spójne z zakresem.
+- Całość ma brzmieć bardzo profesjonalnie i budować zaufanie klienta.
+- Nie zwracaj żadnych dodatkowych pól poza wymaganym JSON.`;
+  const forcedTotal = optionalPositiveNumber(project.finalEstimateTotal);
   const user = `Nazwa projektu: ${project.name || ''}
 Klient: ${project.clientName || ''}
 Kontakt: ${project.clientContact || ''}, ${project.clientEmail || ''}, ${project.clientPhone || ''}
+Strona: https://soft-synergy.com/
+Kontakt handlowy: jakubczajka@softsynergy.com, +48 793 868 886
+
+Wymagania, które muszą znaleźć odzwierciedlenie w treści:
+- Nazwa/tytuł projektu
+- Główna korzyść biznesowa
+- Cel projektu
+- Główne moduły projektu z krótkim, spójnym opisem każdego modułu
+- Opis technologii (bez punktów)
+- Metodologie techniczne
+- 4 fazy projektu z wyceną i harmonogramem
+${forcedTotal ? `- WYMÓG CENOWY: suma pricing.phase1 + phase2 + phase3 + phase4 MUSI wynosić dokładnie ${forcedTotal} PLN netto` : ''}
 
 Notatki i kontekst:
 ${contextNotes}`;
@@ -114,6 +142,46 @@ function optionalPositiveNumber(x) {
   const n = Number(x);
   if (!Number.isFinite(n) || n <= 0) return null;
   return Math.round(n);
+}
+
+function normalizePricingToTargetTotal(rawPricing, targetTotal) {
+  const computed = {
+    phase1: numOr(rawPricing?.phase1, 0),
+    phase2: numOr(rawPricing?.phase2, 0),
+    phase3: numOr(rawPricing?.phase3, 0),
+    phase4: numOr(rawPricing?.phase4, 0)
+  };
+
+  const forcedTotal = optionalPositiveNumber(targetTotal);
+  if (!forcedTotal) {
+    computed.total =
+      computed.phase1 + computed.phase2 + computed.phase3 + computed.phase4;
+    return computed;
+  }
+
+  const base = [
+    Math.max(0, Number(rawPricing?.phase1) || 0),
+    Math.max(0, Number(rawPricing?.phase2) || 0),
+    Math.max(0, Number(rawPricing?.phase3) || 0),
+    Math.max(0, Number(rawPricing?.phase4) || 0)
+  ];
+  const baseSum = base.reduce((a, b) => a + b, 0);
+  const ratios = baseSum > 0 ? base.map((v) => v / baseSum) : [0.25, 0.25, 0.3, 0.2];
+
+  const allocated = ratios.map((r) => Math.floor(forcedTotal * r));
+  let diff = forcedTotal - allocated.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < allocated.length && diff > 0; i += 1) {
+    allocated[i] += 1;
+    diff -= 1;
+  }
+
+  return {
+    phase1: allocated[0],
+    phase2: allocated[1],
+    phase3: allocated[2],
+    phase4: allocated[3],
+    total: forcedTotal
+  };
 }
 
 function normalizeModules(draft) {
@@ -161,14 +229,10 @@ function normalizeTimeline(draft, existing) {
  */
 function draftToProjectUpdate(project, draft) {
   const modules = normalizeModules(draft);
-  const pricing = {
-    phase1: numOr(draft.pricing?.phase1, 0),
-    phase2: numOr(draft.pricing?.phase2, 0),
-    phase3: numOr(draft.pricing?.phase3, 0),
-    phase4: numOr(draft.pricing?.phase4, 0)
-  };
-  pricing.total =
-    pricing.phase1 + pricing.phase2 + pricing.phase3 + pricing.phase4;
+  const pricing = normalizePricingToTargetTotal(
+    draft.pricing,
+    project.finalEstimateTotal
+  );
 
   const pr = draft.priceRange || {};
   const priceRange = {
