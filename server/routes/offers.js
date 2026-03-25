@@ -275,6 +275,34 @@ router.post('/generate/:projectId', auth, async (req, res) => {
       return res.status(404).json({ message: 'Projekt nie został znaleziony' });
     }
 
+    // Wymuszenie ceny z wyceny finalnej: jeśli `finalEstimateTotal` istnieje,
+    // to oferta ma pokazywać dokładnie tę kwotę (nie priceRange z AI).
+    const forcedTotal = Number(project.finalEstimateTotal);
+    if (Number.isFinite(forcedTotal) && forcedTotal > 0) {
+      const pricing = project.pricing || {};
+      const phases = ['phase1', 'phase2', 'phase3', 'phase4'];
+      const existing = phases.map((ph) => Math.max(0, Number(pricing[ph]) || 0));
+      const baseSum = existing.reduce((a, b) => a + b, 0);
+      const ratios = baseSum > 0 ? existing.map((v) => v / baseSum) : [0.25, 0.25, 0.3, 0.2];
+
+      const allocated = ratios.map((r) => Math.floor(forcedTotal * r));
+      let diff = forcedTotal - allocated.reduce((a, b) => a + b, 0);
+      for (let i = 0; i < allocated.length && diff > 0; i += 1) {
+        allocated[i] += 1;
+        diff -= 1;
+      }
+
+      project.pricing = {
+        ...pricing,
+        phase1: allocated[0],
+        phase2: allocated[1],
+        phase3: allocated[2],
+        phase4: allocated[3],
+        total: forcedTotal
+      };
+      project.priceRange = { min: null, max: null };
+    }
+
     // Get portfolio items for the offer (increase limit for carousel)
     const portfolio = await Portfolio.find({ isActive: true })
       .sort({ order: 1 })

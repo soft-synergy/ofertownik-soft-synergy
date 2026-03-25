@@ -162,6 +162,24 @@ router.post('/:id/ai-generate-full-offer', auth, async (req, res) => {
       });
     }
 
+    // Dodatkowa bramka bezpieczeństwa przed wygenerowaniem oferty finalnej
+    try {
+      const { analyzeFinalEstimationReadiness } = require('../services/aiFinalEstimationGate');
+      const gate = await analyzeFinalEstimationReadiness(project);
+      if (!gate.canEstimateFinalNow && gate.hardBlockers.length > 0) {
+        return res.status(409).json({
+          message: 'Nie można przygotować oferty finalnej: najpierw potrzebne doprecyzowanie od klienta.',
+          hardBlockers: gate.hardBlockers,
+          clarificationQuestions: gate.clarificationQuestions
+        });
+      }
+      if (Array.isArray(gate.risksToFlagAtFinalOffer)) {
+        project.finalOfferRisks = gate.risksToFlagAtFinalOffer;
+      }
+    } catch (gateErr) {
+      console.error('[ai-generate-full-offer][ai-gate] warning:', gateErr.message || gateErr);
+    }
+
     const {
       generateFullOfferDraftFromPreliminary,
       draftToProjectUpdate
@@ -399,9 +417,33 @@ router.post('/:id/submit-final-estimate', [
       return res.status(400).json({ message: 'Ta akcja jest dostępna tylko dla ofert wstępnych' });
     }
 
+    // AI gate: blokuj zapis wyceny finalnej tylko przy twardych blokerach
+    let gate = {
+      canEstimateFinalNow: true,
+      hardBlockers: [],
+      risksToFlagAtFinalOffer: [],
+      clarificationQuestions: []
+    };
+    try {
+      const { analyzeFinalEstimationReadiness } = require('../services/aiFinalEstimationGate');
+      gate = await analyzeFinalEstimationReadiness(project);
+    } catch (gateErr) {
+      // fail-open: nie blokujemy pracy przy awarii AI, ale logujemy problem
+      console.error('[submit-final-estimate][ai-gate] warning:', gateErr.message || gateErr);
+    }
+
+    if (!gate.canEstimateFinalNow && gate.hardBlockers.length > 0) {
+      return res.status(409).json({
+        message: 'Nie można zapisać wyceny finalnej: AI wykryło twarde blokery wymagające doprecyzowania.',
+        hardBlockers: gate.hardBlockers,
+        clarificationQuestions: gate.clarificationQuestions
+      });
+    }
+
     const total = Number(req.body.total);
     project.finalEstimateTotal = total;
     project.finalEstimateSubmittedAt = new Date();
+    project.finalOfferRisks = gate.risksToFlagAtFinalOffer || [];
     project.status = 'to_prepare_final_offer';
 
     // Keep pricing in sync with UI currency display (single-number input)
@@ -410,6 +452,10 @@ router.post('/:id/submit-final-estimate', [
     project.pricing.phase2 = 0;
     project.pricing.phase3 = 0;
     project.pricing.phase4 = 0;
+    // Jeśli mamy wycenę finalną, to cena w ofercie ma być dokładnie ta kwota.
+    // Szablon HTML pokazuje `priceRange`, jeśli jest ustawione `priceRange.min`,
+    // więc czyścimy ją, żeby wymuszona cena pochodziła z `pricing.total`.
+    project.priceRange = { min: null, max: null };
     // pricing.total is calculated in pre-save hook
 
     await project.save();
@@ -447,7 +493,11 @@ router.post('/:id/submit-final-estimate', [
       .populate('owner', 'firstName lastName email')
       .populate('teamMembers.user', 'firstName lastName email role avatar');
 
-    return res.json({ message: 'Zapisano wycenę finalną i ustawiono status: Do przygotowania oferty finalnej', project: updated });
+    return res.json({
+      message: 'Zapisano wycenę finalną i ustawiono status: Do przygotowania oferty finalnej',
+      project: updated,
+      risksToFlagAtFinalOffer: gate.risksToFlagAtFinalOffer || []
+    });
   } catch (e) {
     console.error('submit-final-estimate error:', e);
     return res.status(500).json({ message: 'Błąd serwera' });

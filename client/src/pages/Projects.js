@@ -134,12 +134,39 @@ const Projects = () => {
       return;
     }
     try {
-      await projectsAPI.submitFinalEstimate(selectedProject._id, parseFloat(finalEstimateTotal));
+      const data = await projectsAPI.submitFinalEstimate(selectedProject._id, parseFloat(finalEstimateTotal));
       toast.success('Finalna wycena została zapisana. Status zmieniony na "Do przygotowania oferty finalnej"');
+      if (Array.isArray(data?.risksToFlagAtFinalOffer) && data.risksToFlagAtFinalOffer.length > 0) {
+        toast((t) => (
+          <div className="text-sm">
+            <div className="font-semibold mb-1">Wykryte ryzyka do oferty finalnej:</div>
+            <ul className="list-disc pl-4">
+              {data.risksToFlagAtFinalOffer.slice(0, 4).map((r, idx) => (
+                <li key={idx}>{r}</li>
+              ))}
+            </ul>
+          </div>
+        ), { duration: 8000 });
+      }
       handleCloseRespondModal();
       refetch();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Błąd podczas zapisywania wyceny');
+      const apiMessage = error.response?.data?.message;
+      const blockers = error.response?.data?.hardBlockers;
+      const questions = error.response?.data?.clarificationQuestions;
+      if (Array.isArray(blockers) && blockers.length > 0) {
+        const details = [
+          'AI wykryło twarde blokery i zatrzymało zapis wyceny finalnej.',
+          '',
+          'Blokery:',
+          ...blockers.map((b, i) => `${i + 1}. ${b}`),
+          ...(Array.isArray(questions) && questions.length > 0
+            ? ['', 'Pytania do klienta:', ...questions.map((q, i) => `${i + 1}. ${q}`)]
+            : [])
+        ].join('\n');
+        alert(details);
+      }
+      toast.error(apiMessage || 'Błąd podczas zapisywania wyceny');
     }
   };
 

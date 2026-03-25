@@ -200,6 +200,20 @@ const ProjectForm = () => {
         queryClient.invalidateQueries('projects');
       },
       onError: (error) => {
+        const blockers = error.response?.data?.hardBlockers;
+        const questions = error.response?.data?.clarificationQuestions;
+        if (Array.isArray(blockers) && blockers.length > 0) {
+          const details = [
+            'Nie można wygenerować oferty finalnej — AI wykryło twarde blokery.',
+            '',
+            'Blokery:',
+            ...blockers.map((b, i) => `${i + 1}. ${b}`),
+            ...(Array.isArray(questions) && questions.length > 0
+              ? ['', 'Pytania do klienta:', ...questions.map((q, i) => `${i + 1}. ${q}`)]
+              : [])
+          ].join('\n');
+          alert(details);
+        }
         toast.error(
           error.response?.data?.message || 'Błąd podczas generowania oferty z AI'
         );

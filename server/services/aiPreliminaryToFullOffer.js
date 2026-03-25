@@ -84,6 +84,9 @@ Zasady biznesowe i format:
 - Całość ma brzmieć bardzo profesjonalnie i budować zaufanie klienta.
 - Nie zwracaj żadnych dodatkowych pól poza wymaganym JSON.`;
   const forcedTotal = optionalPositiveNumber(project.finalEstimateTotal);
+  const knownRisks = Array.isArray(project.finalOfferRisks)
+    ? project.finalOfferRisks.map((r) => String(r).trim()).filter(Boolean)
+    : [];
   const user = `Nazwa projektu: ${project.name || ''}
 Klient: ${project.clientName || ''}
 Kontakt: ${project.clientContact || ''}, ${project.clientEmail || ''}, ${project.clientPhone || ''}
@@ -99,6 +102,7 @@ Wymagania, które muszą znaleźć odzwierciedlenie w treści:
 - Metodologie techniczne
 - 4 fazy projektu z wyceną i harmonogramem
 ${forcedTotal ? `- WYMÓG CENOWY: suma pricing.phase1 + phase2 + phase3 + phase4 MUSI wynosić dokładnie ${forcedTotal} PLN netto` : ''}
+${knownRisks.length ? `- Uwzględnij te ryzyka niedoprecyzowania w customReservations:\n${knownRisks.map((r) => `  - ${r}`).join('\n')}` : ''}
 
 Notatki i kontekst:
 ${contextNotes}`;
@@ -239,6 +243,12 @@ function draftToProjectUpdate(project, draft) {
     min: optionalPositiveNumber(pr.min),
     max: optionalPositiveNumber(pr.max)
   };
+  // Przy wycenie finalnej cena ma wynikać z `pricing.total` (dokładna kwota),
+  // a nie z widełek `priceRange` wygenerowanych przez AI.
+  if (optionalPositiveNumber(project.finalEstimateTotal)) {
+    priceRange.min = null;
+    priceRange.max = null;
+  }
 
   const tech = draft.technologies;
   const technologies =
@@ -256,6 +266,10 @@ function draftToProjectUpdate(project, draft) {
   const customReservations = Array.isArray(draft.customReservations)
     ? draft.customReservations.map((s) => String(s).trim()).filter(Boolean).slice(0, 30)
     : [];
+  const mergedReservations = [
+    ...customReservations,
+    ...(Array.isArray(project.finalOfferRisks) ? project.finalOfferRisks : [])
+  ].map((s) => String(s).trim()).filter(Boolean).slice(0, 30);
 
   return {
     offerType: 'final',
@@ -273,7 +287,7 @@ function draftToProjectUpdate(project, draft) {
       String(draft.customPaymentTerms || '').trim() ||
       project.customPaymentTerms ||
       '10% zaliczki po podpisaniu umowy.\n90% po odbiorze końcowym projektu.',
-    customReservations,
+    customReservations: mergedReservations,
     technologies,
     technologyExplanation: String(draft.technologyExplanation || '').trim()
   };
