@@ -94,6 +94,40 @@ router.post('/:id/request-final-estimation', auth, async (req, res) => {
       return res.status(400).json({ message: 'Ta akcja jest dostępna tylko dla ofert wstępnych' });
     }
 
+    const force = Boolean(req.body?.force);
+
+    // AI hard-blockers: blokada "Do wyceny finalnej" i czerwony modal po stronie frontu
+    let gate = {
+      canEstimateFinalNow: true,
+      hardBlockers: [],
+      risksToFlagAtFinalOffer: [],
+      clarificationQuestions: []
+    };
+    try {
+      const { analyzeFinalEstimationReadiness } = require('../services/aiFinalEstimationGate');
+      gate = await analyzeFinalEstimationReadiness(project);
+    } catch (gateErr) {
+      console.error('[request-final-estimation][ai-gate] warning:', gateErr.message || gateErr);
+    }
+
+    if (
+      !force &&
+      !gate.canEstimateFinalNow &&
+      Array.isArray(gate.hardBlockers) &&
+      gate.hardBlockers.length > 0
+    ) {
+      return res.status(409).json({
+        message: 'Nie można przejść do wyceny finalnej: AI wykryło twarde blokery wymagające doprecyzowania.',
+        hardBlockers: gate.hardBlockers,
+        clarificationQuestions: gate.clarificationQuestions
+      });
+    }
+
+    // Niezależnie od trybu: zapamiętujemy ryzyka, żeby później można było je pokazać przy ofercie finalnej.
+    if (Array.isArray(gate.risksToFlagAtFinalOffer)) {
+      project.finalOfferRisks = gate.risksToFlagAtFinalOffer;
+    }
+
     project.status = 'to_final_estimation';
     await project.save();
 
@@ -432,14 +466,6 @@ router.post('/:id/submit-final-estimate', [
       console.error('[submit-final-estimate][ai-gate] warning:', gateErr.message || gateErr);
     }
 
-    if (!gate.canEstimateFinalNow && gate.hardBlockers.length > 0) {
-      return res.status(409).json({
-        message: 'Nie można zapisać wyceny finalnej: AI wykryło twarde blokery wymagające doprecyzowania.',
-        hardBlockers: gate.hardBlockers,
-        clarificationQuestions: gate.clarificationQuestions
-      });
-    }
-
     const total = Number(req.body.total);
     project.finalEstimateTotal = total;
     project.finalEstimateSubmittedAt = new Date();
@@ -496,7 +522,9 @@ router.post('/:id/submit-final-estimate', [
     return res.json({
       message: 'Zapisano wycenę finalną i ustawiono status: Do przygotowania oferty finalnej',
       project: updated,
-      risksToFlagAtFinalOffer: gate.risksToFlagAtFinalOffer || []
+      risksToFlagAtFinalOffer: gate.risksToFlagAtFinalOffer || [],
+      hardBlockers: gate.hardBlockers || [],
+      clarificationQuestions: gate.clarificationQuestions || []
     });
   } catch (e) {
     console.error('submit-final-estimate error:', e);

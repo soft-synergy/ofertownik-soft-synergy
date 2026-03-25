@@ -36,6 +36,12 @@ const Projects = () => {
   const [clarificationText, setClarificationText] = useState('');
   const [clarificationResponseText, setClarificationResponseText] = useState('');
   const [submittingClarificationResponse, setSubmittingClarificationResponse] = useState(false);
+  const [showHardBlockersModal, setShowHardBlockersModal] = useState(false);
+  const [hardBlockersModalData, setHardBlockersModalData] = useState({
+    hardBlockers: [],
+    clarificationQuestions: []
+  });
+  const [hardBlockersModalProjectId, setHardBlockersModalProjectId] = useState(null);
 
   const { data, isLoading, refetch } = useQuery(
     ['projects', filters],
@@ -100,15 +106,30 @@ const Projects = () => {
     }
   };
 
-  const handleRequestFinalEstimation = async (projectId) => {
+  const handleRequestFinalEstimation = async (projectId, { force = false } = {}) => {
     try {
       console.log('Wywołuję requestFinalEstimation dla:', projectId);
-      const response = await projectsAPI.requestFinalEstimation(projectId);
+      const response = await projectsAPI.requestFinalEstimation(projectId, { force });
       console.log('Odpowiedź:', response);
       toast.success('Status zmieniony na "Do wyceny finalnej"');
+      setShowHardBlockersModal(false);
+      setHardBlockersModalData({ hardBlockers: [], clarificationQuestions: [] });
+      setHardBlockersModalProjectId(null);
       refetch();
     } catch (error) {
       console.error('Błąd requestFinalEstimation:', error);
+      if (!force && error.response?.status === 409) {
+        const data = error.response?.data || {};
+        setHardBlockersModalData({
+          hardBlockers: Array.isArray(data.hardBlockers) ? data.hardBlockers : [],
+          clarificationQuestions: Array.isArray(data.clarificationQuestions)
+            ? data.clarificationQuestions
+            : []
+        });
+        setHardBlockersModalProjectId(projectId);
+        setShowHardBlockersModal(true);
+        return;
+      }
       toast.error(error.response?.data?.message || 'Błąd podczas zmiany statusu');
     }
   };
@@ -137,36 +158,37 @@ const Projects = () => {
       const data = await projectsAPI.submitFinalEstimate(selectedProject._id, parseFloat(finalEstimateTotal));
       toast.success('Finalna wycena została zapisana. Status zmieniony na "Do przygotowania oferty finalnej"');
       if (Array.isArray(data?.risksToFlagAtFinalOffer) && data.risksToFlagAtFinalOffer.length > 0) {
+        const questions = Array.isArray(data?.clarificationQuestions)
+          ? data.clarificationQuestions
+          : [];
         toast((t) => (
           <div className="text-sm">
-            <div className="font-semibold mb-1">Wykryte ryzyka do oferty finalnej:</div>
+            <div className="font-semibold mb-1">Wykryte ryzyka / brak doprecyzowań:</div>
             <ul className="list-disc pl-4">
               {data.risksToFlagAtFinalOffer.slice(0, 4).map((r, idx) => (
                 <li key={idx}>{r}</li>
               ))}
             </ul>
+            {questions.length > 0 && (
+              <>
+                <div className="font-semibold mt-3 mb-1">Pytania, które warto doprecyzować:</div>
+                <ul className="list-disc pl-4">
+                  {questions.slice(0, 4).map((q, idx) => (
+                    <li key={idx}>{q}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+            <div className="text-xs text-gray-500 mt-2">
+              Rozważ cofnięcie do doprecyzowania, jeśli te braki mogą wpłynąć na scope i ryzyko realizacji.
+            </div>
           </div>
         ), { duration: 8000 });
       }
       handleCloseRespondModal();
       refetch();
     } catch (error) {
-      const apiMessage = error.response?.data?.message;
-      const blockers = error.response?.data?.hardBlockers;
-      const questions = error.response?.data?.clarificationQuestions;
-      if (Array.isArray(blockers) && blockers.length > 0) {
-        const details = [
-          'AI wykryło twarde blokery i zatrzymało zapis wyceny finalnej.',
-          '',
-          'Blokery:',
-          ...blockers.map((b, i) => `${i + 1}. ${b}`),
-          ...(Array.isArray(questions) && questions.length > 0
-            ? ['', 'Pytania do klienta:', ...questions.map((q, i) => `${i + 1}. ${q}`)]
-            : [])
-        ].join('\n');
-        alert(details);
-      }
-      toast.error(apiMessage || 'Błąd podczas zapisywania wyceny');
+      toast.error(error.response?.data?.message || 'Błąd podczas zapisywania wyceny');
     }
   };
 
@@ -767,6 +789,66 @@ const Projects = () => {
                   Anuluj
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal twardych blockerów - blokuje "Do wyceny finalnej" */}
+      {showHardBlockersModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full border border-red-500 shadow-lg overflow-hidden">
+            <div className="p-6 border-b border-red-200 bg-red-50">
+              <h2 className="text-xl font-bold text-red-700">
+                Wycena finalna zablokowana
+              </h2>
+              <p className="text-sm text-red-600 mt-1">
+                AI wykryło twarde braki/doprecyzowania w zakresie projektu.
+              </p>
+            </div>
+            <div className="p-6 space-y-4">
+              {hardBlockersModalData.hardBlockers?.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-red-700 mb-2">
+                    Twarde blokery:
+                  </h3>
+                  <ul className="list-disc pl-5 space-y-1 text-sm text-red-800">
+                    {hardBlockersModalData.hardBlockers.map((b, idx) => (
+                      <li key={idx}>{b}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {hardBlockersModalData.clarificationQuestions?.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-red-700 mb-2">
+                    Pytania doprecyzowujące:
+                  </h3>
+                  <ul className="list-disc pl-5 space-y-1 text-sm text-red-800">
+                    {hardBlockersModalData.clarificationQuestions.map((q, idx) => (
+                      <li key={idx}>{q}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <p className="text-xs text-gray-500">
+                Uzupełnij brakujące informacje w notatkach/zakresie projektu i spróbuj ponownie.
+              </p>
+            </div>
+            <div className="p-6 flex justify-end border-t">
+              <button
+                onClick={() => setShowHardBlockersModal(false)}
+                className="btn-primary bg-red-600 hover:bg-red-700"
+              >
+                Zamknij
+              </button>
+              <button
+                onClick={() => handleRequestFinalEstimation(hardBlockersModalProjectId, { force: true })}
+                disabled={!hardBlockersModalProjectId}
+                className="btn-primary bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed ml-3"
+              >
+                Wyślij do wyceny finalnej mimo to
+              </button>
             </div>
           </div>
         </div>

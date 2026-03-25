@@ -63,7 +63,8 @@ export const projectsAPI = {
   addNote: (id, text) => api.post(`/api/projects/${id}/notes`, { text }).then(res => res.data),
   addFollowUp: (id, note) => api.post(`/api/projects/${id}/followups`, { note }).then(res => res.data),
   assignOwner: (id, ownerId) => api.post(`/api/projects/${id}/assign`, { ownerId }).then(res => res.data),
-  requestFinalEstimation: (id) => api.post(`/api/projects/${id}/request-final-estimation`).then(res => res.data),
+  requestFinalEstimation: (id, { force = false } = {}) =>
+    api.post(`/api/projects/${id}/request-final-estimation`, { force }).then(res => res.data),
   requestClarification: (id, clarificationText) => api.post(`/api/projects/${id}/request-clarification`, { clarificationText }).then(res => res.data),
   submitClarificationResponse: (id, responseText) => api.post(`/api/projects/${id}/clarification-response`, { responseText }).then(res => res.data),
   submitFinalEstimate: (id, total) => api.post(`/api/projects/${id}/submit-final-estimate`, { total }).then(res => res.data),
