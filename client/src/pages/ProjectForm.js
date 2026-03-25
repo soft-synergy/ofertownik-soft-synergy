@@ -9,7 +9,8 @@ import {
   FileText,
   Eye,
   Send,
-  ExternalLink
+  ExternalLink,
+  Sparkles
 } from 'lucide-react';
 import { projectsAPI, offersAPI, authAPI } from '../services/api';
 import toast from 'react-hot-toast';
@@ -82,10 +83,15 @@ const ProjectForm = () => {
   );
 
   const createMutation = useMutation(projectsAPI.create, {
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       toast.success('Projekt został utworzony pomyślnie!');
       queryClient.invalidateQueries('projects');
-      navigate('/projects');
+      const newId = data?.project?._id;
+      if (variables?.offerType === 'preliminary' && newId) {
+        navigate(`/projects/${newId}/edit`);
+      } else {
+        navigate('/projects');
+      }
     },
     onError: (error) => {
       toast.error(error.response?.data?.message || 'Błąd podczas tworzenia projektu');
@@ -181,6 +187,22 @@ const ProjectForm = () => {
       },
       onError: (error) => {
         toast.error('Błąd podczas przekształcania oferty');
+      }
+    }
+  );
+
+  const aiFullOfferMutation = useMutation(
+    () => projectsAPI.aiGenerateFullOffer(id),
+    {
+      onSuccess: (data) => {
+        toast.success(data?.message || 'Wygenerowano pełną ofertę z AI');
+        queryClient.invalidateQueries(['project', id]);
+        queryClient.invalidateQueries('projects');
+      },
+      onError: (error) => {
+        toast.error(
+          error.response?.data?.message || 'Błąd podczas generowania oferty z AI'
+        );
       }
     }
   );
@@ -420,6 +442,18 @@ const ProjectForm = () => {
     generateOfferMutation.mutate(id);
   };
 
+  const handleAiGenerateFullOffer = () => {
+    const notes = (formData.consultationNotes || '').trim();
+    const desc = (formData.description || '').trim();
+    if (!notes && (!desc || desc === 'Konsultacja wstępna')) {
+      toast.error(
+        'Uzupełnij notatki z konsultacji — na ich podstawie AI przygotuje pełną ofertę'
+      );
+      return;
+    }
+    aiFullOfferMutation.mutate();
+  };
+
   const handleConvertToFinal = () => {
     // Ustaw domyślne wartości na podstawie notatek konsultacyjnych
     setConvertData(prev => ({
@@ -502,6 +536,18 @@ const ProjectForm = () => {
                   </a>
                 )}
                 <button
+                  type="button"
+                  onClick={handleAiGenerateFullOffer}
+                  disabled={aiFullOfferMutation.isLoading}
+                  className="btn-secondary flex items-center border-violet-200 bg-violet-50 text-violet-900 hover:bg-violet-100"
+                >
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  {aiFullOfferMutation.isLoading
+                    ? 'Generowanie…'
+                    : 'Wygeneruj z AI pełną ofertę'}
+                </button>
+                <button
+                  type="button"
                   onClick={handleConvertToFinal}
                   disabled={convertToFinalMutation.isLoading}
                   className="btn-primary flex items-center"
@@ -782,7 +828,14 @@ const ProjectForm = () => {
                 placeholder="Wprowadź notatki z konsultacji z klientem, jego potrzeby, oczekiwania, budżet, timeline itp..."
               />
               <p className="text-sm text-gray-500 mt-1">
-                Te notatki będą pomocne przy przekształceniu konsultacji w standardową ofertę
+                Te notatki będą pomocne przy przekształceniu konsultacji w standardową ofertę.
+                {isEditing && (
+                  <>
+                    {' '}
+                    Możesz też użyć przycisku „Wygeneruj z AI pełną ofertę” powyżej — model przygotuje
+                    opis, moduły, harmonogram i wstępną wycenę na podstawie tych notatek.
+                  </>
+                )}
               </p>
             </div>
           </div>

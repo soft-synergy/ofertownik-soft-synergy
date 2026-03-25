@@ -1,0 +1,222 @@
+const { OpenRouter } = require('@openrouter/sdk');
+
+const OR_OFFER_FULL_MODEL =
+  process.env.OPENROUTER_MODEL_OFFER_FULL || 'xiaomi/mimo-v2-pro';
+
+const MODULE_COLORS = new Set(['blue', 'green', 'purple', 'orange', 'red']);
+
+function getOpenRouter() {
+  const apiKey = process.env.OPENROUTER_API_KEY || '';
+  if (!apiKey) {
+    const err = new Error('Brak OPENROUTER_API_KEY w środowisku');
+    err.code = 'NO_OPENROUTER';
+    throw err;
+  }
+  return new OpenRouter({
+    apiKey,
+    defaultHeaders: { 'X-OpenRouter-Title': 'ofertownik-soft-synergy' }
+  });
+}
+
+function extractJsonObject(text) {
+  const trimmed = (text || '').trim();
+  if (!trimmed) return null;
+  let s = trimmed;
+  if (s.startsWith('```')) {
+    s = s.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+  }
+  const match = s.match(/\{[\s\S]*\}/);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[0]);
+  } catch {
+    return null;
+  }
+}
+
+async function generateFullOfferDraftFromPreliminary(project) {
+  const client = getOpenRouter();
+  const contextNotes = [
+    project.consultationNotes,
+    project.description &&
+    project.description !== 'Konsultacja wstępna' &&
+    project.description !== (project.consultationNotes || '').trim()
+      ? project.description
+      : ''
+  ]
+    .filter(Boolean)
+    .join('\n\n---\n\n');
+
+  const system = `Jesteś ekspertem od ofert IT dla software house (strony www, aplikacje web, UI/UX, CMS).
+Na podstawie notatek z konsultacji przygotuj treść profesjonalnej oferty finalnej po polsku.
+Odpowiedz WYŁĄCZNIE jednym obiektem JSON (bez markdown, bez komentarzy, bez tekstu przed ani po), struktura:
+{
+  "description": "string, 2–6 akapitów oddzielonych \\n\\n",
+  "mainBenefit": "string, jedna zwięzła korzyść biznesowa",
+  "modules": [ { "name": "string", "description": "string", "color": "blue" } ],
+  "timeline": {
+    "phase1": { "name": "string", "duration": "string" },
+    "phase2": { "name": "string", "duration": "string" },
+    "phase3": { "name": "string", "duration": "string" },
+    "phase4": { "name": "string", "duration": "string" }
+  },
+  "pricing": { "phase1": number, "phase2": number, "phase3": number, "phase4": number },
+  "priceRange": { "min": number|null, "max": number|null },
+  "customPaymentTerms": "string — warunki płatności",
+  "customReservations": ["string", "..."],
+  "technologies": { "stack": ["string"], "methodologies": ["string"] },
+  "technologyExplanation": "string lub pusty"
+}
+Zasady: "color" modułu jeden z: blue, green, purple, orange, red. Ceny w PLN netto, realistyczne dla polskiego rynku.`;
+  const user = `Nazwa projektu: ${project.name || ''}
+Klient: ${project.clientName || ''}
+Kontakt: ${project.clientContact || ''}, ${project.clientEmail || ''}, ${project.clientPhone || ''}
+
+Notatki i kontekst:
+${contextNotes}`;
+
+  const completion = await client.chat.send({
+    chatGenerationParams: {
+      model: OR_OFFER_FULL_MODEL,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user }
+      ],
+      temperature: 0.35,
+      max_tokens: 8192,
+      stream: false
+    }
+  });
+  const content = completion?.choices?.[0]?.message?.content;
+  const text =
+    typeof content === 'string'
+      ? content
+      : Array.isArray(content)
+        ? content.map((c) => c?.text || '').join('')
+        : '';
+  const draft = extractJsonObject(text);
+  if (!draft || typeof draft !== 'object') {
+    const err = new Error('Model nie zwrócił poprawnego JSON oferty');
+    err.code = 'AI_PARSE';
+    throw err;
+  }
+  return draft;
+}
+
+function numOr(x, fallback = 0) {
+  const n = Number(x);
+  if (!Number.isFinite(n) || n < 0) return fallback;
+  return Math.round(n);
+}
+
+function optionalPositiveNumber(x) {
+  if (x == null || x === '') return null;
+  const n = Number(x);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.round(n);
+}
+
+function normalizeModules(draft) {
+  const raw = draft.modules;
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return [
+      {
+        name: 'Realizacja projektu',
+        description: 'Zakres zgodnie z ustaleniami konsultacyjnymi.',
+        color: 'blue'
+      }
+    ];
+  }
+  return raw.map((m) => ({
+    name: String(m.name || 'Moduł').trim().slice(0, 200) || 'Moduł',
+    description: String(m.description || '').trim().slice(0, 4000),
+    color: MODULE_COLORS.has(m.color) ? m.color : 'blue'
+  }));
+}
+
+const FALLBACK_TIMELINE = {
+  phase1: { name: 'Faza I: Discovery', duration: 'Tydzień 1-2' },
+  phase2: { name: 'Faza II: Design & Prototyp', duration: 'Tydzień 3-4' },
+  phase3: { name: 'Faza III: Development', duration: 'Tydzień 5-12' },
+  phase4: { name: 'Faza IV: Testy i Wdrożenie', duration: 'Tydzień 13-14' }
+};
+
+function normalizeTimeline(draft, existing) {
+  const d = draft.timeline || {};
+  const phases = ['phase1', 'phase2', 'phase3', 'phase4'];
+  const out = {};
+  for (const ph of phases) {
+    const cur = existing?.[ph] || FALLBACK_TIMELINE[ph];
+    const t = d[ph] || {};
+    const name = String(t.name || cur.name || '').trim() || FALLBACK_TIMELINE[ph].name;
+    const duration =
+      String(t.duration || cur.duration || '').trim() || FALLBACK_TIMELINE[ph].duration;
+    out[ph] = { name, duration };
+  }
+  return out;
+}
+
+/**
+ * Zwraca płaski obiekt pól do zapisu w Project (offerType = final, projectManager ustawia route).
+ */
+function draftToProjectUpdate(project, draft) {
+  const modules = normalizeModules(draft);
+  const pricing = {
+    phase1: numOr(draft.pricing?.phase1, 0),
+    phase2: numOr(draft.pricing?.phase2, 0),
+    phase3: numOr(draft.pricing?.phase3, 0),
+    phase4: numOr(draft.pricing?.phase4, 0)
+  };
+  pricing.total =
+    pricing.phase1 + pricing.phase2 + pricing.phase3 + pricing.phase4;
+
+  const pr = draft.priceRange || {};
+  const priceRange = {
+    min: optionalPositiveNumber(pr.min),
+    max: optionalPositiveNumber(pr.max)
+  };
+
+  const tech = draft.technologies;
+  const technologies =
+    tech && typeof tech === 'object'
+      ? {
+          stack: Array.isArray(tech.stack)
+            ? tech.stack.map((s) => String(s).trim()).filter(Boolean).slice(0, 40)
+            : project.technologies?.stack || [],
+          methodologies: Array.isArray(tech.methodologies)
+            ? tech.methodologies.map((s) => String(s).trim()).filter(Boolean).slice(0, 40)
+            : project.technologies?.methodologies || []
+        }
+      : project.technologies;
+
+  const customReservations = Array.isArray(draft.customReservations)
+    ? draft.customReservations.map((s) => String(s).trim()).filter(Boolean).slice(0, 30)
+    : [];
+
+  return {
+    offerType: 'final',
+    description:
+      String(draft.description || '').trim() ||
+      (project.consultationNotes || '').trim() ||
+      'Opis projektu',
+    mainBenefit:
+      String(draft.mainBenefit || '').trim() || 'Realizacja projektu zgodnie z ustaleniami',
+    modules,
+    timeline: normalizeTimeline(draft, project.timeline),
+    pricing,
+    priceRange,
+    customPaymentTerms:
+      String(draft.customPaymentTerms || '').trim() ||
+      project.customPaymentTerms ||
+      '10% zaliczki po podpisaniu umowy.\n90% po odbiorze końcowym projektu.',
+    customReservations,
+    technologies,
+    technologyExplanation: String(draft.technologyExplanation || '').trim()
+  };
+}
+
+module.exports = {
+  generateFullOfferDraftFromPreliminary,
+  draftToProjectUpdate,
+  OR_OFFER_FULL_MODEL
+};

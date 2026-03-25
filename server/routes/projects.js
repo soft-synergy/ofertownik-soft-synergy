@@ -135,6 +135,112 @@ router.post('/:id/request-final-estimation', auth, async (req, res) => {
   }
 });
 
+// Oferta wstępna → pełna oferta (OpenRouter, model z OPENROUTER_MODEL_OFFER_FULL lub xiaomi/mimo-v2-pro)
+router.post('/:id/ai-generate-full-offer', auth, async (req, res) => {
+  try {
+    const project = await Project.findById(req.params.id);
+    if (!project) {
+      return res.status(404).json({ message: 'Projekt nie został znaleziony' });
+    }
+    if (!canEditProject(project, req.user)) {
+      return res.status(403).json({ message: 'Brak uprawnień' });
+    }
+    if (project.offerType !== 'preliminary') {
+      return res.status(400).json({
+        message: 'Generowanie z AI jest dostępne tylko dla ofert wstępnych'
+      });
+    }
+
+    const notes = (project.consultationNotes || '').trim();
+    const desc = (project.description || '').trim();
+    const usableDesc =
+      desc && desc !== 'Konsultacja wstępna' ? desc : '';
+    if (!notes && !usableDesc) {
+      return res.status(400).json({
+        message:
+          'Uzupełnij notatki z konsultacji (lub opis) — AI potrzebuje kontekstu do wygenerowania pełnej oferty'
+      });
+    }
+
+    const {
+      generateFullOfferDraftFromPreliminary,
+      draftToProjectUpdate
+    } = require('../services/aiPreliminaryToFullOffer');
+
+    let draft;
+    try {
+      draft = await generateFullOfferDraftFromPreliminary(project);
+    } catch (err) {
+      if (err.code === 'NO_OPENROUTER') {
+        return res.status(503).json({ message: err.message });
+      }
+      if (err.code === 'AI_PARSE') {
+        return res.status(502).json({ message: err.message });
+      }
+      console.error('[ai-generate-full-offer]', err);
+      return res.status(502).json({
+        message: err.message || 'Błąd generowania oferty przez AI'
+      });
+    }
+
+    const before = project.toObject();
+    const update = draftToProjectUpdate(project, draft);
+    update.projectManager = { ...DEFAULT_PROJECT_MANAGER };
+    Object.assign(project, update);
+    await project.save();
+
+    try {
+      await upsertFollowUpTask(project, req.user._id);
+    } catch (e) {}
+
+    try {
+      const changed = [];
+      for (const key of Object.keys(update)) {
+        const beforeVal = before[key];
+        const afterVal = project[key];
+        if (JSON.stringify(beforeVal) !== JSON.stringify(afterVal)) {
+          changed.push(key);
+        }
+      }
+      if (changed.length) {
+        project.changelog = project.changelog || [];
+        project.changelog.unshift({
+          action: 'update',
+          fields: ['ai_generate_full_offer', ...changed],
+          author: req.user._id,
+          createdAt: new Date()
+        });
+        await project.save();
+        try {
+          await Activity.create({
+            action: 'project.updated',
+            entityType: 'project',
+            entityId: project._id,
+            author: req.user._id,
+            message: `AI: pełna oferta z oferty wstępnej — "${project.name}"`,
+            metadata: { source: 'ai-generate-full-offer', fields: changed }
+          });
+        } catch (e) {}
+      }
+    } catch (e) {}
+
+    const updatedProject = await Project.findById(project._id)
+      .populate('createdBy', 'firstName lastName email')
+      .populate('owner', 'firstName lastName email')
+      .populate('teamMembers.user', 'firstName lastName email role avatar')
+      .populate('changelog.author', 'firstName lastName email');
+
+    return res.json({
+      message:
+        'Wygenerowano pełną ofertę z AI. Przejrzyj moduły, ceny i teksty przed wysłaniem do klienta.',
+      project: updatedProject
+    });
+  } catch (error) {
+    console.error('ai-generate-full-offer error:', error);
+    return res.status(500).json({ message: 'Błąd serwera' });
+  }
+});
+
 // Doprecyzowanie – gdy nie można jeszcze zrobić wyceny finalnej (brakuje info od klienta). Dopisuje do historii.
 router.post('/:id/request-clarification', [
   auth,
