@@ -174,7 +174,7 @@ const setupFollowUpReminderScheduler = () => {
   const { getTransporter, sendEmail } = require('./utils/emailService');
   const { followUpReminderTemplate } = require('./utils/emailTemplates');
 
-  const FOLLOW_UP_RECIPIENT = 'jakub.czajka@soft-synergy.com';
+  const FOLLOW_UP_RECIPIENT = 'rizka.amelia@soft-synergy.com';
 
   const trans = getTransporter();
   if (trans) {

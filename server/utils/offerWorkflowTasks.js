@@ -1,14 +1,14 @@
 /**
  * Taski dla workflow ofert wstępnych:
  * - to_final_estimation → task dla info@soft-synergy.com (Do wyceny finalnej)
- * - active + clarificationRequest → task dla jakub.czajka@soft-synergy.com (Doprecyzowanie)
- * - to_prepare_final_offer → task dla jakub.czajka@soft-synergy.com (Do przygotowania oferty finalnej)
+ * - active + clarificationRequest → task dla rizka.amelia@soft-synergy.com (Doprecyzowanie)
+ * - to_prepare_final_offer → task dla rizka.amelia@soft-synergy.com (Do przygotowania oferty finalnej)
  */
 const Task = require('../models/Task');
 const User = require('../models/User');
 
 const INFO_EMAIL = 'info@soft-synergy.com';
-const JAKUB_EMAIL = 'jakub.czajka@soft-synergy.com';
+const JAKUB_EMAIL = 'rizka.amelia@soft-synergy.com';
 
 async function getAssigneeIdByEmail(email) {
   const user = await User.findOne({ email, isActive: true }).select('_id').lean();
@@ -68,7 +68,7 @@ async function upsertToFinalEstimationTask(project, userId) {
 }
 
 /**
- * Tworzy task „Doprecyzowanie” – przypisany do jakub.czajka@soft-synergy.com
+ * Tworzy task „Doprecyzowanie” – przypisany do rizka.amelia@soft-synergy.com
  */
 async function upsertClarificationTask(project, userId) {
   if (!project?._id) return null;
@@ -106,7 +106,7 @@ async function upsertClarificationTask(project, userId) {
 }
 
 /**
- * Tworzy task „Do przygotowania oferty finalnej” – przypisany do jakub.czajka@soft-synergy.com
+ * Tworzy task „Do przygotowania oferty finalnej” – przypisany do rizka.amelia@soft-synergy.com
  */
 async function upsertPrepareFinalOfferTask(project, userId) {
   if (!project?._id) return null;

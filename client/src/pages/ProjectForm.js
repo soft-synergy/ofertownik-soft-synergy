@@ -404,7 +404,7 @@ const ProjectForm = () => {
         projectManager: {
           name: 'Jakub Czajka',
           position: 'Senior Project Manager',
-          email: 'jakub.czajka@soft-synergy.com',
+          email: 'rizka.amelia@soft-synergy.com',
           phone: '+48 793 868 886',
           description: 'Z ponad 8-letnim doświadczeniem w prowadzeniu złożonych projektów IT...'
         },
@@ -477,7 +477,7 @@ const ProjectForm = () => {
       projectManager: {
         ...prev.projectManager,
         name: 'Jakub Czajka',
-        email: 'jakub.czajka@soft-synergy.com',
+        email: 'rizka.amelia@soft-synergy.com',
         phone: '+48 793 868 886',
         description: 'Z ponad 8-letnim doświadczeniem w prowadzeniu złożonych projektów IT, wierzę w transparentną komunikację i partnerskie relacje. Moim zadaniem jest nie tylko nadzór nad harmonogramem, ale przede wszystkim zapewnienie, że finalny produkt w 100% odpowiada Państwa wizji i celom biznesowym. Będę Państwa głównym punktem kontaktowym na każdym etapie współpracy.'
       }

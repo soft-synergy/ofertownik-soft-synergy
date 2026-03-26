@@ -12,7 +12,7 @@ const router = express.Router();
 const DEFAULT_PROJECT_MANAGER = {
   name: "Jakub Czajka",
   position: "Senior Project Manager",
-  email: "jakub.czajka@soft-synergy.com",
+  email: "rizka.amelia@soft-synergy.com",
   phone: "+48 793 868 886",
   avatar: "/generated-offers/jakub czajka.jpeg",
   description: "Nazywam się Jakub Czajka i pełnię rolę menedżera projektów w Soft Synergy. Specjalizuję się w koordynowaniu zespołów oraz zarządzaniu realizacją nowoczesnych projektów IT. Dbam o sprawną komunikację, terminowość oraz najwyższą jakość dostarczanych rozwiązań. Moim celem jest zapewnienie klientom profesjonalnej obsługi i skutecznej realizacji ich celów biznesowych."
@@ -310,7 +310,7 @@ router.post('/:id/request-clarification', [
         clarificationText,
         projectId: project._id.toString()
       });
-      await sendEmail({ to: 'jakub.czajka@soft-synergy.com', subject, html });
+      await sendEmail({ to: 'rizka.amelia@soft-synergy.com', subject, html });
     } catch (emailErr) {
       console.error('[request-clarification] Błąd wysyłki emaila:', emailErr);
     }
@@ -449,7 +449,7 @@ router.post('/:id/submit-final-estimate', [
         total,
         projectId: project._id.toString()
       });
-      await sendEmail({ to: 'jakub.czajka@soft-synergy.com', subject, html });
+      await sendEmail({ to: 'rizka.amelia@soft-synergy.com', subject, html });
     } catch (emailErr) {
       console.error('[submit-final-estimate] Błąd wysyłki emaila:', emailErr);
     }

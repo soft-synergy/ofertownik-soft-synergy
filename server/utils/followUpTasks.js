@@ -5,7 +5,7 @@
 const Task = require('../models/Task');
 const Project = require('../models/Project');
 
-const FOLLOW_UP_ASSIGNEE_EMAIL = 'jakub.czajka@soft-synergy.com';
+const FOLLOW_UP_ASSIGNEE_EMAIL = 'rizka.amelia@soft-synergy.com';
 
 async function getFollowUpAssigneeId() {
   const User = require('../models/User');

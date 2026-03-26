@@ -348,7 +348,7 @@ router.post('/generate/:projectId', auth, async (req, res) => {
       projectManager: {
         name: "Jakub Czajka",
         position: "Senior Project Manager",
-        email: "jakub.czajka@soft-synergy.com",
+        email: "rizka.amelia@soft-synergy.com",
         phone: "+48 793 868 886",
         avatar: "/generated-offers/jakub czajka.jpeg",
         description: "Nazywam się Jakub Czajka i pełnię rolę menedżera projektów w Soft Synergy. Specjalizuję się w koordynowaniu zespołów oraz zarządzaniu realizacją nowoczesnych projektów IT. Dbam o sprawną komunikację, terminowość oraz najwyższą jakość dostarczanych rozwiązań. Moim celem jest zapewnienie klientom profesjonalnej obsługi i skutecznej realizacji ich celów biznesowych."
@@ -384,7 +384,7 @@ router.post('/generate/:projectId', auth, async (req, res) => {
       // Custom payment terms
       customPaymentTerms: project.customPaymentTerms || '10% zaliczki po podpisaniu umowy.\n90% po odbiorze końcowym projektu.',
       // Company details
-      companyEmail: 'jakub.czajka@soft-synergy.com',
+      companyEmail: 'rizka.amelia@soft-synergy.com',
       companyPhone: '+48 793 868 886',
       companyNIP: '123-456-78-90',
       // Technologies and methodologies (from project or defaults)
@@ -674,7 +674,7 @@ router.post('/generate/:projectId', auth, async (req, res) => {
           doc.y += 20;
           doc.fontSize(10).font(fonts.regular).fillColor('#666666');
           const contactY1 = doc.y;
-          doc.text('Kontakt: jakub.czajka@soft-synergy.com | +48 793 868 886', 50, contactY1, {
+          doc.text('Kontakt: rizka.amelia@soft-synergy.com | +48 793 868 886', 50, contactY1, {
             width: 500
           });
           // Signature aligned with contact line (offer)
@@ -811,7 +811,7 @@ router.get('/preview/:projectId', auth, async (req, res) => {
       portfolio: portfolio,
       customReservations: project.customReservations || [],
       customPaymentTerms: project.customPaymentTerms || '10% zaliczki po podpisaniu umowy.\n90% po odbiorze końcowym projektu.',
-      companyEmail: 'jakub.czajka@soft-synergy.com',
+      companyEmail: 'rizka.amelia@soft-synergy.com',
       companyPhone: '+48 793 868 886',
       companyNIP: '123-456-78-90',
       technologies: project.technologies || {
@@ -937,7 +937,7 @@ router.post('/generate-pdf/:projectId', auth, async (req, res) => {
       projectManager: {
         name: "Jakub Czajka",
         position: "Senior Project Manager",
-        email: "jakub.czajka@soft-synergy.com",
+        email: "rizka.amelia@soft-synergy.com",
         phone: "+48 793 868 886",
         avatar: "/generated-offers/jakub czajka.jpeg",
         description: "Nazywam się Jakub Czajka i pełnię rolę menedżera projektów w Soft Synergy. Specjalizuję się w koordynowaniu zespołów oraz zarządzaniu realizacją nowoczesnych projektów IT. Dbam o sprawną komunikację, terminowość oraz najwyższą jakość dostarczanych rozwiązań. Moim celem jest zapewnienie klientom profesjonalnej obsługi i skutecznej realizacji ich celów biznesowych."
@@ -973,7 +973,7 @@ router.post('/generate-pdf/:projectId', auth, async (req, res) => {
       // Custom payment terms
       customPaymentTerms: project.customPaymentTerms || '10% zaliczki po podpisaniu umowy.\n90% po odbiorze końcowym projektu.',
       // Company details
-      companyEmail: 'jakub.czajka@soft-synergy.com',
+      companyEmail: 'rizka.amelia@soft-synergy.com',
       companyPhone: '+48 793 868 886',
       companyNIP: '123-456-78-90',
       // Technologies and methodologies (from project or defaults)
@@ -1174,7 +1174,7 @@ router.post('/generate-pdf/:projectId', auth, async (req, res) => {
         // Contact info
         addText('Kontakt:', 12);
         addText('Jakub Czajka - Soft Synergy', 12);
-        addText('Email: jakub.czajka@soft-synergy.com', 12);
+        addText('Email: rizka.amelia@soft-synergy.com', 12);
         addText('Telefon: +48 793 868 886', 12);
 
         doc.end();
@@ -1355,7 +1355,7 @@ router.post('/generate-pdf-simple', auth, async (req, res) => {
         // Contact info
         addText('Kontakt:', 12);
         addText('Jakub Czajka - Soft Synergy', 12);
-        addText('Email: jakub.czajka@soft-synergy.com', 12);
+        addText('Email: rizka.amelia@soft-synergy.com', 12);
         addText('Telefon: +48 793 868 886', 12);
 
         doc.end();
@@ -1522,7 +1522,7 @@ router.post('/generate-work-summary/:projectId', auth, async (req, res) => {
           description: 'Wszystkie funkcjonalności spełniają wymagania'
         }
       ],
-      companyEmail: 'jakub.czajka@soft-synergy.com',
+      companyEmail: 'rizka.amelia@soft-synergy.com',
       companyPhone: '+48 793 868 886',
       baseUrl: (req.get('host') ? ((req.protocol || 'https') + '://' + req.get('host')) : 'https://oferty.soft-synergy.com'),
       // invoice links
@@ -1727,7 +1727,7 @@ router.post('/generate-work-summary/:projectId', auth, async (req, res) => {
           doc.y += 20;
           doc.fontSize(10).font(fonts.regular).fillColor('#666666');
           const contactY2 = doc.y;
-          doc.text('Kontakt: jakub.czajka@soft-synergy.com | +48 793 868 886', 50, contactY2, {
+          doc.text('Kontakt: rizka.amelia@soft-synergy.com | +48 793 868 886', 50, contactY2, {
             width: 500
           });
           // Signature aligned with contact line (work summary)
@@ -2117,7 +2117,7 @@ router.post('/generate-contract/:projectId', auth, async (req, res) => {
         doc.font(fonts.regular).text('NIP: 5242495143');
         doc.text('ul. ALEJA KSIĘCIA JÓZEFA PONIATOWSKIEGO 1/ — 03-901');
         doc.text('WARSZAWA MAZOWIECKIE');
-        doc.text('email: jakub.czajka@soft-synergy.com');
+        doc.text('email: rizka.amelia@soft-synergy.com');
         doc.text('Numer telefonu: +48 793 868 886');
         doc.text('jako podmiot świadczący usługę na rzecz Wykonawcy.');
         doc.moveDown(0.2);

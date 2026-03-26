@@ -1,6 +1,6 @@
 /**
  * Jednorazowy skrypt: usuwa wszystkie zadania (Task), potem odtwarza zadania hostingu, follow-upy i offer workflow.
- * Follow-upy: jakub.czajka@soft-synergy.com. Offer workflow: info@ (wycena) / jakub.czajka (doprecyzowanie, oferta finalna).
+ * Follow-upy: rizka.amelia@soft-synergy.com. Offer workflow: info@ (wycena) / rizka.amelia (doprecyzowanie, oferta finalna).
  *
  * Uruchomienie: node server/scripts/reset-tasks-and-sync.js
  */
