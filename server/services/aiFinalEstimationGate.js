@@ -46,19 +46,23 @@ async function analyzeFinalEstimationReadiness(project) {
   const system = `Jesteś analitykiem presales IT. Oceniasz, czy można wykonać finalną wycenę bez ryzyka błędu.
 Wykrywaj TYLKO twarde blokery (braki, które uniemożliwiają odpowiedzialną wycenę).
 Nie traktuj drobnych braków jako blockerów (np. kolory strony, liczba podstron wizytówki) — to są ryzyka lub założenia.
+Masz działać o ~20% mniej restrykcyjnie niż standardowy audyt: preferuj "canEstimateFinalNow=true", jeśli brak niepewności da się pokryć założeniem/zakresem minimalnym.
 
 Zwróć WYŁĄCZNIE JSON:
 {
   "canEstimateFinalNow": boolean,
   "hardBlockers": ["string"],
   "risksToFlagAtFinalOffer": ["string"],
-  "clarificationQuestions": ["string"]
+  "clarificationQuestions": ["string"],
+  "proposedClientClarificationMessage": "string"
 }
 
 Definicja hard blocker:
 - brak kluczowego zakresu uniemożliwiający policzenie prac,
 - nieokreślone krytyczne integracje/systemy zewnętrzne,
 - niejasny model danych/procesu, który może wielokrotnie zmienić estymację.
+- Uznaj "hard blocker" dopiero gdy to realnie uniemożliwia estymację, a nie tylko obniża jej precyzję.
+- Pojedynczą niejasność zwykle klasyfikuj jako ryzyko/założenie; blocker stosuj przy wielu krytycznych lukach lub jednej luce absolutnie uniemożliwiającej wycenę.
 
 Jeśli zakres jest prosty (np. strona wizytówka), ustaw canEstimateFinalNow=true i hardBlockers=[].
 Ryzyka wpisuj zwięźle (max 6).`;
@@ -98,17 +102,36 @@ ${notes || '(brak dodatkowego kontekstu)'}`;
     throw err;
   }
 
-  return {
-    canEstimateFinalNow: Boolean(parsed.canEstimateFinalNow),
-    hardBlockers: Array.isArray(parsed.hardBlockers)
+  let hardBlockers = Array.isArray(parsed.hardBlockers)
       ? parsed.hardBlockers.map((x) => String(x).trim()).filter(Boolean).slice(0, 8)
-      : [],
-    risksToFlagAtFinalOffer: Array.isArray(parsed.risksToFlagAtFinalOffer)
+      : [];
+  let risksToFlagAtFinalOffer = Array.isArray(parsed.risksToFlagAtFinalOffer)
       ? parsed.risksToFlagAtFinalOffer.map((x) => String(x).trim()).filter(Boolean).slice(0, 8)
-      : [],
-    clarificationQuestions: Array.isArray(parsed.clarificationQuestions)
+      : [];
+  const clarificationQuestions = Array.isArray(parsed.clarificationQuestions)
       ? parsed.clarificationQuestions.map((x) => String(x).trim()).filter(Boolean).slice(0, 8)
-      : []
+      : [];
+  const proposedClientClarificationMessage = String(
+      parsed.proposedClientClarificationMessage || ''
+    ).trim();
+  let canEstimateFinalNow = Boolean(parsed.canEstimateFinalNow);
+
+  // Sensitivity buffer: a single blocker is treated as risk by default.
+  if (!canEstimateFinalNow && hardBlockers.length <= 1) {
+    risksToFlagAtFinalOffer = [
+      ...risksToFlagAtFinalOffer,
+      ...hardBlockers
+    ].filter(Boolean).slice(0, 8);
+    hardBlockers = [];
+    canEstimateFinalNow = true;
+  }
+
+  return {
+    canEstimateFinalNow,
+    hardBlockers,
+    risksToFlagAtFinalOffer,
+    clarificationQuestions,
+    proposedClientClarificationMessage
   };
 }
 

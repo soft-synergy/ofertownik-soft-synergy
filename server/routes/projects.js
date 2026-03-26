@@ -94,40 +94,6 @@ router.post('/:id/request-final-estimation', auth, async (req, res) => {
       return res.status(400).json({ message: 'Ta akcja jest dostępna tylko dla ofert wstępnych' });
     }
 
-    const force = Boolean(req.body?.force);
-
-    // AI hard-blockers: blokada "Do wyceny finalnej" i czerwony modal po stronie frontu
-    let gate = {
-      canEstimateFinalNow: true,
-      hardBlockers: [],
-      risksToFlagAtFinalOffer: [],
-      clarificationQuestions: []
-    };
-    try {
-      const { analyzeFinalEstimationReadiness } = require('../services/aiFinalEstimationGate');
-      gate = await analyzeFinalEstimationReadiness(project);
-    } catch (gateErr) {
-      console.error('[request-final-estimation][ai-gate] warning:', gateErr.message || gateErr);
-    }
-
-    if (
-      !force &&
-      !gate.canEstimateFinalNow &&
-      Array.isArray(gate.hardBlockers) &&
-      gate.hardBlockers.length > 0
-    ) {
-      return res.status(409).json({
-        message: 'Nie można przejść do wyceny finalnej: AI wykryło twarde blokery wymagające doprecyzowania.',
-        hardBlockers: gate.hardBlockers,
-        clarificationQuestions: gate.clarificationQuestions
-      });
-    }
-
-    // Niezależnie od trybu: zapamiętujemy ryzyka, żeby później można było je pokazać przy ofercie finalnej.
-    if (Array.isArray(gate.risksToFlagAtFinalOffer)) {
-      project.finalOfferRisks = gate.risksToFlagAtFinalOffer;
-    }
-
     project.status = 'to_final_estimation';
     await project.save();
 
@@ -194,24 +160,6 @@ router.post('/:id/ai-generate-full-offer', auth, async (req, res) => {
         message:
           'Uzupełnij notatki z konsultacji (lub opis) — AI potrzebuje kontekstu do wygenerowania pełnej oferty'
       });
-    }
-
-    // Dodatkowa bramka bezpieczeństwa przed wygenerowaniem oferty finalnej
-    try {
-      const { analyzeFinalEstimationReadiness } = require('../services/aiFinalEstimationGate');
-      const gate = await analyzeFinalEstimationReadiness(project);
-      if (!gate.canEstimateFinalNow && gate.hardBlockers.length > 0) {
-        return res.status(409).json({
-          message: 'Nie można przygotować oferty finalnej: najpierw potrzebne doprecyzowanie od klienta.',
-          hardBlockers: gate.hardBlockers,
-          clarificationQuestions: gate.clarificationQuestions
-        });
-      }
-      if (Array.isArray(gate.risksToFlagAtFinalOffer)) {
-        project.finalOfferRisks = gate.risksToFlagAtFinalOffer;
-      }
-    } catch (gateErr) {
-      console.error('[ai-generate-full-offer][ai-gate] warning:', gateErr.message || gateErr);
     }
 
     const {
