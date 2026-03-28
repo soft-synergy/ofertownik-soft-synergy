@@ -104,10 +104,72 @@ const Projects = () => {
 
   const handleRequestFinalEstimation = async (projectId) => {
     try {
-      console.log('Wywołuję requestFinalEstimation dla:', projectId);
       const response = await projectsAPI.requestFinalEstimation(projectId);
-      console.log('Odpowiedź:', response);
       toast.success('Status zmieniony na "Do wyceny finalnej"');
+      const gate = response?.finalEstimationGate;
+      if (gate?.gateCheckFailed) {
+        toast.error(
+          gate.gateCheckMessage
+            ? `Analiza AI niedostępna: ${gate.gateCheckMessage}`
+            : 'Analiza AI niedostępna — sprawdź zakres przy odpowiedzi w modalu.',
+          { duration: 6000 }
+        );
+      } else if (gate) {
+        const blockers = gate.hardBlockers?.length > 0;
+        const blocked = blockers || gate.canEstimateFinalNow === false;
+        if (blocked) {
+          toast(
+            (t) => (
+              <div className="text-sm max-w-md">
+                <div className="font-semibold text-red-800 mb-1">
+                  AI: przed finalną wyceną uzupełnij zakres lub doprecyzuj z klientem
+                </div>
+                {blockers && (
+                  <ul className="list-decimal pl-4 space-y-0.5 text-red-900">
+                    {gate.hardBlockers.map((b, i) => (
+                      <li key={i}>{b}</li>
+                    ))}
+                  </ul>
+                )}
+                {!blockers && (
+                  <p className="text-red-900">Brak wystarczających informacji do odpowiedzialnej wyceny.</p>
+                )}
+                <p className="text-xs text-gray-600 mt-2">
+                  Status został ustawiony — przy zapisie wyceny serwer nadal zablokuje zapis, dopóki AI nie
+                  zaakceptuje zakresu.
+                </p>
+              </div>
+            ),
+            { duration: 12000 }
+          );
+        } else if (
+          gate.risksToFlagAtFinalOffer?.length > 0 ||
+          gate.clarificationQuestions?.length > 0
+        ) {
+          toast(
+            (t) => (
+              <div className="text-sm max-w-md">
+                <div className="font-semibold text-amber-900 mb-1">AI — uwagi przed wyceną (bez twardych blokerów)</div>
+                {gate.risksToFlagAtFinalOffer?.length > 0 && (
+                  <ul className="list-disc pl-4 space-y-0.5">
+                    {gate.risksToFlagAtFinalOffer.slice(0, 5).map((r, i) => (
+                      <li key={i}>{r}</li>
+                    ))}
+                  </ul>
+                )}
+                {gate.clarificationQuestions?.length > 0 && (
+                  <ul className="list-disc pl-4 mt-1 space-y-0.5">
+                    {gate.clarificationQuestions.slice(0, 5).map((q, i) => (
+                      <li key={i}>{q}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ),
+            { duration: 10000 }
+          );
+        }
+      }
       refetch();
     } catch (error) {
       console.error('Błąd requestFinalEstimation:', error);

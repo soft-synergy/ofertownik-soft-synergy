@@ -94,6 +94,30 @@ router.post('/:id/request-final-estimation', auth, async (req, res) => {
       return res.status(400).json({ message: 'Ta akcja jest dostępna tylko dla ofert wstępnych' });
     }
 
+    const { analyzeFinalEstimationReadiness } = require('../services/aiFinalEstimationGate');
+    let finalEstimationGate = {
+      canEstimateFinalNow: true,
+      hardBlockers: [],
+      risksToFlagAtFinalOffer: [],
+      clarificationQuestions: [],
+      proposedClientClarificationMessage: '',
+      gateCheckOk: false,
+      gateCheckFailed: true,
+      gateCheckMessage: ''
+    };
+    try {
+      const gate = await analyzeFinalEstimationReadiness(project);
+      finalEstimationGate = {
+        ...gate,
+        gateCheckOk: true,
+        gateCheckFailed: false,
+        gateCheckMessage: ''
+      };
+    } catch (gateErr) {
+      console.error('[request-final-estimation][ai-gate] warning:', gateErr.message || gateErr);
+      finalEstimationGate.gateCheckMessage = gateErr.message || 'Błąd sprawdzania AI';
+    }
+
     project.status = 'to_final_estimation';
     await project.save();
 
@@ -128,7 +152,11 @@ router.post('/:id/request-final-estimation', auth, async (req, res) => {
       // nie przerywamy - status projektu został już zmieniony
     }
 
-    return res.json({ message: 'Ustawiono status: Do wyceny finalnej', project: updated });
+    return res.json({
+      message: 'Ustawiono status: Do wyceny finalnej',
+      project: updated,
+      finalEstimationGate
+    });
   } catch (e) {
     console.error('request-final-estimation error:', e);
     return res.status(500).json({ message: 'Błąd serwera' });
