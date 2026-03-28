@@ -118,6 +118,21 @@ router.post('/:id/request-final-estimation', auth, async (req, res) => {
       finalEstimationGate.gateCheckMessage = gateErr.message || 'Błąd sprawdzania AI';
     }
 
+    const force = req.body && req.body.force === true;
+    const aiRejected =
+      finalEstimationGate.gateCheckOk &&
+      (!finalEstimationGate.canEstimateFinalNow ||
+        (Array.isArray(finalEstimationGate.hardBlockers) &&
+          finalEstimationGate.hardBlockers.length > 0));
+
+    if (aiRejected && !force) {
+      return res.status(409).json({
+        message:
+          'AI wykryło braki w zakresie — status nie został zmieniony. Uzupełnij dane projektu lub użyj świadomego nadpisania w panelu.',
+        finalEstimationGate
+      });
+    }
+
     project.status = 'to_final_estimation';
     await project.save();
 
@@ -153,9 +168,13 @@ router.post('/:id/request-final-estimation', auth, async (req, res) => {
     }
 
     return res.json({
-      message: 'Ustawiono status: Do wyceny finalnej',
+      message:
+        force && aiRejected
+          ? 'Ustawiono status: Do wyceny finalnej (świadome nadpisanie blokady AI)'
+          : 'Ustawiono status: Do wyceny finalnej',
       project: updated,
-      finalEstimationGate
+      finalEstimationGate,
+      aiGateOverridden: Boolean(force && aiRejected)
     });
   } catch (e) {
     console.error('request-final-estimation error:', e);

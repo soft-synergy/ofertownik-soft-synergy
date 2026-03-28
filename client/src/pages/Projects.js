@@ -15,7 +15,8 @@ import {
   Download,
   DollarSign,
   ExternalLink,
-  MessageCircle
+  MessageCircle,
+  AlertTriangle
 } from 'lucide-react';
 import { projectsAPI, offersAPI } from '../services/api';
 import { useI18n } from '../contexts/I18nContext';
@@ -38,6 +39,9 @@ const Projects = () => {
   const [submittingClarificationResponse, setSubmittingClarificationResponse] = useState(false);
   const [finalEstimationGate, setFinalEstimationGate] = useState(null);
   const [finalEstimationGateLoading, setFinalEstimationGateLoading] = useState(false);
+  /** AI zablokowało »Do wyceny finalnej« — modal z możliwością force */
+  const [finalEstimationAiBlockModal, setFinalEstimationAiBlockModal] = useState(null);
+  const [finalEstimationForceSubmitting, setFinalEstimationForceSubmitting] = useState(false);
 
   const { data, isLoading, refetch } = useQuery(
     ['projects', filters],
@@ -102,10 +106,16 @@ const Projects = () => {
     }
   };
 
-  const handleRequestFinalEstimation = async (projectId) => {
+  const handleRequestFinalEstimation = async (project, { force = false } = {}) => {
+    if (!project?._id) return;
     try {
-      const response = await projectsAPI.requestFinalEstimation(projectId);
-      toast.success('Status zmieniony na "Do wyceny finalnej"');
+      const response = await projectsAPI.requestFinalEstimation(project._id, { force });
+      setFinalEstimationAiBlockModal(null);
+      toast.success(
+        response?.aiGateOverridden
+          ? 'Status: Do wyceny finalnej (nadpisano blokadę AI — odpowiadasz za zakres)'
+          : 'Status zmieniony na "Do wyceny finalnej"'
+      );
       const gate = response?.finalEstimationGate;
       if (gate?.gateCheckFailed) {
         toast.error(
@@ -114,40 +124,13 @@ const Projects = () => {
             : 'Analiza AI niedostępna — sprawdź zakres przy odpowiedzi w modalu.',
           { duration: 6000 }
         );
-      } else if (gate) {
-        const blockers = gate.hardBlockers?.length > 0;
-        const blocked = blockers || gate.canEstimateFinalNow === false;
-        if (blocked) {
-          toast(
-            (t) => (
-              <div className="text-sm max-w-md">
-                <div className="font-semibold text-red-800 mb-1">
-                  AI: przed finalną wyceną uzupełnij zakres lub doprecyzuj z klientem
-                </div>
-                {blockers && (
-                  <ul className="list-decimal pl-4 space-y-0.5 text-red-900">
-                    {gate.hardBlockers.map((b, i) => (
-                      <li key={i}>{b}</li>
-                    ))}
-                  </ul>
-                )}
-                {!blockers && (
-                  <p className="text-red-900">Brak wystarczających informacji do odpowiedzialnej wyceny.</p>
-                )}
-                <p className="text-xs text-gray-600 mt-2">
-                  Status został ustawiony — przy zapisie wyceny serwer nadal zablokuje zapis, dopóki AI nie
-                  zaakceptuje zakresu.
-                </p>
-              </div>
-            ),
-            { duration: 12000 }
-          );
-        } else if (
+      } else if (gate && !response?.aiGateOverridden) {
+        if (
           gate.risksToFlagAtFinalOffer?.length > 0 ||
           gate.clarificationQuestions?.length > 0
         ) {
           toast(
-            (t) => (
+            () => (
               <div className="text-sm max-w-md">
                 <div className="font-semibold text-amber-900 mb-1">AI — uwagi przed wyceną (bez twardych blokerów)</div>
                 {gate.risksToFlagAtFinalOffer?.length > 0 && (
@@ -172,6 +155,11 @@ const Projects = () => {
       }
       refetch();
     } catch (error) {
+      if (error.response?.status === 409 && !force) {
+        const gate = error.response.data?.finalEstimationGate || {};
+        setFinalEstimationAiBlockModal({ project, gate });
+        return;
+      }
       console.error('Błąd requestFinalEstimation:', error);
       toast.error(error.response?.data?.message || 'Błąd podczas zmiany statusu');
     }
@@ -493,10 +481,7 @@ const Projects = () => {
                      project.status !== 'accepted' && 
                      project.status !== 'cancelled' && (
                       <button
-                        onClick={() => {
-                          console.log('Kliknięto "Do wyceny finalnej" dla projektu:', project._id);
-                          handleRequestFinalEstimation(project._id);
-                        }}
+                        onClick={() => handleRequestFinalEstimation(project)}
                         className="w-full bg-orange-500 hover:bg-orange-600 text-white font-medium py-3 px-4 rounded-lg flex items-center justify-center space-x-2 transition-colors shadow-md"
                       >
                         <DollarSign className="h-5 w-5" />
@@ -991,6 +976,98 @@ const Projects = () => {
                   Anuluj
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {finalEstimationAiBlockModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-lg max-w-lg w-full shadow-xl border-2 border-red-300 overflow-hidden">
+            <div className="bg-red-600 text-white px-6 py-4 flex items-start gap-3">
+              <AlertTriangle className="h-6 w-6 flex-shrink-0 mt-0.5" aria-hidden />
+              <div>
+                <h2 className="text-lg font-bold leading-tight">AI blokuje przejście do wyceny finalnej</h2>
+                <p className="text-sm text-red-100 mt-1.5 font-medium">
+                  {finalEstimationAiBlockModal.project?.name || 'Projekt'}
+                </p>
+              </div>
+            </div>
+            <div className="p-6 space-y-4 max-h-[65vh] overflow-y-auto text-sm text-gray-800">
+              <p>
+                Status <strong>nie został zmieniony</strong>. Najpierw warto uzupełnić notatki / opis w projekcie
+                albo wysłać doprecyzowanie do klienta.
+              </p>
+              {(() => {
+                const g = finalEstimationAiBlockModal.gate || {};
+                const blockers = Array.isArray(g.hardBlockers) ? g.hardBlockers : [];
+                const questions = Array.isArray(g.clarificationQuestions) ? g.clarificationQuestions : [];
+                const proposal = g.proposedClientClarificationMessage;
+                return (
+                  <>
+                    {blockers.length > 0 && (
+                      <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                        <p className="font-semibold text-red-900 mb-2">Twarde blokery</p>
+                        <ol className="list-decimal pl-5 space-y-1 text-red-950">
+                          {blockers.map((b, i) => (
+                            <li key={i}>{b}</li>
+                          ))}
+                        </ol>
+                      </div>
+                    )}
+                    {blockers.length === 0 && g.canEstimateFinalNow === false && (
+                      <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-red-950">
+                        AI uznało, że zakres jest niewystarczający do odpowiedzialnej wyceny finalnej.
+                      </div>
+                    )}
+                    {questions.length > 0 && (
+                      <div>
+                        <p className="font-semibold text-gray-800 mb-1">Pytania do doprecyzowania</p>
+                        <ul className="list-disc pl-5 space-y-1 text-gray-700">
+                          {questions.map((q, i) => (
+                            <li key={i}>{q}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {proposal ? (
+                      <div>
+                        <p className="font-semibold text-gray-800 mb-1">Propozycja wiadomości do klienta</p>
+                        <pre className="whitespace-pre-wrap text-xs bg-gray-100 border rounded p-3 text-gray-800">
+                          {proposal}
+                        </pre>
+                      </div>
+                    ) : null}
+                  </>
+                );
+              })()}
+            </div>
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setFinalEstimationAiBlockModal(null)}
+                className="btn-secondary w-full sm:w-auto"
+              >
+                Zamknij — poprawię projekt
+              </button>
+              <button
+                type="button"
+                disabled={finalEstimationForceSubmitting}
+                onClick={async () => {
+                  const { project } = finalEstimationAiBlockModal;
+                  setFinalEstimationForceSubmitting(true);
+                  try {
+                    await handleRequestFinalEstimation(project, { force: true });
+                  } finally {
+                    setFinalEstimationForceSubmitting(false);
+                  }
+                }}
+                className="w-full sm:w-auto px-4 py-2.5 rounded-lg bg-red-700 hover:bg-red-800 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {finalEstimationForceSubmitting
+                  ? 'Zapisywanie…'
+                  : 'Mimo to ustaw »Do wyceny finalnej« (świadomie nadpisuję AI)'}
+              </button>
             </div>
           </div>
         </div>
