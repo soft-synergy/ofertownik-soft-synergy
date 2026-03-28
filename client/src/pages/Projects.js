@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery } from 'react-query';
 import { Link } from 'react-router-dom';
 import { 
@@ -36,6 +36,8 @@ const Projects = () => {
   const [clarificationText, setClarificationText] = useState('');
   const [clarificationResponseText, setClarificationResponseText] = useState('');
   const [submittingClarificationResponse, setSubmittingClarificationResponse] = useState(false);
+  const [finalEstimationGate, setFinalEstimationGate] = useState(null);
+  const [finalEstimationGateLoading, setFinalEstimationGateLoading] = useState(false);
 
   const { data, isLoading, refetch } = useQuery(
     ['projects', filters],
@@ -117,6 +119,8 @@ const Projects = () => {
     setSelectedProject(project);
     setFinalEstimateTotal('');
     setClarificationText('');
+    setFinalEstimationGate(null);
+    setFinalEstimationGateLoading(false);
     setShowRespondModal(true);
   };
 
@@ -126,7 +130,46 @@ const Projects = () => {
     setFinalEstimateTotal('');
     setClarificationText('');
     setClarificationResponseText('');
+    setFinalEstimationGate(null);
+    setFinalEstimationGateLoading(false);
   };
+
+  useEffect(() => {
+    if (!showRespondModal || !selectedProject?._id) return;
+    if (selectedProject.offerType !== 'preliminary' || selectedProject.status !== 'to_final_estimation') {
+      setFinalEstimationGate(null);
+      setFinalEstimationGateLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setFinalEstimationGateLoading(true);
+    setFinalEstimationGate(null);
+    projectsAPI
+      .getFinalEstimationGate(selectedProject._id)
+      .then((data) => {
+        if (!cancelled) {
+          setFinalEstimationGate(data);
+          if (data.gateCheckFailed) {
+            toast.error(
+              'Sprawdzenie AI było niedostępne — możesz spróbować zapisać wycenę; serwer zweryfikuje ponownie przy zapisie.',
+              { duration: 6000 }
+            );
+          }
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setFinalEstimationGate(null);
+          toast.error(err.response?.data?.message || 'Nie udało się pobrać analizy AI przed wyceną');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setFinalEstimationGateLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showRespondModal, selectedProject?._id, selectedProject?.status, selectedProject?.offerType]);
 
   const handleSubmitFinalEstimate = async () => {
     if (!selectedProject || !finalEstimateTotal || parseFloat(finalEstimateTotal) <= 0) {
@@ -134,39 +177,25 @@ const Projects = () => {
       return;
     }
     try {
-      const data = await projectsAPI.submitFinalEstimate(selectedProject._id, parseFloat(finalEstimateTotal));
+      await projectsAPI.submitFinalEstimate(selectedProject._id, parseFloat(finalEstimateTotal));
       toast.success('Finalna wycena została zapisana. Status zmieniony na "Do przygotowania oferty finalnej"');
-      if (Array.isArray(data?.risksToFlagAtFinalOffer) && data.risksToFlagAtFinalOffer.length > 0) {
-        const questions = Array.isArray(data?.clarificationQuestions)
-          ? data.clarificationQuestions
-          : [];
-        toast((t) => (
-          <div className="text-sm">
-            <div className="font-semibold mb-1">Wykryte ryzyka / brak doprecyzowań:</div>
-            <ul className="list-disc pl-4">
-              {data.risksToFlagAtFinalOffer.slice(0, 4).map((r, idx) => (
-                <li key={idx}>{r}</li>
-              ))}
-            </ul>
-            {questions.length > 0 && (
-              <>
-                <div className="font-semibold mt-3 mb-1">Pytania, które warto doprecyzować:</div>
-                <ul className="list-disc pl-4">
-                  {questions.slice(0, 4).map((q, idx) => (
-                    <li key={idx}>{q}</li>
-                  ))}
-                </ul>
-              </>
-            )}
-            <div className="text-xs text-gray-500 mt-2">
-              Rozważ cofnięcie do doprecyzowania, jeśli te braki mogą wpłynąć na scope i ryzyko realizacji.
-            </div>
-          </div>
-        ), { duration: 8000 });
-      }
       handleCloseRespondModal();
       refetch();
     } catch (error) {
+      if (error.response?.status === 409) {
+        const d = error.response.data || {};
+        setFinalEstimationGate({
+          canEstimateFinalNow: d.canEstimateFinalNow !== false,
+          hardBlockers: Array.isArray(d.hardBlockers) ? d.hardBlockers : [],
+          risksToFlagAtFinalOffer: Array.isArray(d.risksToFlagAtFinalOffer) ? d.risksToFlagAtFinalOffer : [],
+          clarificationQuestions: Array.isArray(d.clarificationQuestions) ? d.clarificationQuestions : [],
+          proposedClientClarificationMessage: d.proposedClientClarificationMessage || '',
+          gateCheckOk: true,
+          gateCheckFailed: false
+        });
+        toast.error(d.message || 'Zapis wyceny zablokowany — zobacz blokery AI w modalu.', { duration: 8000 });
+        return;
+      }
       toast.error(error.response?.data?.message || 'Błąd podczas zapisywania wyceny');
     }
   };
@@ -720,6 +749,123 @@ const Projects = () => {
             <div className="p-6 space-y-6">
               <h3 className="text-sm font-semibold text-gray-700">Decyzja</h3>
 
+              {selectedProject.status === 'to_final_estimation' &&
+                selectedProject.offerType === 'preliminary' && (
+                  <div className="rounded-lg border border-gray-200 bg-slate-50 p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium text-gray-800">
+                        Weryfikacja AI przed wyceną
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!selectedProject?._id) return;
+                          setFinalEstimationGateLoading(true);
+                          projectsAPI
+                            .getFinalEstimationGate(selectedProject._id)
+                            .then((data) => {
+                              setFinalEstimationGate(data);
+                              if (data.gateCheckFailed) {
+                                toast.error(
+                                  'Sprawdzenie AI niedostępne — spróbuj ponownie później.',
+                                  { duration: 5000 }
+                                );
+                              } else {
+                                toast.success('Analiza AI odświeżona');
+                              }
+                            })
+                            .catch((err) => {
+                              toast.error(
+                                err.response?.data?.message || 'Błąd ponownego sprawdzenia AI'
+                              );
+                            })
+                            .finally(() => setFinalEstimationGateLoading(false));
+                        }}
+                        disabled={finalEstimationGateLoading}
+                        className="text-xs text-blue-600 hover:text-blue-800 underline disabled:opacity-50"
+                      >
+                        Sprawdź ponownie
+                      </button>
+                    </div>
+                    {finalEstimationGateLoading && (
+                      <p className="text-sm text-gray-600 flex items-center gap-2">
+                        <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-orange-500 border-t-transparent" />
+                        Szukanie blokerów w zakresie…
+                      </p>
+                    )}
+                    {finalEstimationGate && !finalEstimationGateLoading && (
+                      <>
+                        {finalEstimationGate.gateCheckFailed && (
+                          <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded p-2">
+                            Nie udało się uruchomić pełnej analizy AI. Możesz spróbować zapisać wycenę —
+                            serwer sprawdzi zakres jeszcze raz przy zapisie (przy awarii AI zapis nie
+                            zostanie zablokowany).
+                          </p>
+                        )}
+                        {!finalEstimationGate.gateCheckFailed &&
+                          finalEstimationGate.hardBlockers?.length > 0 && (
+                            <div className="text-sm bg-red-50 border border-red-200 text-red-900 rounded p-3 space-y-2">
+                              <p className="font-semibold">
+                                Twarda blokada — najpierw uzupełnij zakres lub wyślij doprecyzowanie do
+                                klienta:
+                              </p>
+                              <ul className="list-decimal pl-5 space-y-1">
+                                {finalEstimationGate.hardBlockers.map((b, idx) => (
+                                  <li key={idx}>{b}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        {!finalEstimationGate.gateCheckFailed &&
+                          !finalEstimationGate.canEstimateFinalNow &&
+                          !(finalEstimationGate.hardBlockers?.length > 0) && (
+                            <div className="text-sm bg-red-50 border border-red-200 text-red-900 rounded p-3">
+                              AI uznało, że na tym etapie nie można odpowiedzialnie podać finalnej wyceny.
+                              Rozważ doprecyzowanie z klientem.
+                            </div>
+                          )}
+                        {!finalEstimationGate.gateCheckFailed &&
+                          finalEstimationGate.canEstimateFinalNow &&
+                          !(finalEstimationGate.hardBlockers?.length > 0) &&
+                          (finalEstimationGate.risksToFlagAtFinalOffer?.length > 0 ||
+                            finalEstimationGate.clarificationQuestions?.length > 0) && (
+                            <div className="text-sm bg-amber-50 border border-amber-200 text-amber-950 rounded p-3 space-y-2">
+                              <p className="font-medium">Możesz wycenić — uwagi przed wpisaniem kwoty:</p>
+                              {finalEstimationGate.risksToFlagAtFinalOffer?.length > 0 && (
+                                <ul className="list-disc pl-5 space-y-1">
+                                  {finalEstimationGate.risksToFlagAtFinalOffer.map((r, idx) => (
+                                    <li key={idx}>{r}</li>
+                                  ))}
+                                </ul>
+                              )}
+                              {finalEstimationGate.clarificationQuestions?.length > 0 && (
+                                <>
+                                  <p className="font-medium pt-1">Pytania do doprecyzowania:</p>
+                                  <ul className="list-disc pl-5 space-y-1">
+                                    {finalEstimationGate.clarificationQuestions.map((q, idx) => (
+                                      <li key={idx}>{q}</li>
+                                    ))}
+                                  </ul>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        {!finalEstimationGate.gateCheckFailed &&
+                          finalEstimationGate.canEstimateFinalNow &&
+                          !(finalEstimationGate.hardBlockers?.length > 0) &&
+                          !(
+                            finalEstimationGate.risksToFlagAtFinalOffer?.length > 0 ||
+                            finalEstimationGate.clarificationQuestions?.length > 0
+                          ) && (
+                            <p className="text-sm text-green-800 bg-green-50 border border-green-200 rounded p-2">
+                              Brak twardych blokerów — możesz wpisać kwotę finalnej wyceny.
+                            </p>
+                          )}
+                      </>
+                    )}
+                  </div>
+                )}
+
               <div className="space-y-4">
                 <div>
                   <label className="form-label">Finalna wycena – wpisz cenę całkowitą</label>
@@ -730,11 +876,26 @@ const Projects = () => {
                     placeholder="0.00"
                     min="0"
                     step="0.01"
+                    disabled={
+                      selectedProject.status === 'to_final_estimation' &&
+                      selectedProject.offerType === 'preliminary' &&
+                      finalEstimationGateLoading
+                    }
                     className="input-field mb-2"
                   />
                   <button
                     onClick={handleSubmitFinalEstimate}
-                    disabled={!finalEstimateTotal || parseFloat(finalEstimateTotal) <= 0}
+                    disabled={
+                      !finalEstimateTotal ||
+                      parseFloat(finalEstimateTotal) <= 0 ||
+                      (selectedProject.status === 'to_final_estimation' &&
+                        selectedProject.offerType === 'preliminary' &&
+                        (finalEstimationGateLoading ||
+                          (finalEstimationGate &&
+                            !finalEstimationGate.gateCheckFailed &&
+                            (!finalEstimationGate.canEstimateFinalNow ||
+                              (finalEstimationGate.hardBlockers?.length ?? 0) > 0))))
+                    }
                     className="btn-primary bg-orange-600 hover:bg-orange-700"
                   >
                     <DollarSign className="h-4 w-4 inline mr-2" />

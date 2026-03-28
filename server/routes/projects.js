@@ -380,6 +380,39 @@ router.post('/:id/clarification-response', [
   }
 });
 
+// Sprawdzenie AI przed wpisaniem kwoty (bez zapisu) — musi być przed GET /:id
+router.get('/:id/final-estimation-gate', auth, async (req, res) => {
+  try {
+    const project = await Project.findById(req.params.id);
+    if (!project) return res.status(404).json({ message: 'Projekt nie został znaleziony' });
+    if (!canEditProject(project, req.user)) return res.status(403).json({ message: 'Brak uprawnień' });
+    if (project.offerType !== 'preliminary') {
+      return res.status(400).json({ message: 'Bramka AI dotyczy tylko ofert wstępnych' });
+    }
+
+    const { analyzeFinalEstimationReadiness } = require('../services/aiFinalEstimationGate');
+    try {
+      const gate = await analyzeFinalEstimationReadiness(project);
+      return res.json({ ...gate, gateCheckOk: true, gateCheckFailed: false });
+    } catch (gateErr) {
+      console.error('[final-estimation-gate] warning:', gateErr.message || gateErr);
+      return res.json({
+        canEstimateFinalNow: true,
+        hardBlockers: [],
+        risksToFlagAtFinalOffer: [],
+        clarificationQuestions: [],
+        proposedClientClarificationMessage: '',
+        gateCheckOk: false,
+        gateCheckFailed: true,
+        gateCheckMessage: gateErr.message || 'Błąd sprawdzania AI'
+      });
+    }
+  } catch (e) {
+    console.error('final-estimation-gate error:', e);
+    return res.status(500).json({ message: 'Błąd serwera' });
+  }
+});
+
 // Submit final estimate (single total) and mark as "Do przygotowania oferty finalnej" (green highlight)
 router.post('/:id/submit-final-estimate', [
   auth,
@@ -406,12 +439,29 @@ router.post('/:id/submit-final-estimate', [
       risksToFlagAtFinalOffer: [],
       clarificationQuestions: []
     };
+    let gateFromAi = false;
     try {
       const { analyzeFinalEstimationReadiness } = require('../services/aiFinalEstimationGate');
       gate = await analyzeFinalEstimationReadiness(project);
+      gateFromAi = true;
     } catch (gateErr) {
       // fail-open: nie blokujemy pracy przy awarii AI, ale logujemy problem
       console.error('[submit-final-estimate][ai-gate] warning:', gateErr.message || gateErr);
+    }
+
+    if (gateFromAi) {
+      const hasBlockers = Array.isArray(gate.hardBlockers) && gate.hardBlockers.length > 0;
+      if (hasBlockers || !gate.canEstimateFinalNow) {
+        return res.status(409).json({
+          message:
+            'Nie można zapisać wyceny finalnej: AI wykryło twarde blokery lub niewystarczający zakres do odpowiedzialnej wyceny. Uzupełnij notatki / doprecyzuj z klientem albo wybierz „Doprecyzowanie”.',
+          canEstimateFinalNow: Boolean(gate.canEstimateFinalNow),
+          hardBlockers: gate.hardBlockers || [],
+          risksToFlagAtFinalOffer: gate.risksToFlagAtFinalOffer || [],
+          clarificationQuestions: gate.clarificationQuestions || [],
+          proposedClientClarificationMessage: gate.proposedClientClarificationMessage || ''
+        });
+      }
     }
 
     const total = Number(req.body.total);

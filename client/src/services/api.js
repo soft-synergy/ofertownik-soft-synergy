@@ -68,6 +68,9 @@ export const projectsAPI = {
   requestClarification: (id, clarificationText) => api.post(`/api/projects/${id}/request-clarification`, { clarificationText }).then(res => res.data),
   submitClarificationResponse: (id, responseText) => api.post(`/api/projects/${id}/clarification-response`, { responseText }).then(res => res.data),
   submitFinalEstimate: (id, total) => api.post(`/api/projects/${id}/submit-final-estimate`, { total }).then(res => res.data),
+  /** AI: czy można wycenić finalnie (bez zapisu) — wywołaj przy otwarciu modala wyceny */
+  getFinalEstimationGate: (id) =>
+    api.get(`/api/projects/${id}/final-estimation-gate`).then((res) => res.data),
   /** Oferta wstępna → pełna oferta (OpenRouter); wymaga notatek / opisu w projekcie */
   aiGenerateFullOffer: (id) =>
     api.post(`/api/projects/${id}/ai-generate-full-offer`).then((res) => res.data),
