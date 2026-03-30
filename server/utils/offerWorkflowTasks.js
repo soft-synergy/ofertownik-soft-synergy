@@ -8,7 +8,7 @@ const Task = require('../models/Task');
 const User = require('../models/User');
 
 const INFO_EMAIL = 'info@soft-synergy.com';
-const JAKUB_EMAIL = 'rizka.amelia@soft-synergy.com';
+const PM_WORKFLOW_EMAIL = 'rizka.amelia@soft-synergy.com';
 
 async function getAssigneeIdByEmail(email) {
   const user = await User.findOne({ email, isActive: true }).select('_id').lean();
@@ -76,7 +76,7 @@ async function upsertClarificationTask(project, userId) {
 
   await deleteOfferWorkflowTasks(projectId);
 
-  const assignee = await getAssigneeIdByEmail(JAKUB_EMAIL);
+  const assignee = await getAssigneeIdByEmail(PM_WORKFLOW_EMAIL);
   let createdBy = userId || project.owner || project.createdBy;
   if (!createdBy) {
     const admin = await User.findOne({ role: 'admin', isActive: true }).select('_id').lean();
@@ -114,7 +114,7 @@ async function upsertPrepareFinalOfferTask(project, userId) {
 
   await deleteOfferWorkflowTasks(projectId);
 
-  const assignee = await getAssigneeIdByEmail(JAKUB_EMAIL);
+  const assignee = await getAssigneeIdByEmail(PM_WORKFLOW_EMAIL);
   let createdBy = userId || project.owner || project.createdBy;
   if (!createdBy) {
     const admin = await User.findOne({ role: 'admin', isActive: true }).select('_id').lean();

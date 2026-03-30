@@ -257,7 +257,7 @@ const Projects = () => {
     }
     try {
       await projectsAPI.requestClarification(selectedProject._id, clarificationText.trim());
-      toast.success('Doprecyzowanie zapisane. Jakub dostanie maila – odpowiedź wpisuje w panelu.');
+      toast.success('Doprecyzowanie zapisane. Rizka dostanie maila – odpowiedź wpisuje w panelu.');
       handleCloseRespondModal();
       refetch();
     } catch (error) {
@@ -498,7 +498,7 @@ const Projects = () => {
                         <span>Odpowiedz</span>
                       </button>
                     )}
-                    {/* Doprecyzowanie – czeka na odpowiedź Jakuba w panelu (ostatni wpis w historii bez odpowiedzi) */}
+                    {/* Doprecyzowanie – czeka na odpowiedź w panelu (ostatni wpis w historii bez odpowiedzi) */}
                     {project.offerType === 'preliminary' && (() => {
                       const history = project.clarificationHistory || [];
                       const last = history.length ? history[history.length - 1] : null;
@@ -755,7 +755,7 @@ const Projects = () => {
                               </div>
                             )}
                             {!entry.responseText && (
-                              <p className="mt-2 text-xs text-amber-600 italic">Oczekuje na odpowiedź w panelu (Jakub).</p>
+                              <p className="mt-2 text-xs text-amber-600 italic">Oczekuje na odpowiedź w panelu (Rizka).</p>
                             )}
                           </div>
                         ));

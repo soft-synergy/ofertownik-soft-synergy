@@ -91,7 +91,7 @@ Zasady biznesowe i format:
 Klient: ${project.clientName || ''}
 Kontakt: ${project.clientContact || ''}, ${project.clientEmail || ''}, ${project.clientPhone || ''}
 Strona: https://soft-synergy.com/
-Kontakt handlowy: jakubczajka@softsynergy.com, +48 793 868 886
+Kontakt handlowy: rizka.amelia@soft-synergy.com, +48 793 868 886
 
 Wymagania, które muszą znaleźć odzwierciedlenie w treści:
 - Nazwa/tytuł projektu

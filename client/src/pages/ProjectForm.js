@@ -15,6 +15,15 @@ import {
 import { projectsAPI, offersAPI, authAPI } from '../services/api';
 import toast from 'react-hot-toast';
 
+const DEFAULT_PROJECT_MANAGER = {
+  name: 'Rizka Amelia',
+  position: 'Senior Project Manager',
+  email: 'rizka.amelia@soft-synergy.com',
+  phone: '+48 793 868 886',
+  description:
+    'Nazywam się Rizka Amelia i pełnię rolę menedżerki projektów w Soft Synergy. Koordynuję zespoły i pilnuję terminów oraz jakości realizacji projektów IT. Stawiam na przejrzystą komunikację z klientem i spójność dostarczanych rozwiązań z Państwa celami biznesowymi.'
+};
+
 const ProjectForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -49,13 +58,7 @@ const ProjectForm = () => {
       min: null,
       max: null
     },
-    projectManager: {
-      name: '',
-      position: 'Senior Project Manager',
-      email: '',
-      phone: '+48 793 868 886',
-      description: 'Z ponad 8-letnim doświadczeniem w prowadzeniu złożonych projektów IT, wierzę w transparentną komunikację i partnerskie relacje. Moim zadaniem jest nie tylko nadzór nad harmonogramem, ale przede wszystkim zapewnienie, że finalny produkt w 100% odpowiada Państwa wizji i celom biznesowym. Będę Państwa głównym punktem kontaktowym na każdym etapie współpracy.'
-    },
+    projectManager: { ...DEFAULT_PROJECT_MANAGER },
     status: 'draft',
     priority: 'normal',
     notes: [],
@@ -151,13 +154,7 @@ const ProjectForm = () => {
   const [convertData, setConvertData] = useState({
     description: '',
     mainBenefit: '',
-    projectManager: {
-      name: '',
-      position: 'Senior Project Manager',
-      email: '',
-      phone: '',
-      description: ''
-    },
+    projectManager: { ...DEFAULT_PROJECT_MANAGER },
     modules: [{ name: '', description: '', color: 'blue' }],
     timeline: {
       phase1: { name: 'Faza I: Discovery', duration: 'Tydzień 1-2' },
@@ -401,13 +398,7 @@ const ProjectForm = () => {
         // Domyślne wartości dla pól wymaganych przez model
         description: formData.consultationNotes || 'Konsultacja wstępna',
         mainBenefit: 'Analiza potrzeb klienta',
-        projectManager: {
-          name: 'Jakub Czajka',
-          position: 'Senior Project Manager',
-          email: 'rizka.amelia@soft-synergy.com',
-          phone: '+48 793 868 886',
-          description: 'Z ponad 8-letnim doświadczeniem w prowadzeniu złożonych projektów IT...'
-        },
+        projectManager: { ...DEFAULT_PROJECT_MANAGER },
         modules: [{ name: 'Konsultacja', description: 'Analiza potrzeb i wymagań', color: 'blue' }],
         timeline: {
           phase1: { name: 'Konsultacja', duration: 'Tydzień 1' },
@@ -476,10 +467,7 @@ const ProjectForm = () => {
       mainBenefit: 'Analiza potrzeb klienta',
       projectManager: {
         ...prev.projectManager,
-        name: 'Jakub Czajka',
-        email: 'rizka.amelia@soft-synergy.com',
-        phone: '+48 793 868 886',
-        description: 'Z ponad 8-letnim doświadczeniem w prowadzeniu złożonych projektów IT, wierzę w transparentną komunikację i partnerskie relacje. Moim zadaniem jest nie tylko nadzór nad harmonogramem, ale przede wszystkim zapewnienie, że finalny produkt w 100% odpowiada Państwa wizji i celom biznesowym. Będę Państwa głównym punktem kontaktowym na każdym etapie współpracy.'
+        ...DEFAULT_PROJECT_MANAGER
       }
     }));
     setShowConvertModal(true);

@@ -124,7 +124,7 @@ Utworzono interaktywne demo (`demo-new-features.html`) które pozwala:
 
 **Rozwiązanie**:
 1. **Modal konwersji**: Dodano modal z formularzem do wypełnienia brakujących danych
-2. **Domyślne wartości**: Modal automatycznie wypełnia się notatkami konsultacyjnymi i danymi Jakuba Czajki
+2. **Domyślne wartości**: Modal automatycznie wypełnia się notatkami konsultacyjnymi i danymi Rizki Amelii
 3. **Walidacja**: Modal wymaga wypełnienia wszystkich obowiązkowych pól przed konwersją
 4. **UX**: Modal jest responsywny i ma przycisk anulowania
 

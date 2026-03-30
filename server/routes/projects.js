@@ -8,14 +8,15 @@ const Client = require('../models/Client');
 
 const router = express.Router();
 
-// Opiekun projektu – zawsze Jakub Czajka (bez pola w formularzu)
+// Opiekun projektu – zawsze Rizka Amelia (bez pola w formularzu)
 const DEFAULT_PROJECT_MANAGER = {
-  name: "Jakub Czajka",
+  name: "Rizka Amelia",
   position: "Senior Project Manager",
   email: "rizka.amelia@soft-synergy.com",
   phone: "+48 793 868 886",
-  avatar: "/generated-offers/jakub czajka.jpeg",
-  description: "Nazywam się Jakub Czajka i pełnię rolę menedżera projektów w Soft Synergy. Specjalizuję się w koordynowaniu zespołów oraz zarządzaniu realizacją nowoczesnych projektów IT. Dbam o sprawną komunikację, terminowość oraz najwyższą jakość dostarczanych rozwiązań. Moim celem jest zapewnienie klientom profesjonalnej obsługi i skutecznej realizacji ich celów biznesowych."
+  avatar: "/generated-offers/rizka-amelia.jpeg",
+  description:
+    "Nazywam się Rizka Amelia i pełnię rolę menedżerki projektów w Soft Synergy. Koordynuję zespoły i pilnuję terminów oraz jakości realizacji projektów IT. Stawiam na przejrzystą komunikację z klientem i spójność dostarczanych rozwiązań z Państwa celami biznesowymi."
 };
 
 function canEditProject(project, user) {
@@ -342,7 +343,7 @@ router.post('/:id/request-clarification', [
     project.status = 'active'; // czeka na odpowiedź klienta
     await project.save();
 
-    // Wyślij email do Jakuba o doprecyzowaniu
+    // Wyślij email do Rizki o doprecyzowaniu
     try {
       const { sendEmail } = require('../utils/emailService');
       const { clarificationRequestTemplate } = require('../utils/emailTemplates');
@@ -362,7 +363,7 @@ router.post('/:id/request-clarification', [
       console.error('[request-clarification] Błąd wysyłki emaila:', emailErr);
     }
 
-    // Task dla Jakuba – doprecyzowanie (przygotowanie dodatkowych informacji)
+    // Task dla Rizki – doprecyzowanie (przygotowanie dodatkowych informacji)
     try {
       const { upsertClarificationTask } = require('../utils/offerWorkflowTasks');
       await upsertClarificationTask(project, req.user._id);
@@ -377,14 +378,14 @@ router.post('/:id/request-clarification', [
       .populate('clarificationRequest.requestedBy', 'firstName lastName email')
       .populate('clarificationHistory.requestedBy', 'firstName lastName email');
 
-    return res.json({ message: 'Zapisano doprecyzowanie. Jakub dostanie maila – odpowiedź wpisuje w panelu admina.', project: updated });
+    return res.json({ message: 'Zapisano doprecyzowanie. Rizka dostanie maila – odpowiedź wpisuje w panelu admina.', project: updated });
   } catch (e) {
     console.error('request-clarification error:', e);
     return res.status(500).json({ message: 'Błąd serwera' });
   }
 });
 
-// Odpowiedź na doprecyzowanie w panelu admina (Jakub / staff) – po wpisaniu status wraca do "Do wyceny finalnej"
+// Odpowiedź na doprecyzowanie w panelu admina (Rizka / staff) – po wpisaniu status wraca do "Do wyceny finalnej"
 router.post('/:id/clarification-response', [
   auth,
   body('responseText').trim().notEmpty().withMessage('Treść odpowiedzi jest wymagana')
@@ -531,7 +532,7 @@ router.post('/:id/submit-final-estimate', [
 
     await project.save();
 
-    // Wyślij email do Jakuba o zapisanej wycenie finalnej
+    // Wyślij email do Rizki o zapisanej wycenie finalnej
     try {
       const { sendEmail } = require('../utils/emailService');
       const { finalEstimateSubmittedTemplate } = require('../utils/emailTemplates');
@@ -551,7 +552,7 @@ router.post('/:id/submit-final-estimate', [
       console.error('[submit-final-estimate] Błąd wysyłki emaila:', emailErr);
     }
 
-    // Task dla Jakuba – do przygotowania oferty finalnej
+    // Task dla Rizki – do przygotowania oferty finalnej
     try {
       const { upsertPrepareFinalOfferTask } = require('../utils/offerWorkflowTasks');
       await upsertPrepareFinalOfferTask(project, req.user._id);
@@ -645,7 +646,7 @@ router.post('/', [
       projectData.client = client._id;
     }
 
-    // Opiekun projektu zawsze Jakub Czajka – nie z formularza
+    // Opiekun projektu zawsze Rizka Amelia – nie z formularza
     if (projectData.offerType === 'final') {
       projectData.projectManager = { ...DEFAULT_PROJECT_MANAGER };
     }
@@ -725,7 +726,7 @@ router.put('/:id', [
       delete req.body.status;
     }
 
-    // Opiekun projektu zawsze Jakub Czajka – nie z formularza
+    // Opiekun projektu zawsze Rizka Amelia – nie z formularza
     if (req.body.offerType === 'final') {
       req.body.projectManager = { ...DEFAULT_PROJECT_MANAGER };
     }

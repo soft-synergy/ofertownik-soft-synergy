@@ -24,7 +24,7 @@ const buttonPrimary = {
 };
 
 /**
- * Szablon: przypomnienie o follow-up (dla Jakuba)
+ * Szablon: przypomnienie o follow-up (dla Rizki)
  */
 function followUpReminderTemplate({ projectName, clientName, followUpNumber, dueDate, projectId }) {
   const projectUrl = `${APP_URL}/projects/${projectId}`;
@@ -49,7 +49,7 @@ function followUpReminderTemplate({ projectName, clientName, followUpNumber, due
           </tr>
           <tr>
             <td style="padding:32px;">
-              <p style="margin:0 0 20px 0;font-size:16px;line-height:1.6;">Cześć Jakub,</p>
+              <p style="margin:0 0 20px 0;font-size:16px;line-height:1.6;">Cześć Rizka,</p>
               <p style="margin:0 0 24px 0;font-size:16px;line-height:1.6;">Nadszedł termin wysłania <strong>follow-up #${followUpNumber}</strong> dla poniższego projektu:</p>
               
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;margin-bottom:24px;">
@@ -482,7 +482,7 @@ function tasksOverdueTemplate({ recipientName, tasks, tasksUrl, dateLabel }) {
 }
 
 /**
- * Szablon: doprecyzowanie – gdy nie można jeszcze zrobić wyceny (dla Jakuba)
+ * Szablon: doprecyzowanie – gdy nie można jeszcze zrobić wyceny (dla Rizki)
  */
 function clarificationRequestTemplate({ projectName, clientName, clientContact, clientEmail, clientPhone, consultationNotes, clarificationText, projectId }) {
   const projectUrl = `${APP_URL}/projects/${projectId}`;
@@ -554,7 +554,7 @@ function clarificationRequestTemplate({ projectName, clientName, clientContact, 
 }
 
 /**
- * Szablon: wycena finalna zapisana (dla Jakuba)
+ * Szablon: wycena finalna zapisana (dla Rizki)
  */
 function finalEstimateSubmittedTemplate({ projectName, clientName, clientContact, clientEmail, clientPhone, consultationNotes, total, projectId }) {
   const projectUrl = `${APP_URL}/projects/${projectId}`;

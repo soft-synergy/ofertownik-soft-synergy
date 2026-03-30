@@ -19,7 +19,7 @@ out/
 
 # Generated files
 server/generated-offers/*
-!server/generated-offers/jakub czajka.jpeg
+!server/generated-offers/rizka-amelia.jpeg
 !server/generated-offers/logo-removebg-preview.png
 
 server/uploads/

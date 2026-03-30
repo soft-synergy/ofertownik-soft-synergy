@@ -344,14 +344,15 @@ router.post('/generate/:projectId', auth, async (req, res) => {
       offerNumber: project.offerNumber || `SS/${new Date().getFullYear()}/${(new Date().getMonth()+1).toString().padStart(2, '0')}/${project._id.toString().slice(-4)}`,
       offerType: project.offerType || 'final',
       priceRange: project.priceRange,
-      // Project manager - zawsze Jakub Czajka
+      // Project manager - zawsze Rizka Amelia
       projectManager: {
-        name: "Jakub Czajka",
+        name: "Rizka Amelia",
         position: "Senior Project Manager",
         email: "rizka.amelia@soft-synergy.com",
         phone: "+48 793 868 886",
-        avatar: "/generated-offers/jakub czajka.jpeg",
-        description: "Nazywam się Jakub Czajka i pełnię rolę menedżera projektów w Soft Synergy. Specjalizuję się w koordynowaniu zespołów oraz zarządzaniu realizacją nowoczesnych projektów IT. Dbam o sprawną komunikację, terminowość oraz najwyższą jakość dostarczanych rozwiązań. Moim celem jest zapewnienie klientom profesjonalnej obsługi i skutecznej realizacji ich celów biznesowych."
+        avatar: "/generated-offers/rizka-amelia.jpeg",
+        description:
+          "Nazywam się Rizka Amelia i pełnię rolę menedżerki projektów w Soft Synergy. Koordynuję zespoły i pilnuję terminów oraz jakości realizacji projektów IT. Stawiam na przejrzystą komunikację z klientem i spójność dostarczanych rozwiązań z Państwa celami biznesowymi."
       },
       // Modules
       modules: project.modules && project.modules.length > 0 ? 
@@ -933,14 +934,15 @@ router.post('/generate-pdf/:projectId', auth, async (req, res) => {
       offerNumber: project.offerNumber || `SS/${new Date().getFullYear()}/${(new Date().getMonth()+1).toString().padStart(2, '0')}/${project._id.toString().slice(-4)}`,
       offerType: project.offerType || 'final',
       priceRange: project.priceRange,
-      // Project manager - zawsze Jakub Czajka
+      // Project manager - zawsze Rizka Amelia
       projectManager: {
-        name: "Jakub Czajka",
+        name: "Rizka Amelia",
         position: "Senior Project Manager",
         email: "rizka.amelia@soft-synergy.com",
         phone: "+48 793 868 886",
-        avatar: "/generated-offers/jakub czajka.jpeg",
-        description: "Nazywam się Jakub Czajka i pełnię rolę menedżera projektów w Soft Synergy. Specjalizuję się w koordynowaniu zespołów oraz zarządzaniu realizacją nowoczesnych projektów IT. Dbam o sprawną komunikację, terminowość oraz najwyższą jakość dostarczanych rozwiązań. Moim celem jest zapewnienie klientom profesjonalnej obsługi i skutecznej realizacji ich celów biznesowych."
+        avatar: "/generated-offers/rizka-amelia.jpeg",
+        description:
+          "Nazywam się Rizka Amelia i pełnię rolę menedżerki projektów w Soft Synergy. Koordynuję zespoły i pilnuję terminów oraz jakości realizacji projektów IT. Stawiam na przejrzystą komunikację z klientem i spójność dostarczanych rozwiązań z Państwa celami biznesowymi."
       },
       // Modules
       modules: project.modules && project.modules.length > 0 ? 
@@ -1173,7 +1175,7 @@ router.post('/generate-pdf/:projectId', auth, async (req, res) => {
 
         // Contact info
         addText('Kontakt:', 12);
-        addText('Jakub Czajka - Soft Synergy', 12);
+        addText('Rizka Amelia - Soft Synergy', 12);
         addText('Email: rizka.amelia@soft-synergy.com', 12);
         addText('Telefon: +48 793 868 886', 12);
 
@@ -1354,7 +1356,7 @@ router.post('/generate-pdf-simple', auth, async (req, res) => {
 
         // Contact info
         addText('Kontakt:', 12);
-        addText('Jakub Czajka - Soft Synergy', 12);
+        addText('Rizka Amelia - Soft Synergy', 12);
         addText('Email: rizka.amelia@soft-synergy.com', 12);
         addText('Telefon: +48 793 868 886', 12);
 
@@ -2027,10 +2029,9 @@ router.post('/generate-contract/:projectId', auth, async (req, res) => {
 
         // Parties
         doc.moveDown(0.8);
-        doc.fillColor('#000').font(fonts.bold).fontSize(12).text('Jakub Czajka');
-        doc.font(fonts.regular).fontSize(11).text('zamieszkały w Zielonej Górze na ulicy Rydza-Śmigłego 20/9 65-610,');
-        doc.text('identyfikującym się dowodem osobistym o numerze seryjnym DAJ 798974 oraz o numerze PESEL 07302001359,');
-        doc.text('działający w ramach marki Soft Synergy');
+        doc.fillColor('#000').font(fonts.bold).fontSize(12).text('Rizka Amelia');
+        doc.font(fonts.regular).fontSize(11).text('działająca w ramach marki Soft Synergy,');
+        doc.text('kontakt: rizka.amelia@soft-synergy.com, +48 793 868 886');
         doc.moveDown(0.6);
         doc.text('a');
         doc.moveDown(0.6);
@@ -2160,7 +2161,7 @@ router.post('/generate-contract/:projectId', auth, async (req, res) => {
         doc.moveTo(rightX, lineY).lineTo(rightX + colWidth, lineY).stroke();
         // Signature image (2x bigger, placed below the line, offset by 25px)
         try {
-          const sigPath = path.join(__dirname, '../public/img/podpis-jakub-czajka.jpg');
+          const sigPath = path.join(__dirname, '../public/img/podpis-rizka-amelia.jpg');
           const sigWidth = 240; // 2x bigger
           const sigX = rightX + colWidth - sigWidth;
           const sigY = lineY + 25; // 25px below the line to avoid overlap
@@ -2169,7 +2170,7 @@ router.post('/generate-contract/:projectId', auth, async (req, res) => {
           // ignore if image not found
         }
         // Place caption under the signature image
-        doc.font(fonts.regular).text('Jakub Czajka\ndziałający w ramach marki Soft Synergy', rightX, lineY + 25 + 70, { width: colWidth, align: 'right' });
+        doc.font(fonts.regular).text('Rizka Amelia\ndziałająca w ramach marki Soft Synergy', rightX, lineY + 25 + 70, { width: colWidth, align: 'right' });
 
         doc.end();
         stream.on('finish', resolve);
@@ -2233,7 +2234,7 @@ router.get('/contract-draft/:projectId', auth, async (req, res) => {
     const lines = [];
     lines.push(`Umowa realizacji ${project.name}`);
     lines.push(`zawarta w dniu ${new Date().toLocaleDateString('pl-PL')} pomiędzy:`);
-    lines.push(`Jakub Czajka, działający w ramach marki Soft Synergy`);
+    lines.push(`Rizka Amelia, działająca w ramach marki Soft Synergy`);
     lines.push('a');
     lines.push('[Dane Klienta]');
     lines.push('zwana dalej „Zamawiającym”');
