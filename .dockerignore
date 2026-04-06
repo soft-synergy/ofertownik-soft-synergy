@@ -1,0 +1,15 @@
+node_modules
+client/node_modules
+client/build
+.env
+.env.backup
+*.log
+logs/
+.git
+.gitignore
+npm-debug.log*
+ecosystem.config.js
+deploy.sh
+manage.sh
+setup-mongodb.sh
+DEPLOYMENT.md

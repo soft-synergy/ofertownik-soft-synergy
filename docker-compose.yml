@@ -1,0 +1,42 @@
+services:
+
+  # ── Backend API (Node.js + Express) ────────────────────────────────────────
+  api:
+    build:
+      context: .
+      target: production
+    env_file: .env
+    restart: unless-stopped
+    # SYS_ADMIN wymagane przez Chromium sandbox w Puppeteer
+    cap_add:
+      - SYS_ADMIN
+    volumes:
+      - uploads_data:/app/uploads
+      - generated_offers:/app/server/generated-offers
+      - logs_data:/app/logs
+    # Port 5001 dostępny tylko wewnętrznie (nginx robi proxy)
+    expose:
+      - "5001"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5001/api/health', r => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ── Frontend (React build serwowany przez Nginx) ───────────────────────────
+  nginx:
+    build:
+      context: .
+      target: static-server
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  uploads_data:
+  generated_offers:
+  logs_data:

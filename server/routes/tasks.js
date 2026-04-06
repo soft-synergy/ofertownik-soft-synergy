@@ -1,7 +1,7 @@
 const express = require('express');
 const Task = require('../models/Task');
 const Project = require('../models/Project');
-const { auth } = require('../middleware/auth');
+const { auth, requireScope } = require('../middleware/auth');
 const { createNextRecurrenceInstance } = require('../utils/recurringTasks');
 const { notifyTaskWatchers } = require('../utils/taskNotifications');
 
@@ -16,7 +16,7 @@ const STATUS_LABELS = {
 };
 
 // List tasks with filters
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, requireScope('tasks:read'), async (req, res) => {
   try {
     const { assignee, project, publicOrder, status, priority, dateFrom, dateTo, limit = 200, includeTemplates } = req.query;
     const query = {};
@@ -84,7 +84,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // Get one task (with updates for modal)
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', auth, requireScope('tasks:read'), async (req, res) => {
   try {
     const task = await Task.findById(req.params.id)
       .populate('assignee', 'firstName lastName email')
@@ -105,7 +105,7 @@ router.get('/:id', auth, async (req, res) => {
 });
 
 // Add update to task
-router.post('/:id/updates', auth, async (req, res) => {
+router.post('/:id/updates', auth, requireScope('tasks:write'), async (req, res) => {
   try {
     const task = await Task.findById(req.params.id);
     if (!task) {
@@ -137,7 +137,7 @@ router.post('/:id/updates', auth, async (req, res) => {
 });
 
 // Create task
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, requireScope('tasks:write'), async (req, res) => {
   try {
     const { title, description, status, priority, assignee, assignees, project, publicOrder, dueDate, dueTimeMinutes, durationMinutes, recurrence, watchers } = req.body;
     if (!title || !dueDate) {
@@ -238,7 +238,7 @@ router.post('/', auth, async (req, res) => {
 });
 
 // Update task
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', auth, requireScope('tasks:write'), async (req, res) => {
   try {
     const task = await Task.findById(req.params.id);
     if (!task) {
@@ -316,7 +316,7 @@ router.put('/:id', auth, async (req, res) => {
 });
 
 // Delete task
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', auth, requireScope('tasks:write'), async (req, res) => {
   try {
     const task = await Task.findByIdAndDelete(req.params.id);
     if (!task) {

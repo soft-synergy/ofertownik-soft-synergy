@@ -1,7 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const Project = require('../models/Project');
-const { auth, requireRole } = require('../middleware/auth');
+const { auth, requireRole, requireScope } = require('../middleware/auth');
 const Activity = require('../models/Activity');
 const { upsertFollowUpTask, completeCurrentAndCreateNextFollowUpTask } = require('../utils/followUpTasks');
 const Client = require('../models/Client');
@@ -29,7 +29,7 @@ function canEditProject(project, user) {
 }
 
 // Get all projects
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, requireScope('projects:read'), async (req, res) => {
   try {
     const { page = 1, limit = 10, status, search, offerType, owner } = req.query;
     const pageNum = Number.parseInt(page, 10) || 1;
@@ -85,7 +85,7 @@ router.get('/', auth, async (req, res) => {
 
 // --- Offer workflow for preliminary offers ---
 // Mark preliminary offer as "Do wyceny finalnej" (orange highlight)
-router.post('/:id/request-final-estimation', auth, async (req, res) => {
+router.post('/:id/request-final-estimation', auth, requireScope('projects:write'), async (req, res) => {
   try {
     const project = await Project.findById(req.params.id);
     if (!project) return res.status(404).json({ message: 'Projekt nie został znaleziony' });
@@ -184,7 +184,7 @@ router.post('/:id/request-final-estimation', auth, async (req, res) => {
 });
 
 // Oferta wstępna → pełna oferta (OpenRouter, model z OPENROUTER_MODEL_OFFER_FULL lub xiaomi/mimo-v2-pro)
-router.post('/:id/ai-generate-full-offer', auth, async (req, res) => {
+router.post('/:id/ai-generate-full-offer', auth, requireScope('projects:write'), async (req, res) => {
   try {
     const project = await Project.findById(req.params.id);
     if (!project) {
@@ -292,6 +292,7 @@ router.post('/:id/ai-generate-full-offer', auth, async (req, res) => {
 // Doprecyzowanie – gdy nie można jeszcze zrobić wyceny finalnej (brakuje info od klienta). Dopisuje do historii.
 router.post('/:id/request-clarification', [
   auth,
+  requireScope('projects:write'),
   body('clarificationText').trim().notEmpty().withMessage('Treść doprecyzowania jest wymagana')
 ], async (req, res) => {
   try {
@@ -388,6 +389,7 @@ router.post('/:id/request-clarification', [
 // Odpowiedź na doprecyzowanie w panelu admina (Rizka / staff) – po wpisaniu status wraca do "Do wyceny finalnej"
 router.post('/:id/clarification-response', [
   auth,
+  requireScope('projects:write'),
   body('responseText').trim().notEmpty().withMessage('Treść odpowiedzi jest wymagana')
 ], async (req, res) => {
   try {
@@ -429,7 +431,7 @@ router.post('/:id/clarification-response', [
 });
 
 // Sprawdzenie AI przed wpisaniem kwoty (bez zapisu) — musi być przed GET /:id
-router.get('/:id/final-estimation-gate', auth, async (req, res) => {
+router.get('/:id/final-estimation-gate', auth, requireScope('projects:write'), async (req, res) => {
   try {
     const project = await Project.findById(req.params.id);
     if (!project) return res.status(404).json({ message: 'Projekt nie został znaleziony' });
@@ -464,6 +466,7 @@ router.get('/:id/final-estimation-gate', auth, async (req, res) => {
 // Submit final estimate (single total) and mark as "Do przygotowania oferty finalnej" (green highlight)
 router.post('/:id/submit-final-estimate', [
   auth,
+  requireScope('projects:write'),
   body('total').isNumeric().toFloat().custom(v => v >= 0)
 ], async (req, res) => {
   try {
@@ -579,7 +582,7 @@ router.post('/:id/submit-final-estimate', [
 });
 
 // Get single project
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', auth, requireScope('projects:read'), async (req, res) => {
   try {
     const project = await Project.findById(req.params.id)
       .populate('createdBy', 'firstName lastName email')
@@ -603,6 +606,7 @@ router.get('/:id', auth, async (req, res) => {
 // Create new project
 router.post('/', [
   auth,
+  requireScope('projects:write'),
   body('name').trim().isLength({ min: 3 }),
   body('clientName').trim().isLength({ min: 2 }),
   body('clientContact').trim().isLength({ min: 2 }),
@@ -693,6 +697,7 @@ router.post('/', [
 // Update project
 router.put('/:id', [
   auth,
+  requireScope('projects:write'),
   body('name').trim().isLength({ min: 3 }),
   body('clientName').trim().isLength({ min: 2 }),
   body('clientContact').trim().isLength({ min: 2 }),
@@ -792,7 +797,7 @@ router.put('/:id', [
 });
 
 // Reassign owner (admin only)
-router.post('/:id/assign', auth, async (req, res) => {
+router.post('/:id/assign', auth, requireScope('projects:write'), async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
       return res.status(403).json({ message: 'Brak uprawnień' });
@@ -816,6 +821,7 @@ router.post('/:id/assign', auth, async (req, res) => {
 // Create a follow-up (requires note). Automatically sets sequence number.
 router.post('/:id/followups', [
   auth,
+  requireScope('projects:write'),
   body('note').trim().isLength({ min: 1 })
 ], async (req, res) => {
   try {
@@ -872,6 +878,7 @@ router.post('/:id/followups', [
 // Append a note to project
 router.post('/:id/notes', [
   auth,
+  requireScope('projects:write'),
   body('text').trim().isLength({ min: 1 })
 ], async (req, res) => {
   try {
@@ -905,7 +912,7 @@ router.post('/:id/notes', [
 });
 
 // Delete project
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', auth, requireScope('projects:write'), async (req, res) => {
   try {
     const project = await Project.findById(req.params.id);
     
@@ -928,7 +935,7 @@ router.delete('/:id', auth, async (req, res) => {
 });
 
 // Get project statistics
-router.get('/stats/overview', auth, async (req, res) => {
+router.get('/stats/overview', auth, requireScope('projects:read'), async (req, res) => {
   try {
     const stats = await Project.aggregate([
       {

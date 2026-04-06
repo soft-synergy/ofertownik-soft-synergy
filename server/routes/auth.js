@@ -2,7 +2,7 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
-const { auth } = require('../middleware/auth');
+const { auth, requireScope } = require('../middleware/auth');
 const Activity = require('../models/Activity');
 
 const router = express.Router();
@@ -191,7 +191,7 @@ router.post('/logout', auth, (req, res) => {
 });
 
 // List users (basic data) for team selection
-router.get('/users', auth, async (req, res) => {
+router.get('/users', auth, requireScope('users:read'), async (req, res) => {
   try {
     const users = await User.find({ isActive: true })
       .select('firstName lastName email role avatar')
