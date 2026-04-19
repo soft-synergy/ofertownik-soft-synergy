@@ -10,6 +10,7 @@ Claude ma miec dostep do:
 - pelnego zarzadzania taskami
 - odczytu listy pracownikow, aby przypisywac taski do konkretnych osob
 - pelnego zarzadzania dokumentami i playbookami jako baza wiedzy Claude
+- odczytu portfolio Soft Synergy
 
 Klucz **nie daje uprawnien do edycji projektow**. Projektami mozna tylko czytac.
 
@@ -50,7 +51,7 @@ CLAUDE_API_USER_EMAIL=claude-api@soft-synergy.local
 Dostepne scope dla tego klucza:
 
 ```text
-tasks:read,tasks:write,projects:read,users:read,documents:read,documents:write
+tasks:read,tasks:write,projects:read,users:read,documents:read,documents:write,portfolio:read
 ```
 
 ## Zasady pracy Claude
@@ -292,6 +293,62 @@ Payload:
 DELETE /api/tasks/:id
 ```
 
+## Portfolio
+
+Portfolio jest dostepne tylko do odczytu. Claude moze je wykorzystywac jako baze referencji do case studies, technologii i wynikow projektow.
+
+### 9a. Lista portfolio
+
+```http
+GET /api/portfolio
+```
+
+Obslugiwane query params:
+
+- `category`
+- `active`
+- `lang`
+
+Przyklad:
+
+```bash
+curl -H "X-API-Key: $CLAUDE_API_KEY" \
+  "https://oferty.soft-synergy.com/api/portfolio?active=true&lang=pl"
+```
+
+Uwagi:
+
+- `lang=pl` albo `lang=en` zwraca dopasowane pola `title`, `description`, `results`
+- bez `lang` API zwraca surowe pola wielojezyczne, np. `titlePl`, `titleEn`
+- portfolio jest read-only dla Claude
+
+### 9b. Szczegoly elementu portfolio
+
+```http
+GET /api/portfolio/:id
+```
+
+Przyklad:
+
+```bash
+curl -H "X-API-Key: $CLAUDE_API_KEY" \
+  "https://oferty.soft-synergy.com/api/portfolio/PORTFOLIO_ID?lang=pl"
+```
+
+Zwracane sa m.in.:
+
+- tytul
+- opis
+- wyniki
+- kategoria
+- technologie
+- klient
+- czas realizacji
+- link do projektu
+- link do API
+- link do dokumentacji
+- obraz
+
 ## Dokumenty i playbooki
 
 Dokumenty i playbooki sa przechowywane w jednej kolekcji. Rozroznia je pole:
@@ -317,6 +374,8 @@ Obslugiwane query params:
 - `type`
 - `tag`
 - `slug`
+- `folder`
+- `folderPrefix`
 - `limit`
 - `includeContent`
 
@@ -336,6 +395,97 @@ Uwagi:
 
 - `includeContent=false` domyslnie ukrywa pelna tresc, zeby odpowiedzi byly lzejsze
 - `q` szuka po `title`, `slug`, `summary`, `tags` i `content`
+- `folder` filtruje po dokladnej sciezce, np. `klienci/sebastian`
+- `folderPrefix` filtruje po galezi, np. `klienci`
+
+### 10a. Lista folderow
+
+```http
+GET /api/documents/folders/list
+```
+
+Przyklad:
+
+```bash
+curl -H "X-API-Key: $CLAUDE_API_KEY" \
+  "https://oferty.soft-synergy.com/api/documents/folders/list"
+```
+
+### 10b. Drzewo folderow
+
+```http
+GET /api/documents/folders/tree
+```
+
+To jest endpoint do zbudowania explorera folderow. Zwraca drzewo z:
+
+- `path`
+- `name`
+- `parentPath`
+- `children`
+- `documentCount`
+- `totalDocumentCount`
+- `childFolderCount`
+
+### 10c. Tworzenie folderu
+
+```http
+POST /api/documents/folders
+Content-Type: application/json
+```
+
+Przyklad:
+
+```json
+{
+  "path": "klienci/sebastian"
+}
+```
+
+Mozna tez wyslac:
+
+```json
+{
+  "parentPath": "klienci",
+  "name": "sebastian"
+}
+```
+
+### 10d. Zmiana nazwy / przeniesienie folderu
+
+```http
+PATCH /api/documents/folders
+Content-Type: application/json
+```
+
+Przyklad:
+
+```json
+{
+  "fromPath": "klienci/sebastian",
+  "toPath": "klienci/sebastian-archiwum"
+}
+```
+
+Ta operacja przenosi tez podfoldery i dokumenty z calej galezi.
+
+### 10e. Usuniecie folderu
+
+```http
+DELETE /api/documents/folders
+```
+
+Przyklad:
+
+```bash
+curl -X DELETE \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $CLAUDE_API_KEY" \
+  -d '{"path":"klienci/sebastian"}' \
+  https://oferty.soft-synergy.com/api/documents/folders
+```
+
+Folder mozna usunac tylko wtedy, gdy jest pusty.
 
 ### 11. Pobranie dokumentu po ID
 
@@ -371,6 +521,7 @@ Przyklad:
 {
   "title": "Playbook onboarding sprzedawcy",
   "type": "playbook",
+  "folder": "klienci/sebastian",
   "slug": "playbook-onboarding-sprzedawcy",
   "summary": "Kroki wdrozenia nowej osoby do procesu sprzedazowego.",
   "tags": ["onboarding", "sprzedaz", "procedura"],
@@ -382,6 +533,7 @@ Wazne pola:
 
 - `title` jest wymagany
 - `type`: `document` albo `playbook`
+- `folder`: opcjonalna sciezka folderu, np. `klienci/sebastian`
 - `slug` jest opcjonalny, jesli go nie podasz, wygeneruje sie z tytulu
 - `summary` jest opcjonalny
 - `tags` moze byc tablica albo stringiem CSV
@@ -435,6 +587,7 @@ curl -X PUT \
   -d '{
     "title": "Playbook handoff projektu",
     "type": "playbook",
+    "folder": "klienci/sebastian",
     "summary": "Procedura przekazania projektu do realizacji.",
     "tags": ["handoff", "projekt", "delivery"],
     "content": "<h1>Handoff</h1><p>...</p>"
@@ -446,6 +599,21 @@ curl -X PUT \
 
 ```http
 DELETE /api/documents/:id
+```
+
+### 18. Przeniesienie dokumentu do folderu
+
+```http
+PATCH /api/documents/:id/move
+Content-Type: application/json
+```
+
+Przyklad:
+
+```json
+{
+  "folder": "klienci/sebastian"
+}
 ```
 
 ## Rekomendowany workflow dla Claude
@@ -472,10 +640,19 @@ DELETE /api/documents/:id
 ### Zarzadzanie baza wiedzy Claude
 
 1. Jesli Claude zna staly identyfikator wpisu, niech uzywa `PUT /api/documents/slug/:slug`.
-2. Jesli Claude chce znalezc wiedze po temacie, niech uzywa `GET /api/documents?q=...&includeContent=true`.
-3. Dla procedur i instrukcji ustawiaj `type=playbook`.
-4. Dla normalnych materialow referencyjnych ustawiaj `type=document`.
-5. Do organizacji rekordow uzywaj `tags` i `summary`.
+2. Jesli Claude chce odtworzyc explorer folderow, niech zacznie od `GET /api/documents/folders/tree`.
+3. Jesli Claude chce znalezc wiedze po temacie, niech uzywa `GET /api/documents?q=...&includeContent=true`.
+4. Dla procedur i instrukcji ustawiaj `type=playbook`.
+5. Dla normalnych materialow referencyjnych ustawiaj `type=document`.
+6. Do segmentacji uzywaj `folder`, np. `klienci/sebastian` albo `wewnetrzne/hr`.
+7. Do organizacji rekordow uzywaj `tags` i `summary`.
+
+### Odczyt portfolio przez Claude
+
+1. Pobierz `GET /api/portfolio?active=true&lang=pl`, gdy chcesz pokazac aktualne realizacje.
+2. Filtruj po `category`, jesli potrzebujesz tylko web, mobile, api itd.
+3. Przy konkretnym case study pobierz `GET /api/portfolio/:id?lang=pl`.
+4. Traktuj portfolio jako read-only.
 
 ## Kody odpowiedzi
 
@@ -535,6 +712,7 @@ Ten klucz ma umozliwiac tylko:
 - tworzenie, edycje, odczyt i usuwanie taskow
 - dodawanie update'ow do taskow
 - tworzenie, wyszukiwanie, odczyt, edycje i usuwanie dokumentow oraz playbookow
+- odczyt portfolio
 
 Ten klucz nie powinien byc uzywany do:
 

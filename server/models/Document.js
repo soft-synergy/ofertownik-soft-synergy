@@ -31,6 +31,12 @@ const documentSchema = new mongoose.Schema({
     default: '',
     trim: true
   },
+  folder: {
+    type: String,
+    default: '',
+    trim: true,
+    index: true
+  },
   tags: [{
     type: String,
     trim: true,
@@ -53,5 +59,6 @@ const documentSchema = new mongoose.Schema({
 documentSchema.index({ slug: 1 });
 documentSchema.index({ type: 1, updatedAt: -1 });
 documentSchema.index({ tags: 1 });
+documentSchema.index({ folder: 1, updatedAt: -1 });
 
 module.exports = mongoose.model('Document', documentSchema);

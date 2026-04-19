@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
-const DEFAULT_CLAUDE_SCOPES = ['tasks:read', 'tasks:write', 'projects:read', 'users:read', 'documents:read', 'documents:write'];
+const DEFAULT_CLAUDE_SCOPES = ['tasks:read', 'tasks:write', 'projects:read', 'users:read', 'documents:read', 'documents:write', 'portfolio:read'];
 
 const getApiKeyFromRequest = (req) => {
   const xApiKey = req.header('X-API-Key') || req.header('x-api-key');

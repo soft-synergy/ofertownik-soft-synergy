@@ -304,11 +304,17 @@ export const getDocumentPublicUrl = (slug) => `${API_BASE}/dokumenty/${slug}`;
 
 export const documentsAPI = {
   getAll: (params) => api.get('/api/documents', { params }).then(res => res.data),
+  getFolders: (params) => api.get('/api/documents/folders/list', { params }).then(res => res.data),
+  getFolderTree: () => api.get('/api/documents/folders/tree').then(res => res.data),
+  createFolder: (data) => api.post('/api/documents/folders', data).then(res => res.data),
+  renameFolder: (fromPath, toPath) => api.patch('/api/documents/folders', { fromPath, toPath }).then(res => res.data),
+  deleteFolder: (path) => api.delete('/api/documents/folders', { data: { path } }).then(res => res.data),
   getById: (id) => api.get(`/api/documents/${id}`).then(res => res.data),
   getBySlug: (slug) => api.get(`/api/documents/slug/${slug}`).then(res => res.data),
   create: (data) => api.post('/api/documents', data).then(res => res.data),
   update: (id, data) => api.put(`/api/documents/${id}`, data).then(res => res.data),
   patch: (id, data) => api.patch(`/api/documents/${id}`, data).then(res => res.data),
   upsertBySlug: (slug, data) => api.put(`/api/documents/slug/${slug}`, data).then(res => res.data),
+  move: (id, folder) => api.patch(`/api/documents/${id}/move`, { folder }).then(res => res.data),
   delete: (id) => api.delete(`/api/documents/${id}`).then(res => res.data),
 };
