@@ -430,44 +430,13 @@ router.post('/:id/clarification-response', [
   }
 });
 
-// Sprawdzenie AI przed wpisaniem kwoty (bez zapisu) — musi być przed GET /:id
-router.get('/:id/final-estimation-gate', auth, requireScope('projects:write'), async (req, res) => {
-  try {
-    const project = await Project.findById(req.params.id);
-    if (!project) return res.status(404).json({ message: 'Projekt nie został znaleziony' });
-    if (!canEditProject(project, req.user)) return res.status(403).json({ message: 'Brak uprawnień' });
-    if (project.offerType !== 'preliminary') {
-      return res.status(400).json({ message: 'Bramka AI dotyczy tylko ofert wstępnych' });
-    }
-
-    const { analyzeFinalEstimationReadiness } = require('../services/aiFinalEstimationGate');
-    try {
-      const gate = await analyzeFinalEstimationReadiness(project);
-      return res.json({ ...gate, gateCheckOk: true, gateCheckFailed: false });
-    } catch (gateErr) {
-      console.error('[final-estimation-gate] warning:', gateErr.message || gateErr);
-      return res.json({
-        canEstimateFinalNow: true,
-        hardBlockers: [],
-        risksToFlagAtFinalOffer: [],
-        clarificationQuestions: [],
-        proposedClientClarificationMessage: '',
-        gateCheckOk: false,
-        gateCheckFailed: true,
-        gateCheckMessage: gateErr.message || 'Błąd sprawdzania AI'
-      });
-    }
-  } catch (e) {
-    console.error('final-estimation-gate error:', e);
-    return res.status(500).json({ message: 'Błąd serwera' });
-  }
-});
-
 // Submit final estimate (single total) and mark as "Do przygotowania oferty finalnej" (green highlight)
 router.post('/:id/submit-final-estimate', [
   auth,
   requireScope('projects:write'),
-  body('total').isNumeric().toFloat().custom(v => v >= 0)
+  body('mode').optional().isIn(['fixed', 'hourly']),
+  body('total').optional().isNumeric().toFloat().custom(v => v >= 0),
+  body('hourlyRate').optional().isNumeric().toFloat().custom(v => v > 0)
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -483,55 +452,34 @@ router.post('/:id/submit-final-estimate', [
       return res.status(400).json({ message: 'Ta akcja jest dostępna tylko dla ofert wstępnych' });
     }
 
-    // AI gate: blokuj zapis wyceny finalnej tylko przy twardych blokerach
-    let gate = {
-      canEstimateFinalNow: true,
-      hardBlockers: [],
-      risksToFlagAtFinalOffer: [],
-      clarificationQuestions: []
-    };
-    let gateFromAi = false;
-    try {
-      const { analyzeFinalEstimationReadiness } = require('../services/aiFinalEstimationGate');
-      gate = await analyzeFinalEstimationReadiness(project);
-      gateFromAi = true;
-    } catch (gateErr) {
-      // fail-open: nie blokujemy pracy przy awarii AI, ale logujemy problem
-      console.error('[submit-final-estimate][ai-gate] warning:', gateErr.message || gateErr);
+    const mode = req.body.mode === 'hourly' ? 'hourly' : 'fixed';
+    const total = req.body.total != null && req.body.total !== '' ? Number(req.body.total) : null;
+    const hourlyRate = req.body.hourlyRate != null && req.body.hourlyRate !== '' ? Number(req.body.hourlyRate) : null;
+
+    if (mode === 'fixed' && (!Number.isFinite(total) || total <= 0)) {
+      return res.status(400).json({ message: 'Nieprawidłowa cena fixed' });
     }
 
-    if (gateFromAi) {
-      const hasBlockers = Array.isArray(gate.hardBlockers) && gate.hardBlockers.length > 0;
-      if (hasBlockers || !gate.canEstimateFinalNow) {
-        return res.status(409).json({
-          message:
-            'Nie można zapisać wyceny finalnej: AI wykryło twarde blokery lub niewystarczający zakres do odpowiedzialnej wyceny. Uzupełnij notatki / doprecyzuj z klientem albo wybierz „Doprecyzowanie”.',
-          canEstimateFinalNow: Boolean(gate.canEstimateFinalNow),
-          hardBlockers: gate.hardBlockers || [],
-          risksToFlagAtFinalOffer: gate.risksToFlagAtFinalOffer || [],
-          clarificationQuestions: gate.clarificationQuestions || [],
-          proposedClientClarificationMessage: gate.proposedClientClarificationMessage || ''
-        });
-      }
+    if (mode === 'hourly' && (!Number.isFinite(hourlyRate) || hourlyRate <= 0)) {
+      return res.status(400).json({ message: 'Nieprawidłowa stawka godzinowa' });
     }
 
-    const total = Number(req.body.total);
-    project.finalEstimateTotal = total;
+    project.finalEstimateMode = mode;
+    project.finalEstimateHourlyRate = mode === 'hourly' ? hourlyRate : null;
+    project.finalEstimateTotal = mode === 'fixed' ? total : null;
     project.finalEstimateSubmittedAt = new Date();
-    project.finalOfferRisks = gate.risksToFlagAtFinalOffer || [];
+    project.finalOfferRisks = project.finalOfferRisks || [];
     project.status = 'to_prepare_final_offer';
 
-    // Keep pricing in sync with UI currency display (single-number input)
+    // Keep pricing in sync with UI currency display for fixed-price mode.
     project.pricing = project.pricing || {};
-    project.pricing.phase1 = total;
-    project.pricing.phase2 = 0;
-    project.pricing.phase3 = 0;
-    project.pricing.phase4 = 0;
-    // Jeśli mamy wycenę finalną, to cena w ofercie ma być dokładnie ta kwota.
-    // Szablon HTML pokazuje `priceRange`, jeśli jest ustawione `priceRange.min`,
-    // więc czyścimy ją, żeby wymuszona cena pochodziła z `pricing.total`.
+    if (mode === 'fixed') {
+      project.pricing.phase1 = total;
+      project.pricing.phase2 = 0;
+      project.pricing.phase3 = 0;
+      project.pricing.phase4 = 0;
+    }
     project.priceRange = { min: null, max: null };
-    // pricing.total is calculated in pre-save hook
 
     await project.save();
 
@@ -539,7 +487,9 @@ router.post('/:id/submit-final-estimate', [
     try {
       const { sendEmail } = require('../utils/emailService');
       const { finalEstimateSubmittedTemplate } = require('../utils/emailTemplates');
-      const subject = `💰 Wycena finalna zapisana: ${project.name}`;
+      const subject = mode === 'hourly'
+        ? `⏱️ Wycena godzinowa zapisana: ${project.name}`
+        : `💰 Wycena finalna zapisana: ${project.name}`;
       const html = finalEstimateSubmittedTemplate({
         projectName: project.name,
         clientName: project.clientName || '-',
@@ -547,7 +497,7 @@ router.post('/:id/submit-final-estimate', [
         clientEmail: project.clientEmail || '-',
         clientPhone: project.clientPhone || '-',
         consultationNotes: project.consultationNotes || '',
-        total,
+        total: mode === 'hourly' ? hourlyRate : total,
         projectId: project._id.toString()
       });
       await sendEmail({ to: 'rizka.amelia@soft-synergy.com', subject, html });
@@ -569,11 +519,10 @@ router.post('/:id/submit-final-estimate', [
       .populate('teamMembers.user', 'firstName lastName email role avatar');
 
     return res.json({
-      message: 'Zapisano wycenę finalną i ustawiono status: Do przygotowania oferty finalnej',
-      project: updated,
-      risksToFlagAtFinalOffer: gate.risksToFlagAtFinalOffer || [],
-      hardBlockers: gate.hardBlockers || [],
-      clarificationQuestions: gate.clarificationQuestions || []
+      message: mode === 'hourly'
+        ? 'Zapisano wycenę godzinową i ustawiono status: Do przygotowania oferty finalnej'
+        : 'Zapisano wycenę finalną i ustawiono status: Do przygotowania oferty finalnej',
+      project: updated
     });
   } catch (e) {
     console.error('submit-final-estimate error:', e);

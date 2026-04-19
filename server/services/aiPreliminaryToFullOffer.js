@@ -233,10 +233,19 @@ function normalizeTimeline(draft, existing) {
  */
 function draftToProjectUpdate(project, draft) {
   const modules = normalizeModules(draft);
-  const pricing = normalizePricingToTargetTotal(
-    draft.pricing,
-    project.finalEstimateTotal
-  );
+  const isHourlyEstimate = project.finalEstimateMode === 'hourly';
+  const pricing = isHourlyEstimate
+    ? {
+        phase1: 0,
+        phase2: 0,
+        phase3: 0,
+        phase4: 0,
+        total: 0
+      }
+    : normalizePricingToTargetTotal(
+        draft.pricing,
+        project.finalEstimateTotal
+      );
 
   const pr = draft.priceRange || {};
   const priceRange = {
@@ -245,7 +254,7 @@ function draftToProjectUpdate(project, draft) {
   };
   // Przy wycenie finalnej cena ma wynikać z `pricing.total` (dokładna kwota),
   // a nie z widełek `priceRange` wygenerowanych przez AI.
-  if (optionalPositiveNumber(project.finalEstimateTotal)) {
+  if (optionalPositiveNumber(project.finalEstimateTotal) || isHourlyEstimate) {
     priceRange.min = null;
     priceRange.max = null;
   }
@@ -268,7 +277,10 @@ function draftToProjectUpdate(project, draft) {
     : [];
   const mergedReservations = [
     ...customReservations,
-    ...(Array.isArray(project.finalOfferRisks) ? project.finalOfferRisks : [])
+    ...(Array.isArray(project.finalOfferRisks) ? project.finalOfferRisks : []),
+    ...(isHourlyEstimate
+      ? ['Zadecydowaliśmy, że w tym projekcie możliwa jest wyłącznie wycena godzinowa 100 zł/h i nie ma możliwości przygotowania wyceny fixed price.']
+      : [])
   ].map((s) => String(s).trim()).filter(Boolean).slice(0, 30);
 
   return {

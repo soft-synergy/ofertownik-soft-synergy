@@ -158,6 +158,15 @@ const projectSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  finalEstimateMode: {
+    type: String,
+    enum: ['fixed', 'hourly'],
+    default: 'fixed'
+  },
+  finalEstimateHourlyRate: {
+    type: Number,
+    default: null
+  },
   // Ryzyka do pokazania przy przygotowaniu oferty finalnej (wynik analizy AI)
   finalOfferRisks: {
     type: [String],

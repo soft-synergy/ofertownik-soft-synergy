@@ -125,7 +125,10 @@ async function upsertPrepareFinalOfferTask(project, userId) {
   const title = `Do przygotowania oferty finalnej – ${project.name || 'Projekt'}`;
   const total = project.finalEstimateTotal ?? project.pricing?.total ?? 0;
   const formatted = new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN' }).format(total);
-  const description = (project.clientName ? `Klient: ${project.clientName}\n` : '') + `Wycena: ${formatted}`;
+  const estimateLine = project.finalEstimateMode === 'hourly'
+    ? `Wycena: 100 zł/h, bez możliwości fixed price`
+    : `Wycena: ${formatted}`;
+  const description = (project.clientName ? `Klient: ${project.clientName}\n` : '') + estimateLine;
 
   const t = new Task({
     title,
