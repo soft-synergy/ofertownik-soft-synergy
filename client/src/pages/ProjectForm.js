@@ -1592,38 +1592,44 @@ const NotesSection = ({ projectId }) => {
         </div>
       </div>
 
-      <div className="mt-6 space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium text-gray-700">Follow-up</h3>
-          <div className="text-xs text-gray-500">
-            {project?.followUps?.length || 0}/3 wysłane
-            {project?.nextFollowUpDueAt && (
-              <span className="ml-2">
-                Następny termin: {new Date(project.nextFollowUpDueAt).toLocaleDateString('pl-PL')}
-              </span>
-            )}
+      {project?.followUpsEnabled !== false ? (
+        <div className="mt-6 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium text-gray-700">Follow-up</h3>
+            <div className="text-xs text-gray-500">
+              {project?.followUps?.length || 0}/3 wysłane
+              {project?.nextFollowUpDueAt && (
+                <span className="ml-2">
+                  Następny termin: {new Date(project.nextFollowUpDueAt).toLocaleDateString('pl-PL')}
+                </span>
+              )}
+            </div>
+          </div>
+          <textarea
+            value={followUpNote}
+            onChange={(e) => setFollowUpNote(e.target.value)}
+            rows={3}
+            className="input-field"
+            placeholder="Dodaj notatkę do wysłanego follow-upu (wymagane)"
+          />
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => followUpNote.trim() && addFollowUpMutation.mutate({ id: projectId, note: followUpNote.trim() })}
+              className="btn-secondary flex items-center"
+              disabled={addFollowUpMutation.isLoading || (project?.followUps?.length || 0) >= 3 || project?.status === 'accepted' || project?.status === 'cancelled'}
+              title={(project?.followUps?.length || 0) >= 3 ? 'Wysłano już 3 follow-upy' : ''}
+            >
+              <Send className="h-4 w-4 mr-2" />
+              Zapisz follow-up
+            </button>
           </div>
         </div>
-        <textarea
-          value={followUpNote}
-          onChange={(e) => setFollowUpNote(e.target.value)}
-          rows={3}
-          className="input-field"
-          placeholder="Dodaj notatkę do wysłanego follow-upu (wymagane)"
-        />
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={() => followUpNote.trim() && addFollowUpMutation.mutate({ id: projectId, note: followUpNote.trim() })}
-            className="btn-secondary flex items-center"
-            disabled={addFollowUpMutation.isLoading || (project?.followUps?.length || 0) >= 3 || project?.status === 'accepted' || project?.status === 'cancelled'}
-            title={(project?.followUps?.length || 0) >= 3 ? 'Wysłano już 3 follow-upy' : ''}
-          >
-            <Send className="h-4 w-4 mr-2" />
-            Zapisz follow-up
-          </button>
+      ) : (
+        <div className="mt-6 rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
+          Dla projektów utworzonych ze spotkań follow-upy są wyłączone i nie tworzą się automatycznie.
         </div>
-      </div>
+      )}
 
       <div className="mt-6">
         <h3 className="text-sm font-medium text-gray-700 mb-2">Historia notatek</h3>
@@ -1648,7 +1654,7 @@ const NotesSection = ({ projectId }) => {
         )}
       </div>
 
-      {project?.followUps?.length ? (
+      {project?.followUpsEnabled !== false && project?.followUps?.length ? (
         <div className="mt-6">
           <h3 className="text-sm font-medium text-gray-700 mb-2">Historia follow-upów</h3>
           <ul className="space-y-3">

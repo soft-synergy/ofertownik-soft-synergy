@@ -270,6 +270,10 @@ const projectSchema = new mongoose.Schema({
     note: { type: String, default: '' },
     author: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }
   }],
+  followUpsEnabled: {
+    type: Boolean,
+    default: true
+  },
   followUpScheduleDays: {
     type: [Number],
     default: [4, 4, 7]
@@ -363,7 +367,12 @@ projectSchema.pre('save', function(next) {
   try {
     const maxFollowUps = 3;
     const numSent = Array.isArray(this.followUps) ? this.followUps.length : 0;
-    if (this.status === 'accepted' || this.status === 'cancelled' || numSent >= maxFollowUps) {
+    if (
+      this.followUpsEnabled === false ||
+      this.status === 'accepted' ||
+      this.status === 'cancelled' ||
+      numSent >= maxFollowUps
+    ) {
       this.nextFollowUpDueAt = null;
       return next();
     }

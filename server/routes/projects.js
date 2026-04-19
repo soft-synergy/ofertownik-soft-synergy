@@ -791,6 +791,10 @@ router.post('/:id/followups', [
       return res.status(400).json({ message: 'Projekt został już zaakceptowany lub anulowany' });
     }
 
+    if (project.followUpsEnabled === false) {
+      return res.status(400).json({ message: 'Follow-upy są wyłączone dla projektów ze spotkań' });
+    }
+
     const numSent = Array.isArray(project.followUps) ? project.followUps.length : 0;
     if (numSent >= 3) {
       return res.status(400).json({ message: 'Wysłano już maksymalną liczbę follow-upów (3)' });

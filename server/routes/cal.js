@@ -167,6 +167,7 @@ router.post('/', async (req, res) => {
       client: client ? client._id : undefined,
       offerType: 'preliminary',
       status: 'draft',
+      followUpsEnabled: false,
       consultationNotes,
       calBookingUrl: calBookingUrl || undefined,
       modules: [{ name: 'Moduł do ustalenia', description: 'Szczegóły po konsultacji', color: 'blue' }],

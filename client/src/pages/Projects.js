@@ -37,6 +37,9 @@ const Projects = () => {
   const [finalEstimateTotal, setFinalEstimateTotal] = useState('');
   const [clarificationText, setClarificationText] = useState('');
   const [clarificationResponseText, setClarificationResponseText] = useState('');
+  const [submittingFinalEstimate, setSubmittingFinalEstimate] = useState(false);
+  const [submittingHourlyEstimate, setSubmittingHourlyEstimate] = useState(false);
+  const [submittingClarification, setSubmittingClarification] = useState(false);
   const [submittingClarificationResponse, setSubmittingClarificationResponse] = useState(false);
   /** AI zablokowało »Do wyceny finalnej« — modal z możliwością force */
   const [finalEstimationAiBlockModal, setFinalEstimationAiBlockModal] = useState(null);
@@ -187,6 +190,7 @@ const Projects = () => {
       toast.error('Wprowadź poprawną kwotę');
       return;
     }
+    setSubmittingFinalEstimate(true);
     try {
       await projectsAPI.submitFinalEstimate(selectedProject._id, {
         mode: 'fixed',
@@ -197,11 +201,14 @@ const Projects = () => {
       refetch();
     } catch (error) {
       toast.error(error.response?.data?.message || 'Błąd podczas zapisywania wyceny');
+    } finally {
+      setSubmittingFinalEstimate(false);
     }
   };
 
   const handleSubmitHourlyEstimate = async () => {
     if (!selectedProject) return;
+    setSubmittingHourlyEstimate(true);
     try {
       await projectsAPI.submitFinalEstimate(selectedProject._id, {
         mode: 'hourly',
@@ -212,6 +219,8 @@ const Projects = () => {
       refetch();
     } catch (error) {
       toast.error(error.response?.data?.message || 'Błąd podczas zapisywania wyceny godzinowej');
+    } finally {
+      setSubmittingHourlyEstimate(false);
     }
   };
 
@@ -220,6 +229,7 @@ const Projects = () => {
       toast.error('Wpisz treść doprecyzowania');
       return;
     }
+    setSubmittingClarification(true);
     try {
       await projectsAPI.requestClarification(selectedProject._id, clarificationText.trim());
       toast.success('Doprecyzowanie zapisane. Rizka dostanie maila – odpowiedź wpisuje w panelu.');
@@ -227,6 +237,8 @@ const Projects = () => {
       refetch();
     } catch (error) {
       toast.error(error.response?.data?.message || 'Błąd podczas zapisywania doprecyzowania');
+    } finally {
+      setSubmittingClarification(false);
     }
   };
 
@@ -776,9 +788,16 @@ const Projects = () => {
                   <button
                     onClick={handleSubmitClarificationResponse}
                     disabled={!clarificationResponseText.trim() || submittingClarificationResponse}
-                    className="btn-primary bg-amber-600 hover:bg-amber-700"
+                    className="btn-primary bg-amber-600 hover:bg-amber-700 disabled:cursor-wait"
                   >
-                    {submittingClarificationResponse ? 'Zapisywanie...' : 'Zapisz odpowiedź (status → Do wyceny finalnej)'}
+                    {submittingClarificationResponse ? (
+                      <>
+                        <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/80 border-t-transparent mr-2 align-[-2px]" />
+                        Zapisywanie odpowiedzi...
+                      </>
+                    ) : (
+                      'Zapisz odpowiedź (status → Do wyceny finalnej)'
+                    )}
                   </button>
                 </div>
               ) : null;
@@ -803,13 +822,23 @@ const Projects = () => {
                   <button
                     onClick={handleSubmitFinalEstimate}
                     disabled={
+                      submittingFinalEstimate ||
                       !finalEstimateTotal ||
                       parseFloat(finalEstimateTotal) <= 0
                     }
-                    className="btn-primary bg-orange-600 hover:bg-orange-700"
+                    className="btn-primary bg-orange-600 hover:bg-orange-700 disabled:cursor-wait"
                   >
-                    <DollarSign className="h-4 w-4 inline mr-2" />
-                    Zapisz wycenę finalną
+                    {submittingFinalEstimate ? (
+                      <>
+                        <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/80 border-t-transparent mr-2 align-[-2px]" />
+                        Zapisywanie wyceny...
+                      </>
+                    ) : (
+                      <>
+                        <DollarSign className="h-4 w-4 inline mr-2" />
+                        Zapisz wycenę finalną
+                      </>
+                    )}
                   </button>
                 </div>
 
@@ -825,10 +854,20 @@ const Projects = () => {
                     </p>
                     <button
                       onClick={handleSubmitHourlyEstimate}
-                      className="btn-primary bg-green-600 hover:bg-green-700"
+                      disabled={submittingHourlyEstimate}
+                      className="btn-primary bg-green-600 hover:bg-green-700 disabled:cursor-wait"
                     >
-                      <DollarSign className="h-4 w-4 inline mr-2" />
-                      Zapisz wycenę godzinową 100 zł/h
+                      {submittingHourlyEstimate ? (
+                        <>
+                          <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/80 border-t-transparent mr-2 align-[-2px]" />
+                          Zapisywanie godzinówki...
+                        </>
+                      ) : (
+                        <>
+                          <DollarSign className="h-4 w-4 inline mr-2" />
+                          Zapisz wycenę godzinową 100 zł/h
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
@@ -844,11 +883,20 @@ const Projects = () => {
                   />
                   <button
                     onClick={handleSubmitClarification}
-                    disabled={!clarificationText.trim()}
-                    className="btn-secondary bg-amber-500 hover:bg-amber-600 text-white border-amber-600"
+                    disabled={!clarificationText.trim() || submittingClarification}
+                    className="btn-secondary bg-amber-500 hover:bg-amber-600 text-white border-amber-600 disabled:cursor-wait"
                   >
-                    <MessageCircle className="h-4 w-4 inline mr-2" />
-                    Zapisz doprecyzowanie
+                    {submittingClarification ? (
+                      <>
+                        <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/80 border-t-transparent mr-2 align-[-2px]" />
+                        Zapisywanie doprecyzowania...
+                      </>
+                    ) : (
+                      <>
+                        <MessageCircle className="h-4 w-4 inline mr-2" />
+                        Zapisz doprecyzowanie
+                      </>
+                    )}
                   </button>
                   <p className="text-xs text-gray-500 mt-1">Projekt wróci do statusu Aktywny.</p>
                 </div>

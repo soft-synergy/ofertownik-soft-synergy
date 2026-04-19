@@ -18,6 +18,10 @@ async function getFollowUpAssigneeId() {
  */
 async function completeCurrentAndCreateNextFollowUpTask(project, userId) {
   if (!project?._id) return null;
+  if (project.followUpsEnabled === false) {
+    await Task.deleteMany({ 'source.kind': 'followup', 'source.refId': project._id, status: { $ne: 'done' } });
+    return null;
+  }
   const projectId = project._id;
   const numSent = Array.isArray(project.followUps) ? project.followUps.length : 0;
   const nextDue = project.nextFollowUpDueAt ? new Date(project.nextFollowUpDueAt) : null;
@@ -68,6 +72,10 @@ async function completeCurrentAndCreateNextFollowUpTask(project, userId) {
 async function upsertFollowUpTask(project, userId) {
   if (!project?._id) return null;
   const projectId = project._id;
+  if (project.followUpsEnabled === false) {
+    await Task.deleteMany({ 'source.kind': 'followup', 'source.refId': projectId, status: { $ne: 'done' } });
+    return null;
+  }
   const numSent = Array.isArray(project.followUps) ? project.followUps.length : 0;
   const nextDue = project.nextFollowUpDueAt ? new Date(project.nextFollowUpDueAt) : null;
 
@@ -132,10 +140,11 @@ async function deleteFollowUpTask(projectId) {
  */
 async function syncAllFollowUpTasks(userId) {
   const projects = await Project.find({
+    followUpsEnabled: { $ne: false },
     nextFollowUpDueAt: { $ne: null },
     status: { $in: ['draft', 'active'] }
   })
-    .select('_id name clientName followUps followUpScheduleDays nextFollowUpDueAt owner createdBy')
+    .select('_id name clientName followUps followUpsEnabled followUpScheduleDays nextFollowUpDueAt owner createdBy')
     .lean();
 
   for (const p of projects) {
