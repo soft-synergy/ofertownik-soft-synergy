@@ -303,9 +303,12 @@ const API_BASE = process.env.REACT_APP_API_URL || 'https://oferty.soft-synergy.c
 export const getDocumentPublicUrl = (slug) => `${API_BASE}/dokumenty/${slug}`;
 
 export const documentsAPI = {
-  getAll: () => api.get('/api/documents').then(res => res.data),
+  getAll: (params) => api.get('/api/documents', { params }).then(res => res.data),
   getById: (id) => api.get(`/api/documents/${id}`).then(res => res.data),
+  getBySlug: (slug) => api.get(`/api/documents/slug/${slug}`).then(res => res.data),
   create: (data) => api.post('/api/documents', data).then(res => res.data),
   update: (id, data) => api.put(`/api/documents/${id}`, data).then(res => res.data),
+  patch: (id, data) => api.patch(`/api/documents/${id}`, data).then(res => res.data),
+  upsertBySlug: (slug, data) => api.put(`/api/documents/slug/${slug}`, data).then(res => res.data),
   delete: (id) => api.delete(`/api/documents/${id}`).then(res => res.data),
 };

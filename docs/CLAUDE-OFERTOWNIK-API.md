@@ -9,6 +9,7 @@ Claude ma miec dostep do:
 - odczytu projektow
 - pelnego zarzadzania taskami
 - odczytu listy pracownikow, aby przypisywac taski do konkretnych osob
+- pelnego zarzadzania dokumentami i playbookami jako baza wiedzy Claude
 
 Klucz **nie daje uprawnien do edycji projektow**. Projektami mozna tylko czytac.
 
@@ -49,7 +50,7 @@ CLAUDE_API_USER_EMAIL=claude-api@soft-synergy.local
 Dostepne scope dla tego klucza:
 
 ```text
-tasks:read,tasks:write,projects:read,users:read
+tasks:read,tasks:write,projects:read,users:read,documents:read,documents:write
 ```
 
 ## Zasady pracy Claude
@@ -60,6 +61,7 @@ Claude powinien:
 - zawsze wysylac `X-API-Key`
 - przed przypisaniem taska pobrac liste uzytkownikow z `/api/auth/users`
 - przy operacjach na taskach operowac na `_id`
+- przy dokumentach preferowac `slug`, bo to stabilny identyfikator dla bazy wiedzy Claude
 - przy odczycie projektow traktowac API jako read-only
 - przy bledzie `401` uznac, ze klucz jest niepoprawny albo nie zostal wyslany
 - przy bledzie `403` uznac, ze operacja wykracza poza scope klucza
@@ -290,6 +292,162 @@ Payload:
 DELETE /api/tasks/:id
 ```
 
+## Dokumenty i playbooki
+
+Dokumenty i playbooki sa przechowywane w jednej kolekcji. Rozroznia je pole:
+
+```text
+type=document | playbook
+```
+
+Claude moze traktowac ten modul jak baze wiedzy:
+
+- `document` dla zwyklych dokumentow
+- `playbook` dla procedur, instrukcji i know-how
+
+### 10. Lista dokumentow / playbookow
+
+```http
+GET /api/documents
+```
+
+Obslugiwane query params:
+
+- `q`
+- `type`
+- `tag`
+- `slug`
+- `limit`
+- `includeContent`
+
+Przyklady:
+
+```bash
+curl -H "X-API-Key: $CLAUDE_API_KEY" \
+  "https://oferty.soft-synergy.com/api/documents?type=playbook&limit=100"
+```
+
+```bash
+curl -H "X-API-Key: $CLAUDE_API_KEY" \
+  "https://oferty.soft-synergy.com/api/documents?q=onboarding&includeContent=true"
+```
+
+Uwagi:
+
+- `includeContent=false` domyslnie ukrywa pelna tresc, zeby odpowiedzi byly lzejsze
+- `q` szuka po `title`, `slug`, `summary`, `tags` i `content`
+
+### 11. Pobranie dokumentu po ID
+
+```http
+GET /api/documents/:id
+```
+
+### 12. Pobranie dokumentu po slug
+
+To jest rekomendowany endpoint dla Claude.
+
+```http
+GET /api/documents/slug/:slug
+```
+
+Przyklad:
+
+```bash
+curl -H "X-API-Key: $CLAUDE_API_KEY" \
+  https://oferty.soft-synergy.com/api/documents/slug/playbook-onboarding
+```
+
+### 13. Tworzenie dokumentu / playbooka
+
+```http
+POST /api/documents
+Content-Type: application/json
+```
+
+Przyklad:
+
+```json
+{
+  "title": "Playbook onboarding sprzedawcy",
+  "type": "playbook",
+  "slug": "playbook-onboarding-sprzedawcy",
+  "summary": "Kroki wdrozenia nowej osoby do procesu sprzedazowego.",
+  "tags": ["onboarding", "sprzedaz", "procedura"],
+  "content": "<h1>Playbook onboarding</h1><p>...</p>"
+}
+```
+
+Wazne pola:
+
+- `title` jest wymagany
+- `type`: `document` albo `playbook`
+- `slug` jest opcjonalny, jesli go nie podasz, wygeneruje sie z tytulu
+- `summary` jest opcjonalny
+- `tags` moze byc tablica albo stringiem CSV
+- `content` moze zawierac HTML wyswietlany publicznie pod `/dokumenty/:slug`
+
+### 14. Pelna aktualizacja dokumentu
+
+```http
+PUT /api/documents/:id
+Content-Type: application/json
+```
+
+### 15. Czesciowa aktualizacja dokumentu
+
+Najwygodniejsza do drobnych zmian.
+
+```http
+PATCH /api/documents/:id
+Content-Type: application/json
+```
+
+Przyklad:
+
+```json
+{
+  "summary": "Zaktualizowana wersja procesu.",
+  "tags": ["onboarding", "sales", "v2"]
+}
+```
+
+### 16. Upsert po slug
+
+Najlepsza opcja, jesli Claude ma utrzymywac stale rekordy swojej bazy wiedzy.
+
+```http
+PUT /api/documents/slug/:slug
+Content-Type: application/json
+```
+
+Zachowanie:
+
+- jesli dokument nie istnieje, zostanie utworzony
+- jesli istnieje, zostanie zaktualizowany
+
+Przyklad:
+
+```bash
+curl -X PUT \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $CLAUDE_API_KEY" \
+  -d '{
+    "title": "Playbook handoff projektu",
+    "type": "playbook",
+    "summary": "Procedura przekazania projektu do realizacji.",
+    "tags": ["handoff", "projekt", "delivery"],
+    "content": "<h1>Handoff</h1><p>...</p>"
+  }' \
+  https://oferty.soft-synergy.com/api/documents/slug/playbook-handoff-projektu
+```
+
+### 17. Usuniecie dokumentu
+
+```http
+DELETE /api/documents/:id
+```
+
 ## Rekomendowany workflow dla Claude
 
 ### Odczyt projektow
@@ -310,6 +468,14 @@ DELETE /api/tasks/:id
 1. Pobierz aktualny task przez `GET /api/tasks/:id`.
 2. Zmien tylko potrzebne pola przez `PUT /api/tasks/:id`.
 3. Po zmianie statusu na `done` system moze automatycznie utworzyc kolejny task cykliczny, jesli task byl elementem serii.
+
+### Zarzadzanie baza wiedzy Claude
+
+1. Jesli Claude zna staly identyfikator wpisu, niech uzywa `PUT /api/documents/slug/:slug`.
+2. Jesli Claude chce znalezc wiedze po temacie, niech uzywa `GET /api/documents?q=...&includeContent=true`.
+3. Dla procedur i instrukcji ustawiaj `type=playbook`.
+4. Dla normalnych materialow referencyjnych ustawiaj `type=document`.
+5. Do organizacji rekordow uzywaj `tags` i `summary`.
 
 ## Kody odpowiedzi
 
@@ -368,6 +534,7 @@ Ten klucz ma umozliwiac tylko:
 - czytanie uzytkownikow
 - tworzenie, edycje, odczyt i usuwanie taskow
 - dodawanie update'ow do taskow
+- tworzenie, wyszukiwanie, odczyt, edycje i usuwanie dokumentow oraz playbookow
 
 Ten klucz nie powinien byc uzywany do:
 
