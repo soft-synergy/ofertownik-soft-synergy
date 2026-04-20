@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="{{lang}}" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{t.hourlyOfferTitle}} — {{clientName}} — Soft Synergy</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/png" href="/generated-offers/logo-removebg-preview.png">
+    <style>
+        body { font-family: 'Inter', sans-serif; background: linear-gradient(180deg, #0f172a 0%, #111827 100%); color: #dbe4ee; overflow-x: hidden; }
+        h1, h2, h3, h4 { font-family: 'Sora', sans-serif; color: #f8fafc; }
+        .glass-card { background: rgba(15, 23, 42, 0.68); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border: 1px solid rgba(148, 163, 184, 0.18); border-radius: 1.25rem; }
+        .accent-line { background: linear-gradient(90deg, #10b981 0%, #06b6d4 50%, #3b82f6 100%); height: 4px; border-radius: 9999px; }
+        .reveal { opacity: 0; transform: translateY(24px); transition: all 0.7s ease; }
+        .reveal.visible { opacity: 1; transform: translateY(0); }
+        @media print {
+            .no-print { display: none !important; }
+            body { background: #ffffff !important; color: #111827 !important; }
+            .glass-card { background: #ffffff !important; border: 1px solid #d1d5db !important; box-shadow: none !important; }
+            h1, h2, h3, h4, p, li, span, div { color: #111827 !important; }
+            .accent-line { background: #10b981 !important; }
+            .container { max-width: none !important; padding: 16px !important; }
+            section { page-break-inside: avoid; }
+        }
+    </style>
+</head>
+<body class="antialiased">
+    <div class="max-w-5xl mx-auto p-4 md:p-8 lg:p-12">
+        <header class="glass-card p-8 mb-12 reveal">
+            <div class="flex flex-col md:flex-row md:justify-between gap-6">
+                <div class="flex items-center gap-4">
+                    <img src="https://oferty.soft-synergy.com/generated-offers/logo-removebg-preview.png" alt="Soft Synergy Logo" class="w-20 h-20 object-contain">
+                    <div>
+                        <h1 class="text-4xl font-extrabold bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-500 bg-clip-text text-transparent">
+                            Soft<span class="text-emerald-400">Synergy</span>
+                        </h1>
+                        <p class="text-slate-300 font-medium">{{t.companyTagline}}</p>
+                    </div>
+                </div>
+                <div class="text-left md:text-right">
+                    <h2 class="text-2xl font-bold">{{t.hourlyOfferTitle}}</h2>
+                    <p class="text-slate-300 mt-2">{{t.date}}: <span class="font-semibold">{{offerDate}}</span></p>
+                    <p class="text-slate-300">{{t.number}}: <span class="font-semibold">{{offerNumber}}</span></p>
+                </div>
+            </div>
+            <div class="accent-line my-6"></div>
+            <div class="grid md:grid-cols-2 gap-4">
+                <div class="rounded-2xl bg-white/5 p-5">
+                    <div class="text-sm uppercase tracking-[0.18em] text-emerald-300">{{t.forLabel}}</div>
+                    <div class="text-2xl font-bold mt-2">{{clientName}}</div>
+                    <div class="text-slate-300 mt-1">Do rąk: {{clientContact}}</div>
+                </div>
+                <div class="rounded-2xl bg-emerald-500/10 border border-emerald-400/20 p-5">
+                    <div class="text-sm uppercase tracking-[0.18em] text-emerald-300">{{t.hourlyRateLabel}}</div>
+                    <div class="text-4xl font-extrabold mt-2">{{hourlyRate}} PLN/h</div>
+                    <div class="text-slate-300 mt-2">Model time & materials, bez fixed price</div>
+                </div>
+            </div>
+        </header>
+
+        <main class="space-y-10">
+            <section class="glass-card p-8 reveal">
+                <h2 class="text-3xl font-bold mb-4">{{projectName}}</h2>
+                <p class="text-lg leading-8 text-slate-200">{{t.hourlyLead}}</p>
+                <div class="mt-6 text-slate-300 leading-8 whitespace-pre-wrap">{{description}}</div>
+            </section>
+
+            <section class="grid lg:grid-cols-[1.1fr_0.9fr] gap-8 reveal">
+                <div class="glass-card p-8">
+                    <h3 class="text-2xl font-bold mb-4">{{t.hourlyIncludedTitle}}</h3>
+                    <p class="text-slate-300 mb-6">{{t.hourlyIncludedLead}}</p>
+                    <div class="space-y-4">
+                        {{#each modules}}
+                        <div class="rounded-2xl border border-white/10 bg-white/5 p-5">
+                            <div class="flex items-start gap-4">
+                                <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center font-bold flex-shrink-0">{{add @index 1}}</div>
+                                <div>
+                                    <h4 class="text-xl font-semibold">{{name}}</h4>
+                                    <p class="text-slate-300 mt-2 leading-7">{{description}}</p>
+                                </div>
+                            </div>
+                        </div>
+                        {{/each}}
+                    </div>
+                </div>
+
+                <div class="space-y-8">
+                    <div class="glass-card p-8">
+                        <h3 class="text-2xl font-bold mb-4">{{t.hourlyModelTitle}}</h3>
+                        <div class="rounded-2xl bg-emerald-500/10 border border-emerald-400/20 p-5">
+                            <div class="text-sm text-emerald-300 uppercase tracking-[0.18em]">{{t.hourlyRateLabel}}</div>
+                            <div class="text-4xl font-extrabold mt-2">{{hourlyRate}} PLN/h</div>
+                        </div>
+                        <ul class="mt-6 space-y-3 text-slate-300 leading-7">
+                            <li>{{t.hourlySettlement1}}</li>
+                            <li>{{t.hourlySettlement2}}</li>
+                            <li>{{t.hourlySettlement3}}</li>
+                            <li>{{t.hourlySettlement4}}</li>
+                        </ul>
+                    </div>
+
+                    <div class="glass-card p-8">
+                        <h3 class="text-2xl font-bold mb-4">{{t.timeline}}</h3>
+                        <div class="space-y-4">
+                            <div class="rounded-2xl bg-white/5 p-4">
+                                <div class="text-sm text-slate-400">1</div>
+                                <div class="font-semibold">{{timeline.phase1.name}}</div>
+                                <div class="text-slate-300 text-sm mt-1">{{timeline.phase1.duration}}</div>
+                            </div>
+                            <div class="rounded-2xl bg-white/5 p-4">
+                                <div class="text-sm text-slate-400">2</div>
+                                <div class="font-semibold">{{timeline.phase2.name}}</div>
+                                <div class="text-slate-300 text-sm mt-1">{{timeline.phase2.duration}}</div>
+                            </div>
+                            <div class="rounded-2xl bg-white/5 p-4">
+                                <div class="text-sm text-slate-400">3</div>
+                                <div class="font-semibold">{{timeline.phase3.name}}</div>
+                                <div class="text-slate-300 text-sm mt-1">{{timeline.phase3.duration}}</div>
+                            </div>
+                            <div class="rounded-2xl bg-white/5 p-4">
+                                <div class="text-sm text-slate-400">4</div>
+                                <div class="font-semibold">{{timeline.phase4.name}}</div>
+                                <div class="text-slate-300 text-sm mt-1">{{timeline.phase4.duration}}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="grid md:grid-cols-2 gap-8 reveal">
+                <div class="glass-card p-8">
+                    <h3 class="text-2xl font-bold mb-4">{{t.paymentTerms}}</h3>
+                    <div class="space-y-3 text-slate-300 leading-7">
+                        <p>{{t.hourlySettlement1}}</p>
+                        <p>{{t.hourlySettlement2}}</p>
+                        <p>{{customPaymentTerms}}</p>
+                    </div>
+                </div>
+                <div class="glass-card p-8">
+                    <h3 class="text-2xl font-bold mb-4">{{t.technologySectionTitle}}</h3>
+                    <p class="text-slate-300 leading-7">{{technologyExplanation}}</p>
+                    {{#if technologies.stack}}
+                    <div class="mt-5">
+                        <div class="text-sm uppercase tracking-[0.16em] text-slate-400 mb-3">{{t.techStack}}</div>
+                        <div class="flex flex-wrap gap-2">
+                            {{#each technologies.stack}}
+                            <span class="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-sm">{{this}}</span>
+                            {{/each}}
+                        </div>
+                    </div>
+                    {{/if}}
+                </div>
+            </section>
+
+            {{#if portfolio}}
+            <section class="glass-card p-8 reveal">
+                <h3 class="text-2xl font-bold mb-6">{{t.portfolioTitle}}</h3>
+                <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
+                    {{#each portfolio}}
+                    <div class="rounded-2xl overflow-hidden border border-white/10 bg-white/5">
+                        <img src="https://oferty.soft-synergy.com{{this.image}}" alt="{{this.title}}" class="w-full h-44 object-cover" onerror="this.style.display='none'">
+                        <div class="p-5">
+                            <div class="text-lg font-semibold">{{this.title}}</div>
+                            <p class="text-slate-300 text-sm mt-2 leading-6">{{truncateWords this.description 26}}{{#if (gt (wordCount this.description) 26)}}...{{/if}}</p>
+                        </div>
+                    </div>
+                    {{/each}}
+                </div>
+            </section>
+            {{/if}}
+
+            <section class="glass-card p-8 reveal">
+                <h3 class="text-2xl font-bold mb-4">{{t.nextSteps}}</h3>
+                <p class="text-slate-300 mb-5">{{t.hourlyNextStepsLead}}</p>
+                <ol class="space-y-3 text-slate-200">
+                    <li>1. {{t.hourlyStep1}}</li>
+                    <li>2. {{t.hourlyStep2}}</li>
+                    <li>3. {{t.hourlyStep3}}</li>
+                </ol>
+            </section>
+
+            <section class="glass-card p-8 reveal">
+                <h3 class="text-2xl font-bold mb-4">{{t.reservations}}</h3>
+                <ul class="space-y-3 text-slate-300 leading-7">
+                    <li>{{t.res1}}</li>
+                    <li>{{t.res2}}</li>
+                    <li>{{t.res3}}</li>
+                    {{#if customReservations}}
+                        {{#each customReservations}}
+                        <li>{{this}}</li>
+                        {{/each}}
+                    {{/if}}
+                </ul>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach((entry) => {
+                if (entry.isIntersecting) entry.target.classList.add('visible');
+            });
+        }, { threshold: 0.12 });
+        document.querySelectorAll('.reveal').forEach((el) => observer.observe(el));
+    </script>
+</body>
+</html>

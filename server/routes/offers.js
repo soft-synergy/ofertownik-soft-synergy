@@ -153,6 +153,21 @@ const i18n = {
     finalCta: 'Akceptuję i rozpoczynam współpracę',
     downloadOffer: 'Pobierz ofertę',
     reservations: 'Zastrzeżenia',
+    hourlyOfferTitle: 'Oferta Współpracy Godzinowej',
+    hourlyLead: 'Na podstawie analizy zakresu rekomendujemy rozliczenie wyłącznie w modelu godzinowym. Ten projekt wymaga elastycznej współpracy, bieżącego doprecyzowywania priorytetów i rozliczania rzeczywiście wykonanych prac.',
+    hourlyModelTitle: 'Model Współpracy Godzinowej',
+    hourlyRateLabel: 'Stawka godzinowa',
+    hourlySettlementTitle: 'Zasady Rozliczeń',
+    hourlySettlement1: 'Prace rozliczamy według rzeczywiście przepracowanych godzin.',
+    hourlySettlement2: 'Obowiązuje stała stawka 100 PLN netto za godzinę pracy zespołu.',
+    hourlySettlement3: 'Projekt nie jest dostępny w modelu fixed price ze względu na zmienność zakresu i potrzebę iteracyjnej realizacji.',
+    hourlySettlement4: 'Zakres prac, priorytety i kolejność wdrażania ustalamy wspólnie na bieżąco.',
+    hourlyIncludedTitle: 'Co obejmuje współpraca',
+    hourlyIncludedLead: 'W ramach współpracy godzinowej realizujemy uzgodnione zadania projektowe, techniczne i konsultacyjne, w tym:',
+    hourlyNextStepsLead: 'Jeśli ten model współpracy jest dla Państwa odpowiedni, kolejne kroki wyglądają następująco:',
+    hourlyStep1: 'Akceptacja modelu godzinowego i rozpoczęcie współpracy.',
+    hourlyStep2: 'Ustalenie priorytetów pierwszego zakresu prac.',
+    hourlyStep3: 'Uruchomienie realizacji i bieżące raportowanie wykonanych godzin.',
     res1: 'Oferta obejmuje wyłącznie prace wymienione w powyższym zakresie.',
     res2: 'Dodatkowe modyfikacje lub zmiany w trakcie realizacji mogą wymagać osobnej wyceny.',
     res3: 'Soft Synergy rozpoczyna realizację w terminie do 3 dni roboczych od potwierdzenia akceptacji oferty.'
@@ -203,6 +218,21 @@ const i18n = {
     finalCta: 'I accept and want to start',
     downloadOffer: 'Download offer',
     reservations: 'Reservations',
+    hourlyOfferTitle: 'Hourly Cooperation Offer',
+    hourlyLead: 'Based on the current scope analysis, we recommend an hourly-only billing model. This project requires flexibility, ongoing prioritization and settlement based on actual completed work.',
+    hourlyModelTitle: 'Hourly Cooperation Model',
+    hourlyRateLabel: 'Hourly rate',
+    hourlySettlementTitle: 'Billing Rules',
+    hourlySettlement1: 'Work is billed according to the actual number of hours delivered.',
+    hourlySettlement2: 'A fixed rate of 100 PLN net per hour applies.',
+    hourlySettlement3: 'This project is not available in a fixed-price model due to scope variability and the need for iterative delivery.',
+    hourlySettlement4: 'Scope, priorities and delivery order are agreed together on an ongoing basis.',
+    hourlyIncludedTitle: 'What the cooperation includes',
+    hourlyIncludedLead: 'Within the hourly model we deliver agreed project, technical and consulting work, including:',
+    hourlyNextStepsLead: 'If this model works for you, the next steps are as follows:',
+    hourlyStep1: 'Accept the hourly model and begin cooperation.',
+    hourlyStep2: 'Agree the priorities for the first scope of work.',
+    hourlyStep3: 'Start delivery and report completed hours on an ongoing basis.',
     res1: 'The offer includes only the work listed above.',
     res2: 'Additional modifications or changes during implementation may require a separate quote.',
     res3: 'Soft Synergy starts implementation within 3 business days after confirming acceptance of the offer.'
@@ -308,8 +338,13 @@ router.post('/generate/:projectId', auth, async (req, res) => {
       .sort({ order: 1 })
       .limit(10);
 
+    const isHourlyOffer = project.finalEstimateMode === 'hourly';
+
     // Read the HTML template
-    const templatePath = path.join(__dirname, '../templates/offer-template.html');
+    const templatePath = path.join(
+      __dirname,
+      isHourlyOffer ? '../templates/offer-template-hourly.html' : '../templates/offer-template.html'
+    );
     const templateContent = await fs.readFile(templatePath, 'utf8');
 
     // Compile template with Handlebars
@@ -343,6 +378,8 @@ router.post('/generate/:projectId', auth, async (req, res) => {
       offerDate: new Date().toLocaleDateString('pl-PL'),
       offerNumber: project.offerNumber || `SS/${new Date().getFullYear()}/${(new Date().getMonth()+1).toString().padStart(2, '0')}/${project._id.toString().slice(-4)}`,
       offerType: project.offerType || 'final',
+      isHourlyOffer,
+      hourlyRate: Number(project.finalEstimateHourlyRate) > 0 ? Number(project.finalEstimateHourlyRate) : 100,
       priceRange: project.priceRange,
       // Project manager - zawsze Rizka Amelia
       projectManager: {
@@ -542,7 +579,7 @@ router.post('/generate/:projectId', auth, async (req, res) => {
           
           // Add title
           doc.fontSize(18).font(fonts.bold).fillColor('#1e40af');
-          addText(`OFERTA: ${project.name}`, 18, { align: 'center' });
+          addText(`${isHourlyOffer ? 'OFERTA GODZINOWA' : 'OFERTA'}: ${project.name}`, 18, { align: 'center' });
           doc.moveDown(1);
           
           // Client info
@@ -595,7 +632,15 @@ router.post('/generate/:projectId', auth, async (req, res) => {
           }
 
           // Pricing
-          if (project.pricing) {
+          if (isHourlyOffer) {
+            doc.fontSize(14).font(fonts.bold).fillColor('#10b981');
+            addText('Model rozliczenia:', 14);
+            doc.font(fonts.regular).fillColor('#000000');
+            addText(`Stawka godzinowa: ${new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN' }).format(templateData.hourlyRate)} / h netto`, 12);
+            addText('Projekt realizowany wyłącznie w modelu time & materials.', 12);
+            addText('Wycena fixed price nie jest dostępna dla tego projektu.', 12);
+            doc.moveDown(1);
+          } else if (project.pricing) {
             doc.fontSize(14).font(fonts.bold).fillColor('#10b981');
             addText('Wycenienie:', 14);
             doc.font(fonts.regular).fillColor('#000000');
