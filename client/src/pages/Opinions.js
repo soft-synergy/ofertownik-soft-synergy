@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from 'react-query';
 import toast from 'react-hot-toast';
 import {
-  MessageSquareQuote,
+  MessageCircle,
   Plus,
   Send,
   Copy,
@@ -116,7 +116,7 @@ const Opinions = () => {
       </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <SummaryCard icon={MessageSquareQuote} label="Wszystkie prośby" value={summary.total || 0} tone="slate" />
+        <SummaryCard icon={MessageCircle} label="Wszystkie prośby" value={summary.total || 0} tone="slate" />
         <SummaryCard icon={Send} label="Czekają" value={summary.pending || 0} tone="amber" />
         <SummaryCard icon={Star} label="Publiczne testimoniale" value={summary.publicTestimonials || 0} tone="emerald" />
         <SummaryCard icon={BarChart3} label="Średnia ocena" value={summary.avgRating != null ? `${summary.avgRating}/5` : '-'} tone="sky" />
