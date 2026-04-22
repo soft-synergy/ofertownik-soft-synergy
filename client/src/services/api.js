@@ -247,6 +247,15 @@ export const clientsAPI = {
   regeneratePortal: (id) => api.post(`/api/clients/${id}/portal/regenerate`).then(res => res.data),
 };
 
+export const reviewsAPI = {
+  getAll: (params) => api.get('/api/reviews', { params }).then(res => res.data),
+  create: (data) => api.post('/api/reviews', data).then(res => res.data),
+  update: (id, data) => api.patch(`/api/reviews/${id}`, data).then(res => res.data),
+  resend: (id) => api.post(`/api/reviews/${id}/resend`).then(res => res.data),
+  getPublic: (token) => api.get(`/api/reviews/public/${token}`).then(res => res.data),
+  submitPublic: (token, data) => api.post(`/api/reviews/public/${token}/submit`, data).then(res => res.data),
+};
+
 export const hostingAPI = {
   getAll: (params) => api.get('/api/hosting', { params }).then(res => res.data),
   getById: (id) => api.get(`/api/hosting/${id}`).then(res => res.data),

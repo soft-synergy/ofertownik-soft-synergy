@@ -798,11 +798,159 @@ function publicOrderNotificationTemplate({ type, title, orderTitle, orderId, dea
 `.trim();
 }
 
+function reviewRequestEmailTemplate({
+  reviewUrl,
+  clientName,
+  companyName,
+  projectName,
+  senderName = 'Zespół Soft Synergy',
+  followUpNumber = 0
+}) {
+  const greetingName = escapeHtml(clientName || 'Dzień dobry');
+  const subjectContext = projectName
+    ? `po współpracy przy projekcie „${escapeHtml(projectName)}”`
+    : 'po naszej współpracy';
+  const intro =
+    followUpNumber > 0
+      ? 'Wracamy z krótkim przypomnieniem, bo Twoja opinia naprawdę pomoże nam rozwijać proces i komunikację.'
+      : 'Będziemy bardzo wdzięczni za krótką opinię. Chcemy lepiej rozumieć, co działa dobrze, a co możemy jeszcze poprawić.';
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prośba o opinię</title>
+</head>
+<body style="margin:0;padding:0;font-family:${baseStyles.fontFamily};background:#eef2ff;color:#0f172a;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef2ff;">
+    <tr>
+      <td align="center" style="padding:40px 20px;">
+        <table role="presentation" width="640" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border-radius:24px;overflow:hidden;box-shadow:0 20px 50px rgba(15,23,42,0.12);">
+          <tr>
+            <td style="padding:0;background:linear-gradient(135deg,#0f172a 0%,#2563eb 55%,#14b8a6 100%);">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td style="padding:36px 36px 30px 36px;">
+                    <div style="display:inline-block;padding:8px 14px;border-radius:999px;background:rgba(255,255,255,0.16);color:#dbeafe;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">
+                      Soft Synergy · opinia klienta
+                    </div>
+                    <h1 style="margin:18px 0 12px 0;color:#ffffff;font-size:30px;line-height:1.15;font-weight:800;">
+                      3 minuty, które realnie pomagają nam robić lepszą robotę
+                    </h1>
+                    <p style="margin:0;color:rgba(255,255,255,0.88);font-size:16px;line-height:1.7;">
+                      ${intro}
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:34px 36px;">
+              <p style="margin:0 0 16px 0;font-size:17px;line-height:1.7;">${greetingName},</p>
+              <p style="margin:0 0 18px 0;font-size:16px;line-height:1.8;color:#334155;">
+                dziękujemy za zaufanie ${companyName ? `ze strony <strong>${escapeHtml(companyName)}</strong>` : ''} ${subjectContext}. 
+                Zależy nam nie tylko na pozytywnej opinii, ale też na szczerej informacji, co mogliśmy zrobić lepiej.
+              </p>
+
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:26px 0;background:#f8fafc;border:1px solid #e2e8f0;border-radius:18px;">
+                <tr>
+                  <td style="padding:22px 24px;">
+                    <div style="font-size:13px;color:#475569;text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:10px;">Co zbieramy</div>
+                    <ul style="margin:0;padding-left:18px;color:#1e293b;font-size:15px;line-height:1.8;">
+                      <li>krótką opinię, którą ewentualnie będziemy mogli wykorzystać jako testimonial</li>
+                      <li>szczery feedback: co było świetne, a co powinniśmy poprawić</li>
+                      <li>konkretne sygnały, które pomogą nam lepiej prowadzić kolejne projekty</li>
+                    </ul>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:0 0 28px 0;text-align:center;">
+                <a href="${reviewUrl}" style="${objectToInlineStyle({
+                  ...buttonPrimary,
+                  backgroundColor: '#2563eb',
+                  borderRadius: '999px',
+                  padding: '15px 32px',
+                  fontSize: '17px',
+                  boxShadow: '0 12px 30px rgba(37,99,235,0.28)'
+                })}">Zostaw opinię lub feedback →</a>
+              </p>
+
+              <p style="margin:0;color:#64748b;font-size:14px;line-height:1.7;">
+                Formularz jest krótki i działa także na telefonie. Jeśli nie chcesz wystawiać publicznej opinii, możesz zostawić sam prywatny feedback.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:22px 36px;background:#f8fafc;border-top:1px solid #e2e8f0;">
+              <p style="margin:0 0 8px 0;color:#0f172a;font-size:14px;font-weight:600;">${escapeHtml(senderName)}</p>
+              <p style="margin:0;color:#64748b;font-size:12px;line-height:1.6;">
+                Soft Synergy · ta wiadomość została wysłana automatycznie, bo zależy nam na lepszym doświadczeniu klientów.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`.trim();
+}
+
+function reviewThankYouTemplate({ clientName, testimonial, allowPublicUse }) {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dziękujemy za opinię</title>
+</head>
+<body style="margin:0;padding:0;font-family:${baseStyles.fontFamily};background:#f8fafc;color:#111827;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f8fafc;">
+    <tr>
+      <td align="center" style="padding:40px 20px;">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 12px 30px rgba(15,23,42,0.08);">
+          <tr>
+            <td style="background:linear-gradient(135deg,#059669 0%,#14b8a6 100%);padding:30px 34px;text-align:center;">
+              <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:800;">Dziękujemy za opinię</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px 34px;">
+              <p style="margin:0 0 18px 0;font-size:16px;line-height:1.7;">${escapeHtml(clientName || 'Dziękujemy')}.</p>
+              <p style="margin:0 0 18px 0;font-size:15px;line-height:1.8;color:#374151;">
+                Twoja wiadomość została zapisana. Analizujemy zarówno pozytywne opinie, jak i uwagi rozwojowe, bo obie rzeczy pomagają nam budować lepszy proces współpracy.
+              </p>
+              ${testimonial ? `
+              <div style="background:#ecfeff;border:1px solid #bae6fd;border-radius:16px;padding:18px 20px;margin:18px 0;">
+                <p style="margin:0;color:#0f172a;font-size:15px;line-height:1.8;">„${escapeHtml(testimonial)}”</p>
+              </div>` : ''}
+              <p style="margin:0;font-size:14px;line-height:1.7;color:#64748b;">
+                ${allowPublicUse ? 'Oznaczyliśmy też, że możemy wykorzystać Twoją opinię jako testimonial.' : 'Zapisaliśmy Twoją odpowiedź jako feedback wewnętrzny.'}
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`.trim();
+}
+
 module.exports = {
   followUpReminderTemplate,
   quoteRequestTemplate,
   clarificationRequestTemplate,
   finalEstimateSubmittedTemplate,
+  reviewRequestEmailTemplate,
+  reviewThankYouTemplate,
   hostingReminder3DaysBeforeTemplate,
   hostingReminderDueTodayTemplate,
   hostingReminder3DaysOverdueTemplate,

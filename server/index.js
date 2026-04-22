@@ -22,6 +22,7 @@ const servicesRoutes = require('./routes/services');
 const publicOrdersRoutes = require('./routes/publicOrders');
 const leadsRoutes = require('./routes/leads');
 const documentsRoutes = require('./routes/documents');
+const reviewsRoutes = require('./routes/reviews');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -123,6 +124,7 @@ app.use('/api/services', servicesRoutes);
 app.use('/api/public-orders', publicOrdersRoutes);
 app.use('/api/leads', leadsRoutes);
 app.use('/api/documents', documentsRoutes);
+app.use('/api/reviews', reviewsRoutes);
 app.use('/cal', calWebhookRoutes);
 
 // Publiczny podgląd dokumentu/playbooka po slug – zwraca HTML (bez auth)
@@ -386,6 +388,17 @@ const setupHostingNotificationScheduler = () => {
   setInterval(runHostingCheck, oneDay);
 };
 
+const setupReviewRequestScheduler = () => {
+  const { runReviewFollowUpScheduler } = require('./utils/reviewRequests');
+
+  const runCheck = () => runReviewFollowUpScheduler().catch((e) => {
+    console.error('Review follow-up scheduler failed:', e);
+  });
+
+  setTimeout(runCheck, 15 * 1000);
+  setInterval(runCheck, 60 * 60 * 1000);
+};
+
 // Tasks daily digest notifications (per assignee)
 const setupTasksDigestScheduler = () => {
   const Task = require('./models/Task');
@@ -634,6 +647,12 @@ mongoose.connect(process.env.MONGODB_URI, {
     console.log('📧 Powiadomienia hostingu (info@) uruchomione – co 24 h');
   } catch (e) {
     console.error('Nie udało się uruchomić powiadomień hostingu:', e);
+  }
+  try {
+    setupReviewRequestScheduler();
+    console.log('💬 Follow-upy opinii klientów uruchomione – co 1 h');
+  } catch (e) {
+    console.error('Nie udało się uruchomić schedulera opinii klientów:', e);
   }
   try {
     setupRecurringTasksScheduler();

@@ -13,7 +13,8 @@ import {
   CheckSquare,
   Wrench,
   FileCheck,
-  FileText
+  FileText,
+  MessageCircle
 } from 'lucide-react';
 import SearchCommandPalette from './SearchCommandPalette';
 
@@ -48,6 +49,7 @@ const Layout = () => {
     { path: '/services', label: t('nav.services'), icon: Wrench },
     { path: '/activity', label: 'Aktywność', icon: Activity },
     { path: '/dokumenty', label: 'Dokumenty i playbooki', icon: FileText },
+    { path: '/opinie', label: 'Opinie', icon: MessageCircle },
   ];
 
   // Add admin-only items

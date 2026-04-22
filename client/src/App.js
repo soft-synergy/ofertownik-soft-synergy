@@ -23,6 +23,8 @@ import ClientPortal from './pages/ClientPortal';
 import Tasks from './pages/Tasks';
 import Leads from './pages/Leads';
 import Documents from './pages/Documents';
+import Opinions from './pages/Opinions';
+import ReviewPublic from './pages/ReviewPublic';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import AuthLayout from './components/AuthLayout';
@@ -42,6 +44,7 @@ function AppContent() {
     <Routes>
       {/* Public routes */}
       <Route path="/client/:token" element={<ClientPortal />} />
+      <Route path="/opinie/:token" element={<ReviewPublic />} />
       <Route path="/admin" element={<AdminApp />} />
       <Route path="/employee" element={<EmployeeApp />} />
       <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login />} />
@@ -65,6 +68,7 @@ function AppContent() {
           <Route path="tasks" element={<Tasks />} />
           <Route path="leads" element={<Leads />} />
           <Route path="dokumenty" element={<Documents />} />
+          <Route path="opinie" element={<Opinions />} />
           <Route path="activity" element={<Activity />} />
           <Route path="hosting" element={<Hosting />} />
           <Route path="zlecenia-publiczne" element={<ZleceniaPubliczne />} />
