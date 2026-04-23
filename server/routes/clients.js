@@ -8,7 +8,7 @@ const Hosting = require('../models/Hosting');
 const router = express.Router();
 
 router.use(auth);
-router.use(requireRole(['admin']));
+router.use(requireRole(['admin', 'employee']));
 
 // List clients
 router.get('/', async (req, res) => {
@@ -134,5 +134,4 @@ router.post('/:id/assign-hosting', [ body('hostingId').isString() ], async (req,
 });
 
 module.exports = router;
-
 

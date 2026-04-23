@@ -97,6 +97,16 @@ const ReviewPublic = () => {
                 <p className="mt-4 text-base leading-8 text-slate-600">
                   Twoja opinia została zapisana. Naprawdę doceniamy poświęcony czas.
                 </p>
+                <div className="mt-6 rounded-[28px] border border-amber-200 bg-amber-50 px-6 py-6 text-left shadow-sm">
+                  <div className="text-xs font-extrabold uppercase tracking-[0.18em] text-amber-700">Mały bonus od nas</div>
+                  <p className="mt-3 text-base leading-8 text-amber-950">
+                    Zapisaliśmy dla Ciebie <strong>100 zł zniżki na kolejny projekt w Soft Synergy</strong>.
+                    Po prostu przypomnij o niej przy następnym kontakcie, a uwzględnimy ją w rozmowie.
+                  </p>
+                </div>
+                <p className="mt-5 text-sm leading-7 text-slate-500">
+                  Za chwilę dostaniesz też krótkie potwierdzenie mailowe, żeby łatwo było o tym pamiętać.
+                </p>
               </div>
             ) : (
               <>

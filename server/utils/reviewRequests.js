@@ -28,9 +28,9 @@ function getNextFollowUpAt(lastSentAt, currentStep) {
 
 function getReviewEmailSubject(review, kind = 'initial') {
   const suffix = review.projectName ? ` po projekcie ${review.projectName}` : '';
-  if (kind === 'initial') return `Krótka prośba o opinię${suffix}`;
-  if (kind === 'manual_reminder') return `Przypomnienie o opinii${suffix}`;
-  return `Czy znajdziesz chwilę na opinię?${suffix}`;
+  if (kind === 'initial') return `Czy możesz dać nam krótką opinię${suffix}?`;
+  if (kind === 'manual_reminder') return `Wracam z krótką prośbą o opinię${suffix}`;
+  return `Czy znajdziesz 2 minuty na opinię${suffix}?`;
 }
 
 async function sendReviewRequestEmail(review, kind = 'initial') {
@@ -70,7 +70,7 @@ async function sendReviewThankYouEmail(review) {
   if (!review?.email || !review?.response?.respondedAt) return;
   await sendEmail({
     to: review.email,
-    subject: 'Dziękujemy za Twoją opinię',
+    subject: 'Dziękujemy za opinię i mamy dla Ciebie 100 zł zniżki',
     html: reviewThankYouTemplate({
       clientName: review.response.clientName || review.clientName,
       testimonial: review.response.testimonial,

@@ -812,8 +812,8 @@ function reviewRequestEmailTemplate({
     : 'po naszej współpracy';
   const intro =
     followUpNumber > 0
-      ? 'Wracamy z krótkim przypomnieniem, bo Twoja opinia naprawdę pomoże nam rozwijać proces i komunikację.'
-      : 'Będziemy bardzo wdzięczni za krótką opinię. Chcemy lepiej rozumieć, co działa dobrze, a co możemy jeszcze poprawić.';
+      ? 'Wracam z krótkim przypomnieniem, bo taka odpowiedź naprawdę pomaga nam wyciągać sensowne wnioski po współpracy.'
+      : 'Mam do Ciebie małą prośbę o krótką opinię po naszej współpracy.';
 
   return `
 <!DOCTYPE html>
@@ -837,7 +837,7 @@ function reviewRequestEmailTemplate({
                       Soft Synergy · opinia klienta
                     </div>
                     <h1 style="margin:18px 0 12px 0;color:#ffffff;font-size:30px;line-height:1.15;font-weight:800;">
-                      3 minuty, które realnie pomagają nam robić lepszą robotę
+                      Krótka opinia, która naprawdę nam pomaga
                     </h1>
                     <p style="margin:0;color:rgba(255,255,255,0.88);font-size:16px;line-height:1.7;">
                       ${intro}
@@ -851,18 +851,21 @@ function reviewRequestEmailTemplate({
             <td style="padding:34px 36px;">
               <p style="margin:0 0 16px 0;font-size:17px;line-height:1.7;">${greetingName},</p>
               <p style="margin:0 0 18px 0;font-size:16px;line-height:1.8;color:#334155;">
-                dziękujemy za zaufanie ${companyName ? `ze strony <strong>${escapeHtml(companyName)}</strong>` : ''} ${subjectContext}. 
-                Zależy nam nie tylko na pozytywnej opinii, ale też na szczerej informacji, co mogliśmy zrobić lepiej.
+                dziękujemy za zaufanie ${companyName ? `i współpracę ze strony <strong>${escapeHtml(companyName)}</strong>` : ''} ${subjectContext}.
+                Jeśli znajdziesz 2-3 minuty, będzie nam bardzo miło, jeśli napiszesz, jak oceniasz współpracę i co możemy robić jeszcze lepiej.
+              </p>
+              <p style="margin:0 0 18px 0;font-size:16px;line-height:1.8;color:#334155;">
+                To może być zarówno krótka opinia, jak i szczery feedback tylko dla nas. Czytamy jedno i drugie.
               </p>
 
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:26px 0;background:#f8fafc;border:1px solid #e2e8f0;border-radius:18px;">
                 <tr>
                   <td style="padding:22px 24px;">
-                    <div style="font-size:13px;color:#475569;text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:10px;">Co zbieramy</div>
+                    <div style="font-size:13px;color:#475569;text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:10px;">W formularzu możesz</div>
                     <ul style="margin:0;padding-left:18px;color:#1e293b;font-size:15px;line-height:1.8;">
-                      <li>krótką opinię, którą ewentualnie będziemy mogli wykorzystać jako testimonial</li>
-                      <li>szczery feedback: co było świetne, a co powinniśmy poprawić</li>
-                      <li>konkretne sygnały, które pomogą nam lepiej prowadzić kolejne projekty</li>
+                      <li>zostawić krótką opinię, jeśli chcesz</li>
+                      <li>napisać, co zadziałało dobrze</li>
+                      <li>podpowiedzieć, co warto poprawić przy kolejnej współpracy</li>
                     </ul>
                   </td>
                 </tr>
@@ -880,7 +883,7 @@ function reviewRequestEmailTemplate({
               </p>
 
               <p style="margin:0;color:#64748b;font-size:14px;line-height:1.7;">
-                Formularz jest krótki i działa także na telefonie. Jeśli nie chcesz wystawiać publicznej opinii, możesz zostawić sam prywatny feedback.
+                Formularz jest krótki i działa też wygodnie na telefonie. Po wysłaniu podziękujemy Ci małym bonusem: 100 zł zniżki na kolejny projekt w Soft Synergy.
               </p>
             </td>
           </tr>
@@ -888,7 +891,7 @@ function reviewRequestEmailTemplate({
             <td style="padding:22px 36px;background:#f8fafc;border-top:1px solid #e2e8f0;">
               <p style="margin:0 0 8px 0;color:#0f172a;font-size:14px;font-weight:600;">${escapeHtml(senderName)}</p>
               <p style="margin:0;color:#64748b;font-size:12px;line-height:1.6;">
-                Soft Synergy · ta wiadomość została wysłana automatycznie, bo zależy nam na lepszym doświadczeniu klientów.
+                Soft Synergy · wysyłamy tę wiadomość, bo zależy nam na sensownym feedbacku po współpracy.
               </p>
             </td>
           </tr>
@@ -924,14 +927,21 @@ function reviewThankYouTemplate({ clientName, testimonial, allowPublicUse }) {
             <td style="padding:32px 34px;">
               <p style="margin:0 0 18px 0;font-size:16px;line-height:1.7;">${escapeHtml(clientName || 'Dziękujemy')}.</p>
               <p style="margin:0 0 18px 0;font-size:15px;line-height:1.8;color:#374151;">
-                Twoja wiadomość została zapisana. Analizujemy zarówno pozytywne opinie, jak i uwagi rozwojowe, bo obie rzeczy pomagają nam budować lepszy proces współpracy.
+                Twoja wiadomość została zapisana. Naprawdę doceniamy, że poświęciłeś_aś chwilę, żeby nam to opisać.
               </p>
               ${testimonial ? `
               <div style="background:#ecfeff;border:1px solid #bae6fd;border-radius:16px;padding:18px 20px;margin:18px 0;">
                 <p style="margin:0;color:#0f172a;font-size:15px;line-height:1.8;">„${escapeHtml(testimonial)}”</p>
               </div>` : ''}
+              <div style="background:#fff7ed;border:1px solid #fdba74;border-radius:16px;padding:18px 20px;margin:18px 0;">
+                <p style="margin:0 0 8px 0;color:#9a3412;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">Twój bonus</p>
+                <p style="margin:0;color:#7c2d12;font-size:15px;line-height:1.8;">
+                  Zapisaliśmy dla Ciebie <strong>100 zł zniżki na kolejny projekt</strong> realizowany z Soft Synergy.
+                  Wystarczy, że przypomnisz o tym przy następnym kontakcie.
+                </p>
+              </div>
               <p style="margin:0;font-size:14px;line-height:1.7;color:#64748b;">
-                ${allowPublicUse ? 'Oznaczyliśmy też, że możemy wykorzystać Twoją opinię jako testimonial.' : 'Zapisaliśmy Twoją odpowiedź jako feedback wewnętrzny.'}
+                ${allowPublicUse ? 'Zapisaliśmy też, że możemy wykorzystać Twoją opinię jako testimonial.' : 'Zapisaliśmy Twoją odpowiedź jako feedback wewnętrzny.'}
               </p>
             </td>
           </tr>

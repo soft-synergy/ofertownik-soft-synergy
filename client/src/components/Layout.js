@@ -57,7 +57,12 @@ const Layout = () => {
     navItems.push(
       { path: '/employees', label: t('nav.employees'), icon: Users },
       { path: '/hosting', label: t('nav.hosting'), icon: Server },
-      { path: '/zlecenia-publiczne', label: 'Zlecenia publiczne', icon: FileCheck },
+      { path: '/zlecenia-publiczne', label: 'Zlecenia publiczne', icon: FileCheck }
+    );
+  }
+
+  if (user?.role === 'admin' || user?.role === 'employee') {
+    navItems.push(
       { path: '/clients', label: 'Klienci', icon: Users }
     );
   }
