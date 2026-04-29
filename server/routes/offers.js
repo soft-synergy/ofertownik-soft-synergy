@@ -2074,8 +2074,9 @@ router.post('/generate-contract/:projectId', auth, async (req, res) => {
 
         // Parties
         doc.moveDown(0.8);
-        doc.fillColor('#000').font(fonts.bold).fontSize(12).text('Rizka Amelia');
-        doc.font(fonts.regular).fontSize(11).text('działająca w ramach marki Soft Synergy,');
+        doc.fillColor('#000').font(fonts.bold).fontSize(12).text('Antoni Seba');
+        doc.font(fonts.regular).fontSize(11).text('nr dowodu: DGM288362');
+        doc.text('działający w ramach marki Soft Synergy,');
         doc.text('kontakt: rizka.amelia@soft-synergy.com, +48 793 868 886');
         doc.moveDown(0.6);
         doc.text('a');
@@ -2192,31 +2193,6 @@ router.post('/generate-contract/:projectId', auth, async (req, res) => {
           'W sprawach nieuregulowanych stosuje się przepisy Kodeksu cywilnego.'
         ]);
 
-        // Signatures
-        doc.moveDown(2);
-        const yStart = doc.y;
-        const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-        const colWidth = pageWidth / 2 - 10;
-        // Left
-        doc.moveTo(doc.page.margins.left, yStart + 30).lineTo(doc.page.margins.left + colWidth, yStart + 30).strokeColor('#000').lineWidth(1).stroke();
-        doc.font(fonts.regular).fontSize(10).text('Zamawiający', doc.page.margins.left, yStart + 35, { width: colWidth, align: 'left' });
-        // Right
-        const rightX = doc.page.margins.left + colWidth + 20;
-        const lineY = yStart + 30;
-        doc.moveTo(rightX, lineY).lineTo(rightX + colWidth, lineY).stroke();
-        // Signature image (2x bigger, placed below the line, offset by 25px)
-        try {
-          const sigPath = path.join(__dirname, '../public/img/podpis-rizka-amelia.jpg');
-          const sigWidth = 240; // 2x bigger
-          const sigX = rightX + colWidth - sigWidth;
-          const sigY = lineY + 25; // 25px below the line to avoid overlap
-          doc.image(sigPath, sigX, sigY, { width: sigWidth, align: 'right' });
-        } catch (e) {
-          // ignore if image not found
-        }
-        // Place caption under the signature image
-        doc.font(fonts.regular).text('Rizka Amelia\ndziałająca w ramach marki Soft Synergy', rightX, lineY + 25 + 70, { width: colWidth, align: 'right' });
-
         doc.end();
         stream.on('finish', resolve);
         stream.on('error', reject);
@@ -2279,7 +2255,7 @@ router.get('/contract-draft/:projectId', auth, async (req, res) => {
     const lines = [];
     lines.push(`Umowa realizacji ${project.name}`);
     lines.push(`zawarta w dniu ${new Date().toLocaleDateString('pl-PL')} pomiędzy:`);
-    lines.push(`Rizka Amelia, działająca w ramach marki Soft Synergy`);
+    lines.push(`Antoni Seba, nr dowodu DGM288362, działający w ramach marki Soft Synergy`);
     lines.push('a');
     lines.push('[Dane Klienta]');
     lines.push('zwana dalej „Zamawiającym”');

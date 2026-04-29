@@ -30,6 +30,7 @@
   <p class="bold">{{contractor.name}}</p>
   <p>{{contractor.address}}</p>
   <p>NIP: {{contractor.nip}}</p>
+  {{#if contractor.idNumber}}<p>nr dowodu: {{contractor.idNumber}}</p>{{/if}}
   {{#if contractor.email}}<p>email: {{contractor.email}} | tel.: {{contractor.phone}}</p>{{/if}}
   <p class="muted">działającym w ramach marki Soft Synergy</p>
 
@@ -101,20 +102,5 @@
       <li>W sprawach nieuregulowanych stosuje się przepisy Kodeksu cywilnego.</li>
     </ol>
   </div>
-
-  <div class="section signatures">
-    <div class="cols">
-      <div class="col">
-        <div class="sig-line"></div>
-        <div class="small">Zamawiający</div>
-      </div>
-      <div class="col" style="text-align:right;">
-        <div class="sig-line" style="margin-left:auto;"></div>
-        <div class="small">{{contractor.signatory}}</div>
-        <div class="small">działający w ramach marki Soft Synergy</div>
-      </div>
-    </div>
-  </div>
 </body>
 </html>
-
