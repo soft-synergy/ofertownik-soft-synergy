@@ -14,26 +14,10 @@ const router = express.Router();
 const CONTRACT_LOCATION = 'Zielonej Górze';
 const CONTRACT_CONTACT_EMAIL = 'info@soft-synergy.com';
 const CONTRACT_CONTACT_PHONE = '+48 576 205 389';
-const OLD_DEFAULT_PAYMENT_TERMS = '10% zaliczki po podpisaniu umowy.\n90% po odbiorze końcowym projektu.';
 const CONTRACT_DEFAULT_PAYMENT_TERMS = '100% po odbiorze końcowym projektu.';
 
-function normalizeContractPaymentTerms(terms) {
-  return terms
-    .trim()
-    .replace(/\r\n/g, '\n')
-    .replace(/[ \t]+/g, ' ');
-}
-
-function getContractPaymentLines(project) {
-  const customPaymentTerms = project.customPaymentTerms
-    ? normalizeContractPaymentTerms(project.customPaymentTerms)
-    : '';
-
-  if (!customPaymentTerms || customPaymentTerms === normalizeContractPaymentTerms(OLD_DEFAULT_PAYMENT_TERMS)) {
-    return [CONTRACT_DEFAULT_PAYMENT_TERMS];
-  }
-
-  return customPaymentTerms.split(/\n+/);
+function getContractPaymentLines() {
+  return [CONTRACT_DEFAULT_PAYMENT_TERMS];
 }
 
 // Configure multer for file uploads
