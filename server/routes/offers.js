@@ -11,6 +11,31 @@ const { auth } = require('../middleware/auth');
 
 const router = express.Router();
 
+const CONTRACT_LOCATION = 'Zielonej Górze';
+const CONTRACT_CONTACT_EMAIL = 'info@soft-synergy.com';
+const CONTRACT_CONTACT_PHONE = '+48 576 205 389';
+const OLD_DEFAULT_PAYMENT_TERMS = '10% zaliczki po podpisaniu umowy.\n90% po odbiorze końcowym projektu.';
+const CONTRACT_DEFAULT_PAYMENT_TERMS = '100% po odbiorze końcowym projektu.';
+
+function normalizeContractPaymentTerms(terms) {
+  return terms
+    .trim()
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]+/g, ' ');
+}
+
+function getContractPaymentLines(project) {
+  const customPaymentTerms = project.customPaymentTerms
+    ? normalizeContractPaymentTerms(project.customPaymentTerms)
+    : '';
+
+  if (!customPaymentTerms || customPaymentTerms === normalizeContractPaymentTerms(OLD_DEFAULT_PAYMENT_TERMS)) {
+    return [CONTRACT_DEFAULT_PAYMENT_TERMS];
+  }
+
+  return customPaymentTerms.split(/\n+/);
+}
+
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -2070,14 +2095,14 @@ router.post('/generate-contract/:projectId', auth, async (req, res) => {
         // Title
         doc.font(fonts.bold).fontSize(18).text(`Umowa realizacji ${project.name}`, { align: 'left' });
         doc.moveDown(0.5);
-        doc.font(fonts.regular).fontSize(11).fillColor('#333').text(`zawarta w dniu ${new Date().toLocaleDateString('pl-PL')} pomiędzy:`);
+        doc.font(fonts.regular).fontSize(11).fillColor('#333').text(`zawarta w dniu ${new Date().toLocaleDateString('pl-PL')} w ${CONTRACT_LOCATION} pomiędzy:`);
 
         // Parties
         doc.moveDown(0.8);
         doc.fillColor('#000').font(fonts.bold).fontSize(12).text('Antoni Seba');
         doc.font(fonts.regular).fontSize(11).text('nr dowodu: DGM288362');
         doc.text('działający w ramach marki Soft Synergy,');
-        doc.text('kontakt: rizka.amelia@soft-synergy.com, +48 793 868 886');
+        doc.text(`kontakt: ${CONTRACT_CONTACT_EMAIL}, ${CONTRACT_CONTACT_PHONE}`);
         doc.moveDown(0.6);
         doc.text('a');
         doc.moveDown(0.6);
@@ -2145,14 +2170,7 @@ router.post('/generate-contract/:projectId', auth, async (req, res) => {
         const total = currency(project?.pricing?.total || 0);
         doc.font(fonts.regular).fontSize(11).text(`Łączne wynagrodzenie za realizację prac wynosi ${total} netto.`);
         doc.moveDown(0.2);
-        const paymentLines = (project.customPaymentTerms && project.customPaymentTerms.trim().length)
-          ? project.customPaymentTerms.split(/\n+/)
-          : [
-              `Faza I: ${currency(project?.pricing?.phase1 || 0)}`,
-              `Faza II: ${currency(project?.pricing?.phase2 || 0)}`,
-              `Faza III: ${currency(project?.pricing?.phase3 || 0)}`,
-              `Faza IV: ${currency(project?.pricing?.phase4 || 0)}`
-            ].filter(line => !line.endsWith('0,00 zł') && !line.endsWith('0,00 zł'));
+        const paymentLines = getContractPaymentLines(project);
         if (paymentLines.length) {
           doc.text('Warunki płatności:');
           paymentLines.forEach(t => doc.text(`• ${t}`, { indent: 14 }));
@@ -2164,8 +2182,8 @@ router.post('/generate-contract/:projectId', auth, async (req, res) => {
         doc.font(fonts.regular).text('NIP: 5242495143');
         doc.text('ul. ALEJA KSIĘCIA JÓZEFA PONIATOWSKIEGO 1/ — 03-901');
         doc.text('WARSZAWA MAZOWIECKIE');
-        doc.text('email: rizka.amelia@soft-synergy.com');
-        doc.text('Numer telefonu: +48 793 868 886');
+        doc.text(`email: ${CONTRACT_CONTACT_EMAIL}`);
+        doc.text(`Numer telefonu: ${CONTRACT_CONTACT_PHONE}`);
         doc.text('jako podmiot świadczący usługę na rzecz Wykonawcy.');
         doc.moveDown(0.2);
         doc.text('Płatność faktur będzie traktowana jako spełnienie zobowiązania wobec Wykonawcy.');
@@ -2254,8 +2272,8 @@ router.get('/contract-draft/:projectId', auth, async (req, res) => {
 
     const lines = [];
     lines.push(`Umowa realizacji ${project.name}`);
-    lines.push(`zawarta w dniu ${new Date().toLocaleDateString('pl-PL')} pomiędzy:`);
-    lines.push(`Antoni Seba, nr dowodu DGM288362, działający w ramach marki Soft Synergy`);
+    lines.push(`zawarta w dniu ${new Date().toLocaleDateString('pl-PL')} w ${CONTRACT_LOCATION} pomiędzy:`);
+    lines.push(`Antoni Seba, nr dowodu DGM288362, działający w ramach marki Soft Synergy, kontakt: ${CONTRACT_CONTACT_EMAIL}, ${CONTRACT_CONTACT_PHONE}`);
     lines.push('a');
     lines.push('[Dane Klienta]');
     lines.push('zwana dalej „Zamawiającym”');
@@ -2276,14 +2294,7 @@ router.get('/contract-draft/:projectId', auth, async (req, res) => {
     lines.push('');
     lines.push('§4. Wynagrodzenie i płatności');
     lines.push(`Łączne wynagrodzenie za realizację prac wynosi ${currency(project?.pricing?.total || 0)} netto.`);
-    const paymentLines = (project.customPaymentTerms && project.customPaymentTerms.trim().length)
-      ? project.customPaymentTerms.split(/\n+/)
-      : [
-          `Faza I: ${currency(project?.pricing?.phase1 || 0)}`,
-          `Faza II: ${currency(project?.pricing?.phase2 || 0)}`,
-          `Faza III: ${currency(project?.pricing?.phase3 || 0)}`,
-          `Faza IV: ${currency(project?.pricing?.phase4 || 0)}`
-        ];
+    const paymentLines = getContractPaymentLines(project);
     paymentLines.forEach((l) => lines.push(`- ${l}`));
     lines.push('');
     lines.push('§5. Zwrot zaliczki i odstąpienie');
