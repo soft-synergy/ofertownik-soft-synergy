@@ -779,6 +779,12 @@ router.post('/generate/:projectId', auth, async (req, res) => {
     // Try to save to database, but don't fail if it doesn't work (for local testing)
     try {
       await project.save();
+      try {
+        const { upsertFollowUpTask } = require('../utils/followUpTasks');
+        await upsertFollowUpTask(project, req.user._id);
+      } catch (taskErr) {
+        console.error('[generate offer] Follow-up task sync error:', taskErr.message);
+      }
       console.log('Project saved to database successfully');
     } catch (dbError) {
       console.log('Database save failed (local testing mode):', dbError.message);
@@ -1244,6 +1250,12 @@ router.post('/generate-pdf/:projectId', auth, async (req, res) => {
     // Update project with PDF URL
     project.pdfUrl = `/generated-offers/${pdfFileName}`;
     await project.save();
+    try {
+      const { upsertFollowUpTask } = require('../utils/followUpTasks');
+      await upsertFollowUpTask(project, req.user._id);
+    } catch (taskErr) {
+      console.error('[generate offer PDF] Follow-up task sync error:', taskErr.message);
+    }
 
     // Log activity
     try {

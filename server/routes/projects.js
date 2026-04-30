@@ -4,6 +4,7 @@ const Project = require('../models/Project');
 const { auth, requireRole, requireScope } = require('../middleware/auth');
 const Activity = require('../models/Activity');
 const { upsertFollowUpTask, completeCurrentAndCreateNextFollowUpTask } = require('../utils/followUpTasks');
+const { MAX_FOLLOW_UPS } = require('../utils/followUpPolicy');
 const Client = require('../models/Client');
 
 const router = express.Router();
@@ -796,8 +797,8 @@ router.post('/:id/followups', [
     }
 
     const numSent = Array.isArray(project.followUps) ? project.followUps.length : 0;
-    if (numSent >= 3) {
-      return res.status(400).json({ message: 'Wysłano już maksymalną liczbę follow-upów (3)' });
+    if (numSent >= MAX_FOLLOW_UPS) {
+      return res.status(400).json({ message: `Wysłano już maksymalną liczbę follow-upów (${MAX_FOLLOW_UPS})` });
     }
 
     const followUp = {
@@ -809,6 +810,7 @@ router.post('/:id/followups', [
 
     project.followUps = project.followUps || [];
     project.followUps.push(followUp);
+    project.followUpManualDueAt = null;
     // Saving will recalculate nextFollowUpDueAt via pre-save hook
     await project.save();
 

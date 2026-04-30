@@ -22,6 +22,8 @@ import { projectsAPI, offersAPI } from '../services/api';
 import { useI18n } from '../contexts/I18nContext';
 import toast from 'react-hot-toast';
 
+const MAX_FOLLOW_UPS = 6;
+
 const Projects = () => {
   const { t } = useI18n();
   const [filters, setFilters] = useState({
@@ -391,7 +393,7 @@ const Projects = () => {
       {/* Projects List */}
       <div className="space-y-4">
         {data?.projects?.map((project) => {
-          const hasPendingFollowUp = project.nextFollowUpDueAt && project.status !== 'accepted' && project.status !== 'cancelled' && (!project.followUps || project.followUps.length < 3);
+          const hasPendingFollowUp = project.nextFollowUpDueAt && project.status !== 'accepted' && project.status !== 'cancelled' && (!project.followUps || project.followUps.length < MAX_FOLLOW_UPS);
           const isOverdue = hasPendingFollowUp && new Date(project.nextFollowUpDueAt) <= new Date();
           const isOrangeStatus = project.status === 'to_final_estimation';
           return (

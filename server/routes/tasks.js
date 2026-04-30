@@ -280,6 +280,20 @@ router.put('/:id', auth, requireScope('tasks:write'), async (req, res) => {
       }
     }
     await task.save();
+
+    if (dueDateChanged && task.source?.kind === 'followup' && task.source?.refId) {
+      try {
+        const Project = require('../models/Project');
+        await Project.findByIdAndUpdate(task.source.refId, {
+          nextFollowUpDueAt: task.dueDate,
+          followUpManualDueAt: task.dueDate,
+          lastFollowUpReminderAt: null
+        });
+      } catch (e) {
+        console.error('[Update task] Błąd synchronizacji terminu follow-upu z projektem:', e.message);
+      }
+    }
+
     await task.populate([
       { path: 'assignee', select: 'firstName lastName email' },
       { path: 'assignees', select: 'firstName lastName email' },

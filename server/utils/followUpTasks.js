@@ -4,6 +4,7 @@
  */
 const Task = require('../models/Task');
 const Project = require('../models/Project');
+const { MAX_FOLLOW_UPS, getFollowUpTaskMeta } = require('./followUpPolicy');
 
 const FOLLOW_UP_ASSIGNEE_EMAIL = 'rizka.amelia@soft-synergy.com';
 
@@ -25,18 +26,21 @@ async function completeCurrentAndCreateNextFollowUpTask(project, userId) {
   const projectId = project._id;
   const numSent = Array.isArray(project.followUps) ? project.followUps.length : 0;
   const nextDue = project.nextFollowUpDueAt ? new Date(project.nextFollowUpDueAt) : null;
+  const meta = getFollowUpTaskMeta(project);
 
-  const existing = await Task.findOne({ 'source.kind': 'followup', 'source.refId': projectId });
+  const existing = await Task.findOne({ 'source.kind': 'followup', 'source.refId': projectId, status: { $ne: 'done' } });
   if (existing) {
     existing.status = 'done';
     existing.completedAt = existing.completedAt || new Date();
     await existing.save();
   }
 
-  if (!nextDue || numSent >= 3) return existing || null;
+  if (!nextDue || numSent >= MAX_FOLLOW_UPS) return existing || null;
 
-  const title = `Follow-up #${numSent + 1} – ${project.name || 'Projekt'}`;
-  const description = project.clientName ? `Klient: ${project.clientName}` : '';
+  const title = `Follow-up #${meta.nextNumber}/${meta.maxFollowUps} – ${project.name || 'Projekt'}`;
+  const description = [meta.label, project.clientName ? `Klient: ${project.clientName}` : '']
+    .filter(Boolean)
+    .join('\n');
   let createdBy = userId || project.owner || project.createdBy;
   if (!createdBy) {
     const User = require('../models/User');
@@ -51,11 +55,11 @@ async function completeCurrentAndCreateNextFollowUpTask(project, userId) {
     title,
     description,
     status: 'todo',
-    priority: 'normal',
+    priority: meta.priority,
     assignee,
     project: projectId,
     dueDate: nextDue,
-    dueTimeMinutes: 540,
+    dueTimeMinutes: meta.dueTimeMinutes,
     durationMinutes: 30,
     createdBy,
     source: { kind: 'followup', refId: projectId }
@@ -78,14 +82,17 @@ async function upsertFollowUpTask(project, userId) {
   }
   const numSent = Array.isArray(project.followUps) ? project.followUps.length : 0;
   const nextDue = project.nextFollowUpDueAt ? new Date(project.nextFollowUpDueAt) : null;
+  const meta = getFollowUpTaskMeta(project);
 
-  if (!nextDue || numSent >= 3) {
+  if (!nextDue || numSent >= MAX_FOLLOW_UPS) {
     await Task.deleteMany({ 'source.kind': 'followup', 'source.refId': projectId, status: { $ne: 'done' } });
     return null;
   }
 
-  const title = `Follow-up #${numSent + 1} – ${project.name || 'Projekt'}`;
-  const description = project.clientName ? `Klient: ${project.clientName}` : '';
+  const title = `Follow-up #${meta.nextNumber}/${meta.maxFollowUps} – ${project.name || 'Projekt'}`;
+  const description = [meta.label, project.clientName ? `Klient: ${project.clientName}` : '']
+    .filter(Boolean)
+    .join('\n');
 
   const followUpAssigneeId = await getFollowUpAssigneeId();
 
@@ -94,6 +101,8 @@ async function upsertFollowUpTask(project, userId) {
     existing.title = title;
     existing.description = description;
     existing.dueDate = nextDue;
+    existing.dueTimeMinutes = meta.dueTimeMinutes;
+    existing.priority = meta.priority;
     existing.project = projectId;
     existing.assignee = followUpAssigneeId;
     if (!existing.source) existing.source = { kind: 'followup', refId: projectId };
@@ -113,11 +122,11 @@ async function upsertFollowUpTask(project, userId) {
     title,
     description,
     status: 'todo',
-    priority: 'normal',
+    priority: meta.priority,
     assignee: followUpAssigneeId,
     project: projectId,
     dueDate: nextDue,
-    dueTimeMinutes: 540,
+    dueTimeMinutes: meta.dueTimeMinutes,
     durationMinutes: 30,
     createdBy,
     source: { kind: 'followup', refId: projectId }
@@ -127,7 +136,7 @@ async function upsertFollowUpTask(project, userId) {
 }
 
 /**
- * Remove the follow-up task for a project (e.g. when project is accepted/cancelled or 3 follow-ups sent).
+ * Remove the follow-up task for a project (e.g. when project is accepted/cancelled or follow-ups are exhausted).
  */
 async function deleteFollowUpTask(projectId) {
   if (!projectId) return;
@@ -141,21 +150,23 @@ async function deleteFollowUpTask(projectId) {
 async function syncAllFollowUpTasks(userId) {
   const projects = await Project.find({
     followUpsEnabled: { $ne: false },
-    nextFollowUpDueAt: { $ne: null },
-    status: { $in: ['draft', 'active'] }
-  })
-    .select('_id name clientName followUps followUpsEnabled followUpScheduleDays nextFollowUpDueAt owner createdBy')
-    .lean();
+    status: { $nin: ['accepted', 'cancelled', 'completed'] },
+    $or: [
+      { status: 'active' },
+      { generatedOfferUrl: { $exists: true, $nin: [null, ''] } },
+      { pdfUrl: { $exists: true, $nin: [null, ''] } }
+    ],
+    [`followUps.${MAX_FOLLOW_UPS - 1}`]: { $exists: false }
+  }).select('_id name clientName followUps followUpsEnabled followUpScheduleDays followUpStartedAt followUpManualDueAt nextFollowUpDueAt owner createdBy generatedOfferUrl pdfUrl status');
 
-  for (const p of projects) {
-    const numSent = Array.isArray(p.followUps) ? p.followUps.length : 0;
-    if (numSent >= 3) continue;
-    const project = await Project.findById(p._id);
-    if (!project) continue;
+  for (const project of projects) {
+    const numSent = Array.isArray(project.followUps) ? project.followUps.length : 0;
+    if (numSent >= MAX_FOLLOW_UPS) continue;
     try {
+      await project.save();
       await upsertFollowUpTask(project, userId);
     } catch (e) {
-      console.error('[Follow-up tasks] Sync error for project', p._id, e.message);
+      console.error('[Follow-up tasks] Sync error for project', project._id, e.message);
     }
   }
 }

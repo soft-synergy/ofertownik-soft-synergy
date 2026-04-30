@@ -175,6 +175,7 @@ const setupFollowUpReminderScheduler = () => {
   const Project = require('./models/Project');
   const { getTransporter, sendEmail } = require('./utils/emailService');
   const { followUpReminderTemplate } = require('./utils/emailTemplates');
+  const { MAX_FOLLOW_UPS } = require('./utils/followUpPolicy');
 
   const FOLLOW_UP_RECIPIENT = 'rizka.amelia@soft-synergy.com';
 
@@ -190,11 +191,14 @@ const setupFollowUpReminderScheduler = () => {
     try {
       const now = new Date();
       const projects = await Project.find({
-        status: { $in: ['draft', 'active'] },
+        status: { $nin: ['accepted', 'cancelled', 'completed'] },
+        followUpsEnabled: { $ne: false },
         $or: [
-          { followUps: { $exists: false } },
-          { $where: 'this.followUps.length < 3' }
+          { status: 'active' },
+          { generatedOfferUrl: { $exists: true, $nin: [null, ''] } },
+          { pdfUrl: { $exists: true, $nin: [null, ''] } }
         ],
+        [`followUps.${MAX_FOLLOW_UPS - 1}`]: { $exists: false },
         nextFollowUpDueAt: { $ne: null, $lte: now }
       }).limit(50);
 
@@ -204,7 +208,7 @@ const setupFollowUpReminderScheduler = () => {
         if (lastReminder && (now.getTime() - lastReminder.getTime()) < (24 * 60 * 60 * 1000)) continue;
 
         const numSent = Array.isArray(p.followUps) ? p.followUps.length : 0;
-        const subject = `⏰ Przypomnienie: follow-up #${numSent + 1} dla oferty ${p.name}`;
+        const subject = `⏰ Przypomnienie: follow-up #${numSent + 1}/${MAX_FOLLOW_UPS} dla oferty ${p.name}`;
         const dueDate = p.nextFollowUpDueAt ? new Date(p.nextFollowUpDueAt).toLocaleString('pl-PL') : null;
         const html = followUpReminderTemplate({
           projectName: p.name,

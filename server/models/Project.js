@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { MAX_FOLLOW_UPS, getNextFollowUpDueAt, isFollowUpEligible } = require('../utils/followUpPolicy');
 
 const projectSchema = new mongoose.Schema({
   name: {
@@ -276,7 +277,15 @@ const projectSchema = new mongoose.Schema({
   },
   followUpScheduleDays: {
     type: [Number],
-    default: [4, 4, 7]
+    default: [1, 3, 5, 8, 13, 21]
+  },
+  followUpStartedAt: {
+    type: Date,
+    default: null
+  },
+  followUpManualDueAt: {
+    type: Date,
+    default: null
   },
   nextFollowUpDueAt: {
     type: Date,
@@ -362,38 +371,24 @@ projectSchema.pre('save', function(next) {
   next();
 });
 
-// Calculate next follow-up due date based on schedule and number of follow-ups already sent
+// Calculate next follow-up due date based on the offer lifecycle and last sales touch.
 projectSchema.pre('save', function(next) {
   try {
-    const maxFollowUps = 3;
     const numSent = Array.isArray(this.followUps) ? this.followUps.length : 0;
     if (
-      this.followUpsEnabled === false ||
-      this.status === 'accepted' ||
-      this.status === 'cancelled' ||
-      numSent >= maxFollowUps
+      !isFollowUpEligible(this) ||
+      numSent >= MAX_FOLLOW_UPS
     ) {
       this.nextFollowUpDueAt = null;
+      this.followUpManualDueAt = null;
       return next();
     }
 
-    const schedule = Array.isArray(this.followUpScheduleDays) && this.followUpScheduleDays.length
-      ? this.followUpScheduleDays
-      : [4, 4, 7];
+    if (!this.followUpStartedAt) {
+      this.followUpStartedAt = new Date();
+    }
 
-    // Cumulative days: e.g., [4,4,7] => [4,8,15]
-    const cumulativeDays = schedule.reduce((acc, days, idx) => {
-      const sum = (acc[idx - 1] || 0) + days;
-      acc.push(sum);
-      return acc;
-    }, []);
-
-    const baseDate = this.createdAt || new Date();
-    const nextIndex = Math.min(numSent, cumulativeDays.length - 1);
-    const daysToAdd = cumulativeDays[nextIndex];
-    const dueDate = new Date(baseDate.getTime());
-    dueDate.setDate(dueDate.getDate() + daysToAdd);
-    this.nextFollowUpDueAt = dueDate;
+    this.nextFollowUpDueAt = this.followUpManualDueAt || getNextFollowUpDueAt(this);
     next();
   } catch (e) {
     next(e);

@@ -24,6 +24,8 @@ const DEFAULT_PROJECT_MANAGER = {
     'Nazywam się Rizka Amelia i pełnię rolę menedżerki projektów w Soft Synergy. Koordynuję zespoły i pilnuję terminów oraz jakości realizacji projektów IT. Stawiam na przejrzystą komunikację z klientem i spójność dostarczanych rozwiązań z Państwa celami biznesowymi.'
 };
 
+const MAX_FOLLOW_UPS = 6;
+
 const ProjectForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -1597,7 +1599,7 @@ const NotesSection = ({ projectId }) => {
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-medium text-gray-700">Follow-up</h3>
             <div className="text-xs text-gray-500">
-              {project?.followUps?.length || 0}/3 wysłane
+              {project?.followUps?.length || 0}/{MAX_FOLLOW_UPS} wysłane
               {project?.nextFollowUpDueAt && (
                 <span className="ml-2">
                   Następny termin: {new Date(project.nextFollowUpDueAt).toLocaleDateString('pl-PL')}
@@ -1617,8 +1619,8 @@ const NotesSection = ({ projectId }) => {
               type="button"
               onClick={() => followUpNote.trim() && addFollowUpMutation.mutate({ id: projectId, note: followUpNote.trim() })}
               className="btn-secondary flex items-center"
-              disabled={addFollowUpMutation.isLoading || (project?.followUps?.length || 0) >= 3 || project?.status === 'accepted' || project?.status === 'cancelled'}
-              title={(project?.followUps?.length || 0) >= 3 ? 'Wysłano już 3 follow-upy' : ''}
+              disabled={addFollowUpMutation.isLoading || (project?.followUps?.length || 0) >= MAX_FOLLOW_UPS || project?.status === 'accepted' || project?.status === 'cancelled'}
+              title={(project?.followUps?.length || 0) >= MAX_FOLLOW_UPS ? `Wysłano już ${MAX_FOLLOW_UPS} follow-upów` : ''}
             >
               <Send className="h-4 w-4 mr-2" />
               Zapisz follow-up
