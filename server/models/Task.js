@@ -36,6 +36,11 @@ const taskSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   }],
+  isPrivate: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
   project: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Project',
@@ -110,6 +115,16 @@ const taskSchema = new mongoose.Schema({
     text: { type: String, required: true },
     author: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     createdAt: { type: Date, default: Date.now }
+  }],
+  /** File attachments / uploaded documents */
+  attachments: [{
+    filename: { type: String, required: true },
+    originalname: { type: String, required: true },
+    path: { type: String, required: true },
+    mimetype: { type: String },
+    size: { type: Number },
+    uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    uploadedAt: { type: Date, default: Date.now }
   }]
 }, {
   timestamps: true
@@ -118,6 +133,7 @@ const taskSchema = new mongoose.Schema({
 taskSchema.index({ assignee: 1, dueDate: 1 });
 taskSchema.index({ assignees: 1, dueDate: 1 });
 taskSchema.index({ watchers: 1 });
+taskSchema.index({ isPrivate: 1, createdBy: 1 });
 taskSchema.index({ project: 1, dueDate: 1 });
 taskSchema.index({ status: 1, dueDate: 1 });
 // Non-unique so many tasks can have source.kind = null. Hosting/followup uniqueness enforced in app (upsert).

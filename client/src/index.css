@@ -208,4 +208,87 @@
     background-size: 200% 100%;
     animation: ss-shimmer 1.2s ease-in-out infinite;
   }
+
+  /* Task board animations */
+  @keyframes task-card-enter {
+    0% { opacity: 0; transform: translateY(8px) scale(0.97); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  @keyframes task-check-done {
+    0% { transform: scale(0); opacity: 0; }
+    60% { transform: scale(1.2); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  @keyframes task-drag-ghost {
+    0%, 100% { box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    50% { box-shadow: 0 8px 28px rgba(37,99,235,0.25); }
+  }
+
+  @keyframes task-pulse-new {
+    0% { background-color: #eff6ff; }
+    100% { background-color: transparent; }
+  }
+
+  @keyframes modal-slide-up {
+    0% { opacity: 0; transform: translateY(30px) scale(0.96); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  @keyframes modal-backdrop-in {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+  }
+
+  @keyframes upload-drop-active {
+    0%, 100% { border-color: #3b82f6; background: #eff6ff; }
+    50% { border-color: #2563eb; background: #dbeafe; }
+  }
+
+  @keyframes spin-slow {
+    to { transform: rotate(360deg); }
+  }
+
+  .task-card-enter {
+    animation: task-card-enter 0.35s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  }
+
+  .task-check-done {
+    animation: task-check-done 0.35s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  }
+
+  .task-dragging {
+    animation: task-drag-ghost 1.5s ease-in-out infinite;
+  }
+
+  .task-pulse-new {
+    animation: task-pulse-new 2s ease-out forwards;
+  }
+
+  .modal-slide-up {
+    animation: modal-slide-up 0.25s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  }
+
+  .modal-backdrop-in {
+    animation: modal-backdrop-in 0.2s ease-out both;
+  }
+
+  .upload-drop-active {
+    animation: upload-drop-active 1.2s ease-in-out infinite;
+  }
+
+  .task-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+  .task-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .task-scrollbar::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 3px;
+  }
+  .task-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #9ca3af;
+  }
 } 

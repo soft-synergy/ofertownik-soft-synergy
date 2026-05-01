@@ -234,6 +234,14 @@ export const tasksAPI = {
   update: (id, data) => api.put(`/api/tasks/${id}`, data).then(res => res.data),
   delete: (id) => api.delete(`/api/tasks/${id}`).then(res => res.data),
   addUpdate: (id, text) => api.post(`/api/tasks/${id}/updates`, { text }).then(res => res.data),
+  uploadAttachments: (id, formData) => {
+    const instance = axios.create(uploadAxiosConfig());
+    uploadAxiosInterceptors(instance);
+    return instance.post(`/api/tasks/${id}/attachments`, formData).then(res => res.data);
+  },
+  deleteAttachment: (taskId, attachmentId) => api.delete(`/api/tasks/${taskId}/attachments/${attachmentId}`).then(res => res.data),
+  batchDelete: (ids) => api.post('/api/tasks/batch-delete', { ids }).then(res => res.data),
+  batchUpdate: (ids, updates) => api.post('/api/tasks/batch-update', { ids, updates }).then(res => res.data),
 };
 
 export const clientsAPI = {

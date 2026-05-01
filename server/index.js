@@ -92,6 +92,7 @@ app.use('/uploads/services', setCorsHeaders, express.static(path.join(__dirname,
 app.use('/uploads/documents', setCorsHeaders, express.static(path.join(__dirname, '../uploads/documents')));
 app.use('/uploads/public-orders', setCorsHeaders, express.static(path.join(__dirname, '../uploads/public-orders')));
 app.use('/uploads/monitoring', setCorsHeaders, express.static(path.join(__dirname, '../uploads/monitoring')));
+app.use('/uploads/tasks', setCorsHeaders, express.static(path.join(__dirname, '../uploads/tasks')));
 
 // Generated offers with cache-busting and CORS
 app.use('/generated-offers', (req, res, next) => {

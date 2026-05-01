@@ -1,4 +1,7 @@
 const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const Task = require('../models/Task');
 const Project = require('../models/Project');
 const { auth, requireScope } = require('../middleware/auth');
@@ -6,6 +9,28 @@ const { createNextRecurrenceInstance } = require('../utils/recurringTasks');
 const { notifyTaskWatchers } = require('../utils/taskNotifications');
 
 const router = express.Router();
+
+const uploadsDir = path.join(__dirname, '../../uploads/tasks');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, uploadsDir),
+  filename: (_req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    cb(null, `task-attachment-${uniqueSuffix}${ext}`);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    cb(null, true);
+  }
+});
 
 // Human-readable labels for statuses (used in notifications)
 const STATUS_LABELS = {
@@ -15,11 +40,59 @@ const STATUS_LABELS = {
   cancelled: 'Anulowane'
 };
 
+function privateTaskAccessQuery(userId) {
+  return [
+    {
+      isPrivate: { $ne: true }
+    },
+    {
+      createdBy: userId
+    },
+    {
+      assignee: userId
+    },
+    {
+      assignees: userId
+    },
+    {
+      watchers: userId
+    }
+  ];
+}
+
+function addAccessCondition(query, condition) {
+  query.$and = query.$and || [];
+  query.$and.push(condition);
+}
+
+function assigneeQuery(userId) {
+  return {
+    $or: [
+      { assignee: userId },
+      { assignees: userId }
+    ]
+  };
+}
+
+function canAccessTask(task, userId) {
+  if (!task?.isPrivate) return true;
+  const id = userId?.toString?.() || String(userId);
+  const matches = (value) => value && (value.toString?.() || String(value)) === id;
+
+  return (
+    matches(task.createdBy) ||
+    matches(task.assignee) ||
+    (Array.isArray(task.assignees) && task.assignees.some(matches)) ||
+    (Array.isArray(task.watchers) && task.watchers.some(matches))
+  );
+}
+
 // List tasks with filters
 router.get('/', auth, requireScope('tasks:read'), async (req, res) => {
   try {
     const { assignee, project, publicOrder, status, priority, dateFrom, dateTo, limit = 200, includeTemplates } = req.query;
     const query = {};
+    addAccessCondition(query, { $or: privateTaskAccessQuery(req.user._id) });
 
     // Hide recurring templates by default (they are "meta" tasks)
     if (includeTemplates !== 'true') {
@@ -27,15 +100,9 @@ router.get('/', auth, requireScope('tasks:read'), async (req, res) => {
     }
 
     if (assignee === 'me') {
-      query.$or = [
-        { assignee: req.user._id },
-        { assignees: req.user._id }
-      ];
+      addAccessCondition(query, assigneeQuery(req.user._id));
     } else if (assignee) {
-      query.$or = [
-        { assignee: assignee },
-        { assignees: assignee }
-      ];
+      addAccessCondition(query, assigneeQuery(assignee));
     }
 
     if (project) {
@@ -97,6 +164,9 @@ router.get('/:id', auth, requireScope('tasks:read'), async (req, res) => {
     if (!task) {
       return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
     }
+    if (!canAccessTask(task, req.user._id)) {
+      return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
+    }
     res.json(task);
   } catch (error) {
     console.error('Get task error:', error);
@@ -109,6 +179,9 @@ router.post('/:id/updates', auth, requireScope('tasks:write'), async (req, res) 
   try {
     const task = await Task.findById(req.params.id);
     if (!task) {
+      return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
+    }
+    if (!canAccessTask(task, req.user._id)) {
       return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
     }
     const text = (req.body.text || '').trim();
@@ -139,7 +212,7 @@ router.post('/:id/updates', auth, requireScope('tasks:write'), async (req, res) 
 // Create task
 router.post('/', auth, requireScope('tasks:write'), async (req, res) => {
   try {
-    const { title, description, status, priority, assignee, assignees, project, publicOrder, dueDate, dueTimeMinutes, durationMinutes, recurrence, watchers } = req.body;
+    const { title, description, status, priority, assignee, assignees, project, publicOrder, dueDate, dueTimeMinutes, durationMinutes, recurrence, watchers, isPrivate } = req.body;
     if (!title || !dueDate) {
       return res.status(400).json({ message: 'Tytuł i termin są wymagane' });
     }
@@ -156,6 +229,7 @@ router.post('/', auth, requireScope('tasks:write'), async (req, res) => {
       assignee: assignee || null, // Keep for backward compatibility
       assignees: assigneesArray, // New array field
       watchers: watchersArray, // Watchers array
+      isPrivate: !!isPrivate,
       project: project || null,
       publicOrder: publicOrder || null,
       dueDate: new Date(dueDate),
@@ -244,9 +318,12 @@ router.put('/:id', auth, requireScope('tasks:write'), async (req, res) => {
     if (!task) {
       return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
     }
+    if (!canAccessTask(task, req.user._id)) {
+      return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
+    }
     const prevStatus = task.status;
     const prevDueDate = task.dueDate ? new Date(task.dueDate) : null;
-    const { title, description, status, priority, assignee, assignees, project, dueDate, dueTimeMinutes, durationMinutes, watchers } = req.body;
+    const { title, description, status, priority, assignee, assignees, project, dueDate, dueTimeMinutes, durationMinutes, watchers, isPrivate } = req.body;
     if (title != null) task.title = title;
     if (description != null) task.description = description;
     if (status != null) task.status = status;
@@ -258,6 +335,7 @@ router.put('/:id', auth, requireScope('tasks:write'), async (req, res) => {
     if (watchers !== undefined) {
       task.watchers = Array.isArray(watchers) ? watchers.filter(Boolean) : [];
     }
+    if (isPrivate !== undefined) task.isPrivate = !!isPrivate;
     if (project !== undefined) task.project = project || null;
     if (req.body.publicOrder !== undefined) task.publicOrder = req.body.publicOrder || null;
     const dueDateChanged = dueDate != null && prevDueDate && new Date(dueDate).getTime() !== prevDueDate.getTime();
@@ -332,14 +410,156 @@ router.put('/:id', auth, requireScope('tasks:write'), async (req, res) => {
 // Delete task
 router.delete('/:id', auth, requireScope('tasks:write'), async (req, res) => {
   try {
-    const task = await Task.findByIdAndDelete(req.params.id);
+    const task = await Task.findById(req.params.id);
     if (!task) {
       return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
     }
+    if (!canAccessTask(task, req.user._id)) {
+      return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
+    }
+    if (task.attachments && task.attachments.length > 0) {
+      task.attachments.forEach((att) => {
+        const filePath = path.join(uploadsDir, att.filename);
+        if (fs.existsSync(filePath)) {
+          try { fs.unlinkSync(filePath); } catch (e) { /* ignore */ }
+        }
+      });
+    }
+    await task.deleteOne();
     res.json({ message: 'Zadanie usunięte' });
   } catch (error) {
     console.error('Delete task error:', error);
     res.status(500).json({ message: 'Błąd podczas usuwania zadania' });
+  }
+});
+
+// Upload attachment to task
+router.post('/:id/attachments', auth, requireScope('tasks:write'), upload.array('files', 20), async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+    if (!task) {
+      return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
+    }
+    if (!canAccessTask(task, req.user._id)) {
+      return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
+    }
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ message: 'Brak plików do przesłania' });
+    }
+    task.attachments = task.attachments || [];
+    req.files.forEach((file) => {
+      task.attachments.push({
+        filename: file.filename,
+        originalname: file.originalname,
+        path: file.path,
+        mimetype: file.mimetype,
+        size: file.size,
+        uploadedBy: req.user._id,
+        uploadedAt: new Date()
+      });
+    });
+    await task.save();
+    await task.populate('attachments.uploadedBy', 'firstName lastName');
+    res.status(201).json(task);
+  } catch (error) {
+    console.error('Upload task attachment error:', error);
+    res.status(500).json({ message: 'Błąd podczas przesyłania plików' });
+  }
+});
+
+// Delete attachment from task
+router.delete('/:id/attachments/:attachmentId', auth, requireScope('tasks:write'), async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+    if (!task) {
+      return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
+    }
+    if (!canAccessTask(task, req.user._id)) {
+      return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
+    }
+    const attachment = (task.attachments || []).find(
+      (a) => a._id.toString() === req.params.attachmentId
+    );
+    if (!attachment) {
+      return res.status(404).json({ message: 'Załącznik nie został znaleziony' });
+    }
+    const filePath = path.join(uploadsDir, attachment.filename);
+    if (fs.existsSync(filePath)) {
+      try { fs.unlinkSync(filePath); } catch (e) { /* ignore */ }
+    }
+    task.attachments.pull(req.params.attachmentId);
+    await task.save();
+    res.json(task);
+  } catch (error) {
+    console.error('Delete task attachment error:', error);
+    res.status(500).json({ message: 'Błąd podczas usuwania załącznika' });
+  }
+});
+
+// Batch delete tasks
+router.post('/batch-delete', auth, requireScope('tasks:write'), async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: 'Podaj listę identyfikatorów zadań do usunięcia' });
+    }
+    let deleted = 0;
+    for (const id of ids) {
+      const task = await Task.findById(id);
+      if (!task) continue;
+      if (!canAccessTask(task, req.user._id)) continue;
+      if (task.attachments && task.attachments.length > 0) {
+        task.attachments.forEach((att) => {
+          const fpath = path.join(uploadsDir, att.filename);
+          if (fs.existsSync(fpath)) {
+            try { fs.unlinkSync(fpath); } catch (e) { /* ignore */ }
+          }
+        });
+      }
+      await task.deleteOne();
+      deleted++;
+    }
+    res.json({ message: `Usunięto ${deleted} ${deleted === 1 ? 'zadanie' : (deleted < 5 ? 'zadania' : 'zadań')}`, count: deleted });
+  } catch (error) {
+    console.error('Batch delete tasks error:', error);
+    res.status(500).json({ message: 'Błąd podczas usuwania zadań' });
+  }
+});
+
+// Batch update tasks status
+router.post('/batch-update', auth, requireScope('tasks:write'), async (req, res) => {
+  try {
+    const { ids, updates } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: 'Podaj listę identyfikatorów zadań' });
+    }
+    if (!updates || typeof updates !== 'object') {
+      return res.status(400).json({ message: 'Podaj dane do aktualizacji' });
+    }
+    let updated = 0;
+    for (const id of ids) {
+      const task = await Task.findById(id);
+      if (!task) continue;
+      if (!canAccessTask(task, req.user._id)) continue;
+      if (updates.status != null) {
+        if (updates.status === 'done' && task.status !== 'done') {
+          task.completedAt = new Date();
+          if (task.recurrenceParent) {
+            try { await createNextRecurrenceInstance(task.recurrenceParent); } catch (e) { /* ignore */ }
+          }
+        }
+        if (updates.status !== 'done') task.completedAt = null;
+        task.status = updates.status;
+      }
+      if (updates.priority != null) task.priority = updates.priority;
+      if (Array.isArray(updates.assignees)) task.assignees = updates.assignees;
+      await task.save();
+      updated++;
+    }
+    res.json({ message: `Zaktualizowano ${updated} ${updated === 1 ? 'zadanie' : (updated < 5 ? 'zadania' : 'zadań')}`, count: updated });
+  } catch (error) {
+    console.error('Batch update tasks error:', error);
+    res.status(500).json({ message: 'Błąd podczas aktualizacji zadań' });
   }
 });
 

@@ -204,6 +204,85 @@
                 </div>
             </section>
 
+            <section class="reveal">
+                <div class="glass-card overflow-hidden print-bg-white">
+                    <div class="grid lg:grid-cols-[0.95fr_1.05fr] gap-0">
+                        <div class="p-8 md:p-10 bg-gradient-to-br from-blue-600/20 via-slate-900/40 to-purple-600/20 border-b lg:border-b-0 lg:border-r border-white/10">
+                            <p class="text-sm uppercase tracking-[0.22em] text-blue-300 font-semibold mb-4">{{t.understandingEyebrow}}</p>
+                            <h2 class="text-3xl md:text-4xl font-extrabold leading-tight mb-6">{{t.understandingTitle}}</h2>
+                            <p class="text-slate-300 text-lg leading-8 print-text-gray">{{t.understandingLead}}</p>
+                            <div class="mt-8 rounded-2xl border border-white/10 bg-black/20 p-5">
+                                <p class="text-sm uppercase tracking-[0.16em] text-purple-300 font-semibold mb-2">{{t.businessGoalTitle}}</p>
+                                <p class="text-white print-text-black text-xl font-bold leading-8">{{mainBenefit}}</p>
+                            </div>
+                        </div>
+
+                        <div class="p-8 md:p-10">
+                            <div class="grid sm:grid-cols-3 gap-4 mb-8">
+                                <div class="rounded-2xl border border-blue-400/20 bg-blue-500/10 p-4">
+                                    <div class="text-3xl font-extrabold text-blue-300">{{length modules}}</div>
+                                    <div class="text-sm text-slate-300 mt-1 print-text-gray">{{t.scopeAreasLabel}}</div>
+                                </div>
+                                <div class="rounded-2xl border border-purple-400/20 bg-purple-500/10 p-4">
+                                    <div class="text-3xl font-extrabold text-purple-300">4</div>
+                                    <div class="text-sm text-slate-300 mt-1 print-text-gray">{{t.controlStagesLabel}}</div>
+                                </div>
+                                <div class="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-4">
+                                    <div class="text-3xl font-extrabold text-emerald-300">1</div>
+                                    <div class="text-sm text-slate-300 mt-1 print-text-gray">{{t.sharedGoalLabel}}</div>
+                                </div>
+                            </div>
+
+                            <div class="rounded-2xl border border-white/10 bg-white/5 p-6 mb-6">
+                                <h3 class="text-2xl font-bold mb-4">{{t.scopeMapTitle}}</h3>
+                                <div class="space-y-4">
+                                    {{#each modules}}
+                                    <div class="flex gap-4">
+                                        <div class="w-9 h-9 rounded-xl bg-white/10 text-blue-300 flex items-center justify-center font-bold flex-shrink-0">{{add @index 1}}</div>
+                                        <div>
+                                            <h4 class="font-bold text-white print-text-black">{{name}}</h4>
+                                            <p class="text-slate-400 leading-7 print-text-gray">{{description}}</p>
+                                        </div>
+                                    </div>
+                                    {{/each}}
+                                </div>
+                            </div>
+
+                            <div class="rounded-2xl border border-white/10 bg-white/5 p-6">
+                                <h3 class="text-2xl font-bold mb-5">{{t.approachTitle}}</h3>
+                                <div class="space-y-5">
+                                    <div class="flex gap-4">
+                                        <div class="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-300 flex items-center justify-center font-bold flex-shrink-0">01</div>
+                                        <div>
+                                            <h4 class="font-bold text-white print-text-black">{{t.approachStep1Title}}</h4>
+                                            <p class="text-slate-400 leading-7 print-text-gray">{{t.approachStep1Text}}</p>
+                                        </div>
+                                    </div>
+                                    <div class="flex gap-4">
+                                        <div class="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-300 flex items-center justify-center font-bold flex-shrink-0">02</div>
+                                        <div>
+                                            <h4 class="font-bold text-white print-text-black">{{t.approachStep2Title}}</h4>
+                                            <p class="text-slate-400 leading-7 print-text-gray">{{t.approachStep2Text}}</p>
+                                        </div>
+                                    </div>
+                                    <div class="flex gap-4">
+                                        <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center font-bold flex-shrink-0">03</div>
+                                        <div>
+                                            <h4 class="font-bold text-white print-text-black">{{t.approachStep3Title}}</h4>
+                                            <p class="text-slate-400 leading-7 print-text-gray">{{t.approachStep3Text}}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mt-6 rounded-2xl border border-amber-300/20 bg-amber-400/10 p-5">
+                                    <h4 class="font-bold text-amber-200 print-text-black mb-2">{{t.riskControlTitle}}</h4>
+                                    <p class="text-slate-300 leading-7 print-text-gray">{{t.riskControlText}}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <!-- PROJECT GUARDIAN -->
             <section class="reveal">
                 <h2 class="text-3xl font-bold mb-8 text-center">{{t.guardianTitle}}</h2>
@@ -1293,4 +1372,4 @@
 
     </script>
 </body>
-</html> 
+</html>

@@ -126,6 +126,23 @@ const i18n = {
     preliminaryLead: 'Niniejsza oferta ma charakter wstępny i konsultacyjny. Po dokładnym poznaniu Państwa potrzeb i wymagań przygotujemy szczegółową ofertę finalną z precyzyjną wyceną.',
     greeting: 'Szanowni Państwo,',
     guardianTitle: 'Państwa Dedykowany Opiekun Projektu',
+    understandingTitle: 'Jak rozumiemy Państwa cel i zakres',
+    understandingEyebrow: 'Nasze rozumienie projektu',
+    understandingLead: 'Ta część pokazuje, jak przekładamy Państwa cel biznesowy na konkretny zakres prac, decyzje projektowe i sposób prowadzenia realizacji.',
+    businessGoalTitle: 'Cel, który ma prowadzić projekt',
+    scopeMapTitle: 'Zakres ułożony w logiczny plan',
+    scopeAreasLabel: 'obszary zakresu',
+    controlStagesLabel: 'etapy kontroli',
+    sharedGoalLabel: 'wspólny cel',
+    approachTitle: 'Podejście do realizacji',
+    approachStep1Title: 'Najpierw porządkujemy decyzje',
+    approachStep1Text: 'Zaczynamy od doprecyzowania priorytetów, ryzyk i kryteriów sukcesu, żeby zespół nie budował funkcji w oderwaniu od realnego celu.',
+    approachStep2Title: 'Budujemy etapami',
+    approachStep2Text: 'Zakres dzielimy na czytelne moduły, dzięki czemu łatwiej kontrolować postęp, budżet i momenty akceptacji.',
+    approachStep3Title: 'Dowozimy użyteczny efekt',
+    approachStep3Text: 'Skupiamy się na rozwiązaniu, które można wdrożyć, utrzymać i rozwijać, a nie tylko na liście funkcji do odhaczenia.',
+    riskControlTitle: 'Kontrola ryzyk i jakości',
+    riskControlText: 'Na każdym etapie pilnujemy spójności zakresu, komunikacji i odbiorów. Jeśli w trakcie pojawi się lepsza droga do celu, rekomendujemy ją jasno wraz z konsekwencjami dla czasu i budżetu.',
     solutionScope: 'Proponowane Rozwiązanie i Zakres Prac',
     timeline: 'Harmonogram Projektu',
     investment: 'Inwestycja i Warunki Współpracy',
@@ -191,6 +208,23 @@ const i18n = {
     preliminaryLead: 'This offer is preliminary and consultative. After understanding your needs, we will prepare a detailed final offer with precise pricing.',
     greeting: 'Dear Sir/Madam,',
     guardianTitle: 'Your Dedicated Project Manager',
+    understandingTitle: 'How we understand your goal and scope',
+    understandingEyebrow: 'Our project understanding',
+    understandingLead: 'This section shows how we translate your business goal into scope, project decisions and a practical delivery approach.',
+    businessGoalTitle: 'The goal guiding the project',
+    scopeMapTitle: 'Scope organized into a clear plan',
+    scopeAreasLabel: 'scope areas',
+    controlStagesLabel: 'control stages',
+    sharedGoalLabel: 'shared goal',
+    approachTitle: 'Delivery approach',
+    approachStep1Title: 'We clarify decisions first',
+    approachStep1Text: 'We start by clarifying priorities, risks and success criteria so the team does not build features detached from the actual goal.',
+    approachStep2Title: 'We deliver in stages',
+    approachStep2Text: 'We divide the scope into clear modules, making it easier to control progress, budget and acceptance points.',
+    approachStep3Title: 'We deliver a useful outcome',
+    approachStep3Text: 'We focus on a solution that can be launched, maintained and developed, not only a checklist of features.',
+    riskControlTitle: 'Risk and quality control',
+    riskControlText: 'At every stage we keep scope, communication and acceptance under control. If a better path appears, we explain it clearly with its impact on time and budget.',
     solutionScope: 'Proposed Solution and Scope of Work',
     timeline: 'Project Timeline',
     investment: 'Investment and Terms of Cooperation',
@@ -2206,6 +2240,48 @@ router.post('/generate-contract/:projectId', auth, async (req, res) => {
           'Spory będą rozstrzygane polubownie, a w razie potrzeby przez sąd właściwy dla miejsca zamieszkania Wykonawcy.',
           'W sprawach nieuregulowanych stosuje się przepisy Kodeksu cywilnego.'
         ]);
+
+        const addSignatureSection = () => {
+          const signatureImagePath = path.join(__dirname, '../public/images/podpis.png');
+          const pageBottom = doc.page.height - doc.page.margins.bottom;
+          const requiredHeight = 130;
+
+          if (doc.y + requiredHeight > pageBottom) {
+            doc.addPage();
+          } else {
+            doc.moveDown(2);
+          }
+
+          const sectionTop = doc.y;
+          const columnGap = 44;
+          const columnWidth = (doc.page.width - doc.page.margins.left - doc.page.margins.right - columnGap) / 2;
+          const leftX = doc.page.margins.left;
+          const rightX = leftX + columnWidth + columnGap;
+          const lineY = sectionTop + 78;
+
+          doc.strokeColor('#000').lineWidth(1);
+          doc.moveTo(leftX, lineY).lineTo(leftX + columnWidth, lineY).stroke();
+          doc.moveTo(rightX, lineY).lineTo(rightX + columnWidth, lineY).stroke();
+
+          try {
+            if (require('fs').existsSync(signatureImagePath)) {
+              doc.image(signatureImagePath, rightX + 18, sectionTop, {
+                fit: [columnWidth - 36, 70],
+                align: 'center',
+                valign: 'bottom'
+              });
+            }
+          } catch (e) {
+            console.error('Contract signature image error:', e.message);
+          }
+
+          doc.font(fonts.regular).fontSize(10).fillColor('#000');
+          doc.text('Zamawiający', leftX, lineY + 8, { width: columnWidth, align: 'center' });
+          doc.text('Wykonawca', rightX, lineY + 8, { width: columnWidth, align: 'center' });
+          doc.y = lineY + 34;
+        };
+
+        addSignatureSection();
 
         doc.end();
         stream.on('finish', resolve);
