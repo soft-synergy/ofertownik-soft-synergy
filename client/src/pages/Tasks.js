@@ -58,9 +58,9 @@ function Skeleton({ className = '' }) {
 }
 function BoardSkeleton() {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="flex gap-4 overflow-x-auto pb-4 -mx-4 px-4">
       {COLUMN_KEYS.map((k) => (
-        <div key={k} className="bg-white rounded-2xl border border-gray-200/80 shadow-sm p-4">
+        <div key={k} className="flex-shrink-0 w-[340px] bg-white rounded-2xl border border-gray-200/80 shadow-sm p-4">
           <Skeleton className="h-6 w-28 mb-4" />
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="mb-3 p-4 rounded-xl border border-gray-100">
@@ -211,7 +211,7 @@ function DroppableColumn({ id, statusKey, tasks, onTaskOpen, onToggleDone, onTog
   const st = STATUS[statusKey];
 
   return (
-    <div ref={setNodeRef} className={`flex flex-col bg-gray-50/80 rounded-2xl border-2 transition-all min-h-[300px]
+    <div ref={setNodeRef} className={`flex flex-col bg-gray-50/80 rounded-2xl border-2 transition-all min-h-[400px] h-full
       ${isOver ? 'border-primary-400 bg-primary-50/50 shadow-lg shadow-primary-100/50 scale-[1.01]' : 'border-transparent'}`}
     >
       <div className={`flex items-center justify-between px-4 py-3.5 border-b ${isOver ? 'border-primary-200' : 'border-gray-200/60'}`}>
@@ -260,19 +260,20 @@ function BoardView({ tasks, onTaskOpen, onToggleDone, onToggleSelect, selectedId
   }, [tasks]);
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
+    <div className="flex gap-4 overflow-x-auto pb-4 -mx-4 px-4">
       {COLUMN_KEYS.map((key) => (
-        <DroppableColumn
-          key={key}
-          id={`col:${key}`}
-          statusKey={key}
-          tasks={columns[key]}
-          onTaskOpen={onTaskOpen}
-          onToggleDone={onToggleDone}
-          onToggleSelect={onToggleSelect}
-          selectedIds={selectedIds}
-          onDragStart={onDragStart}
-        />
+        <div key={key} className="flex-shrink-0 w-[340px]">
+          <DroppableColumn
+            id={`col:${key}`}
+            statusKey={key}
+            tasks={columns[key]}
+            onTaskOpen={onTaskOpen}
+            onToggleDone={onToggleDone}
+            onToggleSelect={onToggleSelect}
+            selectedIds={selectedIds}
+            onDragStart={onDragStart}
+          />
+        </div>
       ))}
     </div>
   );
