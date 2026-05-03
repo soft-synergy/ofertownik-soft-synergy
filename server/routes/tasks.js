@@ -175,37 +175,56 @@ router.get('/:id', auth, requireScope('tasks:read'), async (req, res) => {
 });
 
 // Add update to task
-router.post('/:id/updates', auth, requireScope('tasks:write'), async (req, res) => {
+router.post('/:id/updates', auth, requireScope('tasks:write'), upload.array('files', 20), async (req, res) => {
   try {
     const task = await Task.findById(req.params.id);
-    if (!task) {
-      return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
-    }
-    if (!canAccessTask(task, req.user._id)) {
-      return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
-    }
+    if (!task) return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
+    if (!canAccessTask(task, req.user._id)) return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
     const text = (req.body.text || '').trim();
-    if (!text) {
-      return res.status(400).json({ message: 'Treść update\'u jest wymagana' });
+    const files = req.files || [];
+    if (!text && files.length === 0) {
+      return res.status(400).json({ message: 'Treść lub plik jest wymagany' });
     }
     task.updates = task.updates || [];
     task.updates.push({
       text,
       author: req.user._id,
-      createdAt: new Date()
+      createdAt: new Date(),
+      attachments: files.map(f => ({ filename: f.filename, originalname: f.originalname, mimetype: f.mimetype, size: f.size }))
     });
     await task.save();
     await task.populate('updates.author', 'firstName lastName');
-    
-    // Wyślij powiadomienia do watchers
     notifyTaskWatchers(task, 'update_added', `Dodano update: "${text.substring(0, 100)}${text.length > 100 ? '...' : ''}"`, req.user).catch(err => {
       console.error('[Add task update] Błąd powiadomień:', err);
     });
-    
     res.status(201).json(task);
   } catch (error) {
     console.error('Add task update error:', error);
     res.status(500).json({ message: 'Błąd podczas dodawania update\'u' });
+  }
+});
+
+router.delete('/:id/updates/:updateId', auth, requireScope('tasks:write'), async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+    if (!task) return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
+    if (!canAccessTask(task, req.user._id)) return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
+    const update = task.updates.id(req.params.updateId);
+    if (!update) return res.status(404).json({ message: 'Update nie istnieje' });
+    // Delete associated files from disk
+    if (update.attachments && update.attachments.length > 0) {
+      update.attachments.forEach(att => {
+        const filePath = path.join(uploadsDir, att.filename);
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      });
+    }
+    update.deleteOne();
+    await task.save();
+    await task.populate('updates.author', 'firstName lastName');
+    res.json(task);
+  } catch (error) {
+    console.error('Delete task update error:', error);
+    res.status(500).json({ message: 'Błąd podczas usuwania update\'u' });
   }
 });
 
@@ -561,6 +580,30 @@ router.post('/batch-update', auth, requireScope('tasks:write'), async (req, res)
     console.error('Batch update tasks error:', error);
     res.status(500).json({ message: 'Błąd podczas aktualizacji zadań' });
   }
+});
+
+// Add link
+router.post('/:id/links', auth, requireScope('tasks:write'), async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+    if (!task) return res.status(404).json({ message: 'Nie znaleziono zadania' });
+    const { url, title } = req.body;
+    if (!url) return res.status(400).json({ message: 'URL jest wymagany' });
+    task.links.push({ url: url.trim(), title: (title || '').trim() });
+    await task.save();
+    res.json(task.links[task.links.length - 1]);
+  } catch (e) { res.status(500).json({ message: 'Błąd serwera' }); }
+});
+
+// Delete link
+router.delete('/:id/links/:linkId', auth, requireScope('tasks:write'), async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+    if (!task) return res.status(404).json({ message: 'Nie znaleziono zadania' });
+    task.links = task.links.filter(l => l._id.toString() !== req.params.linkId);
+    await task.save();
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ message: 'Błąd serwera' }); }
 });
 
 module.exports = router;

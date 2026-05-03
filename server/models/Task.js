@@ -112,9 +112,15 @@ const taskSchema = new mongoose.Schema({
   },
   /** Updates / progress notes (e.g. "Daj update") */
   updates: [{
-    text: { type: String, required: true },
+    text: { type: String, default: '' },
     author: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    createdAt: { type: Date, default: Date.now }
+    createdAt: { type: Date, default: Date.now },
+    attachments: [{
+      filename: { type: String, required: true },
+      originalname: { type: String, required: true },
+      mimetype: { type: String },
+      size: { type: Number }
+    }]
   }],
   /** File attachments / uploaded documents */
   attachments: [{
@@ -125,6 +131,11 @@ const taskSchema = new mongoose.Schema({
     size: { type: Number },
     uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     uploadedAt: { type: Date, default: Date.now }
+  }],
+  links: [{
+    url: { type: String, required: true },
+    title: { type: String, default: '' },
+    createdAt: { type: Date, default: Date.now }
   }]
 }, {
   timestamps: true

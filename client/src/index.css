@@ -5,10 +5,23 @@
 @layer base {
   html {
     font-family: 'Inter', sans-serif;
+    /* Prevent horizontal overflow on mobile */
+    overflow-x: hidden;
   }
-  
+
   body {
     @apply bg-gray-50 text-gray-900;
+    overflow-x: hidden;
+  }
+
+  /* Prevent iOS input zoom — all inputs default to 16px base */
+  input, textarea, select {
+    font-size: 16px;
+  }
+
+  /* Better tap highlight on mobile */
+  * {
+    -webkit-tap-highlight-color: transparent;
   }
 }
 
@@ -30,7 +43,7 @@
   }
   
   .input-field {
-    @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent;
+    @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base;
   }
   
   .form-label {

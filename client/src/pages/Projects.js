@@ -293,6 +293,27 @@ const Projects = () => {
     return formatCurrency(project.finalEstimateTotal || project.pricing?.total || 0);
   };
 
+  const STATUS_CHIPS = [
+    { value: '', label: 'Wszystkie' },
+    { value: 'active', label: 'Aktywne' },
+    { value: 'to_final_estimation', label: 'Wycena' },
+    { value: 'to_prepare_final_offer', label: 'Oferta finalna' },
+    { value: 'accepted', label: 'Zaakceptowane' },
+    { value: 'draft', label: 'Szkic' },
+    { value: 'completed', label: 'Zakończone' },
+    { value: 'cancelled', label: 'Anulowane' },
+  ];
+
+  const STATUS_BORDER = {
+    draft: 'border-l-gray-300',
+    active: 'border-l-green-400',
+    accepted: 'border-l-emerald-500',
+    completed: 'border-l-blue-400',
+    cancelled: 'border-l-red-400',
+    to_final_estimation: 'border-l-orange-400',
+    to_prepare_final_offer: 'border-l-lime-500',
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -302,7 +323,218 @@ const Projects = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <>
+    {/* ══════════════ MOBILE LAYOUT ══════════════ */}
+    <div className="sm:hidden -m-4 min-h-screen bg-gray-50 flex flex-col pb-24">
+
+      {/* Sticky search + filter chips */}
+      <div className="sticky top-0 z-10 bg-white border-b border-gray-200">
+        <div className="px-4 pt-3 pb-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Szukaj projektów..."
+              value={filters.search}
+              onChange={(e) => setFilters({ ...filters, search: e.target.value, page: 1 })}
+              className="w-full pl-9 pr-4 py-2.5 bg-gray-100 rounded-xl border-0 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+        </div>
+        <div className="flex gap-2 px-4 pb-3 overflow-x-auto scrollbar-hide" style={{scrollbarWidth:'none'}}>
+          {STATUS_CHIPS.map(chip => (
+            <button
+              key={chip.value}
+              type="button"
+              onClick={() => setFilters(f => ({ ...f, status: chip.value, page: 1 }))}
+              className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
+                filters.status === chip.value
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {chip.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Project list */}
+      <div className="flex-1 p-4 space-y-3">
+        {data?.projects?.length === 0 && (
+          <div className="text-center py-16 text-gray-400">
+            <FolderOpen className="h-12 w-12 mx-auto mb-3 opacity-30" />
+            <p className="text-sm font-medium">Brak projektów</p>
+          </div>
+        )}
+
+        {data?.projects?.map((project) => {
+          const hasPendingFollowUp = project.nextFollowUpDueAt && project.status !== 'accepted' && project.status !== 'cancelled' && (!project.followUps || project.followUps.length < MAX_FOLLOW_UPS);
+          const isOverdue = hasPendingFollowUp && new Date(project.nextFollowUpDueAt) <= new Date();
+          const borderColor = STATUS_BORDER[project.status] || 'border-l-gray-200';
+          const history = project.clarificationHistory || [];
+          const lastClarif = history.length ? history[history.length - 1] : null;
+          const hasPendingClarification = lastClarif && !lastClarif.responseText;
+
+          return (
+            <div
+              key={project._id}
+              className={`bg-white rounded-2xl shadow-sm border border-gray-100 border-l-4 ${borderColor} ${isOverdue ? 'ring-2 ring-red-400' : ''}`}
+            >
+              {/* Card header */}
+              <Link to={`/projects/${project._id}`} className="block p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900 text-sm leading-snug truncate">{project.name}</p>
+                    <p className="text-xs text-gray-500 mt-0.5 truncate">{project.clientName}</p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-sm font-bold text-gray-900">{formatCurrency(project.pricing?.total || 0)}</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
+                  {getStatusBadge(project.status)}
+                  {project.offerType === 'preliminary' && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">Wstępna</span>
+                  )}
+                  {project.priority && (
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                      project.priority === 'urgent' ? 'bg-red-100 text-red-700' :
+                      project.priority === 'high' ? 'bg-orange-100 text-orange-700' :
+                      'bg-gray-100 text-gray-600'
+                    }`}>
+                      {project.priority === 'urgent' ? 'Pilny' : project.priority === 'high' ? 'Wysoki' : 'Normalny'}
+                    </span>
+                  )}
+                </div>
+
+                {isOverdue && (
+                  <p className="text-xs text-red-600 font-semibold mt-1.5">
+                    Termin follow-up minął: {new Date(project.nextFollowUpDueAt).toLocaleDateString('pl-PL')}
+                  </p>
+                )}
+              </Link>
+
+              {/* Workflow action buttons */}
+              {project.offerType === 'preliminary' && (
+                <div className="px-4 pb-4 space-y-2">
+                  {project.status !== 'to_final_estimation' &&
+                   project.status !== 'to_prepare_final_offer' &&
+                   project.status !== 'accepted' &&
+                   project.status !== 'cancelled' && (
+                    <button
+                      onClick={() => handleRequestFinalEstimation(project)}
+                      disabled={requestFinalEstimationProjectId === project._id}
+                      className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-orange-400 text-white font-semibold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 text-sm transition-colors"
+                    >
+                      {requestFinalEstimationProjectId === project._id
+                        ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/80 border-t-transparent"/><span>Przenosze...</span></>
+                        : <><DollarSign className="h-4 w-4"/><span>Do wyceny finalnej</span></>}
+                    </button>
+                  )}
+                  {project.status === 'to_final_estimation' && (
+                    <button
+                      onClick={() => handleOpenRespondModal(project)}
+                      className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 text-sm"
+                    >
+                      <MessageCircle className="h-4 w-4"/><span>Odpowiedz</span>
+                    </button>
+                  )}
+                  {hasPendingClarification && (
+                    <button
+                      onClick={() => handleOpenRespondModal(project)}
+                      className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 text-sm"
+                    >
+                      <MessageCircle className="h-4 w-4"/><span>Odpowiedz na doprecyzowanie</span>
+                    </button>
+                  )}
+                  {project.status === 'to_prepare_final_offer' && (
+                    <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-xs text-green-800 font-medium">
+                      ✓ {project.finalEstimateMode === 'hourly'
+                        ? `Wycena godzinowa (${formatProjectEstimatePreview(project)})`
+                        : `Wycena finalna (${formatProjectEstimatePreview(project)})`}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Quick actions row */}
+              <div className="flex border-t border-gray-100 divide-x divide-gray-100">
+                <Link
+                  to={`/projects/${project._id}`}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-3 text-xs text-gray-500 font-medium hover:bg-gray-50 active:bg-gray-100"
+                >
+                  <Eye className="h-4 w-4"/> Szczegóły
+                </Link>
+                <Link
+                  to={`/projects/${project._id}/edit`}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-3 text-xs text-gray-500 font-medium hover:bg-gray-50 active:bg-gray-100"
+                >
+                  <Edit className="h-4 w-4"/> Edytuj
+                </Link>
+                {project.generatedOfferUrl ? (
+                  <a
+                    href={`https://oferty.soft-synergy.com${project.generatedOfferUrl}`}
+                    target="_blank" rel="noopener noreferrer"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-3 text-xs text-green-600 font-medium hover:bg-gray-50 active:bg-gray-100"
+                  >
+                    <Download className="h-4 w-4"/> Oferta
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => generateOffer(project._id)}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-3 text-xs text-gray-500 font-medium hover:bg-gray-50 active:bg-gray-100"
+                  >
+                    <FileText className="h-4 w-4"/> Oferta
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleDelete(project._id)}
+                  className="flex items-center justify-center px-4 py-3 text-xs text-red-400 hover:bg-red-50 active:bg-red-100 rounded-br-2xl"
+                >
+                  <Trash2 className="h-4 w-4"/>
+                </button>
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Pagination — mobile */}
+        {data?.totalPages > 1 && (
+          <div className="flex gap-3 pt-2">
+            <button
+              onClick={() => setFilters(f => ({ ...f, page: Math.max(1, Number(f.page) - 1) }))}
+              disabled={Number(data.currentPage) <= 1}
+              className="flex-1 btn-secondary disabled:opacity-40 text-sm py-2.5"
+            >
+              ← Poprzednia
+            </button>
+            <button
+              onClick={() => setFilters(f => ({ ...f, page: Math.min(Number(data.totalPages), Number(f.page) + 1) }))}
+              disabled={Number(data.currentPage) >= Number(data.totalPages)}
+              className="flex-1 btn-secondary disabled:opacity-40 text-sm py-2.5"
+            >
+              Następna →
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* FAB */}
+      <Link
+        to="/projects/new"
+        className="fixed bottom-6 right-6 z-30 h-14 w-14 rounded-full bg-primary-600 text-white shadow-lg flex items-center justify-center active:scale-95 transition-transform"
+        style={{boxShadow:'0 4px 20px rgba(37,99,235,0.4)'}}
+      >
+        <Plus className="h-6 w-6"/>
+      </Link>
+    </div>
+
+    {/* ══════════════ DESKTOP LAYOUT ══════════════ */}
+    <div className="hidden sm:block space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -1050,7 +1282,8 @@ const Projects = () => {
         </div>
       )}
     </div>
+    </>
   );
 };
 
-export default Projects; 
+export default Projects;
