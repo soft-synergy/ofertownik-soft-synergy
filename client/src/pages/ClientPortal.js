@@ -11,7 +11,9 @@ const ClientPortal = () => {
   const [success, setSuccess] = useState('');
   const [actionError, setActionError] = useState('');
   const [taskNoteDrafts, setTaskNoteDrafts] = useState({});
+  const [taskNoteFiles, setTaskNoteFiles] = useState({});
   const [savingTaskNote, setSavingTaskNote] = useState(null);
+  const [deletingNote, setDeletingNote] = useState(null);
   const [month, setMonth] = useState(() => {
     const d = new Date();
     const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -85,12 +87,21 @@ const ClientPortal = () => {
 
   const handleAddTaskNote = async (taskId) => {
     const text = (taskNoteDrafts[taskId] || '').trim();
-    if (!text) return;
+    const files = taskNoteFiles[taskId] || [];
+    if (!text && files.length === 0) return;
     setSavingTaskNote(taskId);
     setActionError('');
     try {
-      await api.post(`/api/client-portal/${token}/tasks/${taskId}/client-note`, { text });
+      const formData = new FormData();
+      formData.append('text', text);
+      for (const file of files) {
+        formData.append('files', file);
+      }
+      await api.post(`/api/client-portal/${token}/tasks/${taskId}/client-note`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
       setTaskNoteDrafts((prev) => ({ ...prev, [taskId]: '' }));
+      setTaskNoteFiles((prev) => ({ ...prev, [taskId]: [] }));
       setSuccess('Notatka została dodana do zadania.');
       await fetchData();
       setTimeout(() => setSuccess(''), 5000);
@@ -100,6 +111,45 @@ const ClientPortal = () => {
     } finally {
       setSavingTaskNote(null);
     }
+  };
+
+  const handleDeleteTaskNote = async (taskId, noteId) => {
+    if (!window.confirm('Na pewno usunąć tę notatkę?')) return;
+    setDeletingNote(noteId);
+    setActionError('');
+    try {
+      await api.delete(`/api/client-portal/${token}/tasks/${taskId}/client-note/${noteId}`);
+      setSuccess('Notatka została usunięta.');
+      await fetchData();
+      setTimeout(() => setSuccess(''), 5000);
+    } catch (e) {
+      setActionError(e?.response?.data?.message || 'Nie udało się usunąć notatki');
+      setTimeout(() => setActionError(''), 5000);
+    } finally {
+      setDeletingNote(null);
+    }
+  };
+
+  const formatFileSize = (bytes) => {
+    if (!bytes && bytes !== 0) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const handleSelectFiles = (taskId, fileList) => {
+    const arr = Array.from(fileList || []);
+    setTaskNoteFiles((prev) => {
+      const existing = prev[taskId] || [];
+      return { ...prev, [taskId]: [...existing, ...arr].slice(0, 10) };
+    });
+  };
+
+  const removeSelectedFile = (taskId, index) => {
+    setTaskNoteFiles((prev) => ({
+      ...prev,
+      [taskId]: (prev[taskId] || []).filter((_, i) => i !== index)
+    }));
   };
 
   const getTaskStatusLabel = (status) => {
@@ -222,9 +272,9 @@ const ClientPortal = () => {
       }
       if (status === 'accepted') {
         return {
-          title: 'Oferta została zaakceptowana – szykujemy kolejne kroki',
+          title: 'Działamy – jesteśmy po tej samej stronie stołu',
           description:
-            'Dziękujemy za zaufanie! W oparciu o zaakceptowaną ofertę przygotujemy formalności i szczegółowy plan startu projektu.',
+            'Dziękujemy za zaufanie! Projekt rusza pełną parą i pracujemy razem nad jego realizacją – aktualny postęp prac widzisz poniżej.',
         };
       }
       if (status === 'cancelled') {
@@ -245,9 +295,9 @@ const ClientPortal = () => {
     // Final offers
     if (status === 'accepted') {
       return {
-        title: 'Oferta zaakceptowana – jesteśmy po tej samej stronie stołu',
+        title: 'Działamy – jesteśmy po tej samej stronie stołu',
         description:
-          'Na bazie zaakceptowanej oferty przygotowujemy formalności i planujemy start prac. W tym panelu zawsze sprawdzisz historię ofert i dokumentów.',
+          'Projekt rusza pełną parą. Zespół Soft Synergy pracuje nad realizacją, a Ty na bieżąco widzisz tu postęp prac, terminy i to, co dzieje się po naszej stronie.',
       };
     }
 
@@ -500,8 +550,9 @@ const ClientPortal = () => {
                   {primaryExplainer.description}
                 </p>
                 <p className="mt-3 text-[11px] text-blue-200/80">
-                  Ten panel aktualizuje się automatycznie, gdy zespół SoftSynergy przechodzi kolejne etapy pracy nad Twoją ofertą
-                  i projektem.
+                  {primaryProject?.status === 'accepted'
+                    ? 'Ten panel aktualizuje się automatycznie wraz z postępem prac – widzisz tu na żywo, nad czym aktualnie pracuje zespół Soft Synergy.'
+                    : 'Ten panel aktualizuje się automatycznie, gdy zespół Soft Synergy przechodzi kolejne etapy pracy nad Twoją ofertą i projektem.'}
                 </p>
               </div>
               <div className="hidden md:flex flex-col justify-center text-xs text-blue-100/90 space-y-1">
@@ -539,7 +590,7 @@ const ClientPortal = () => {
       </div>
 
       {/* Content */}
-      <div className="max-w-6xl mx-auto px-6 py-8 space-y-10">
+      <div className="max-w-7xl mx-auto px-6 py-8 space-y-10">
         {/* Success/Error Messages */}
         {success && (
           <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4 text-green-800 font-medium flex items-center gap-2">
@@ -572,14 +623,14 @@ const ClientPortal = () => {
               <div className="text-sm font-medium text-gray-500">Brak projektów</div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-6">
               {data.projects.map(p => {
                 const isPreliminary = p.offerType === 'preliminary';
                 return (
                   <div
                     key={p._id}
-                    className={`bg-white rounded-xl border-2 border-gray-100 p-6 shadow-sm hover:shadow-lg hover:border-blue-200 transition-all duration-200 ${
-                      isPreliminary ? 'md:col-span-2 offer-preliminary-card' : ''
+                    className={`bg-white rounded-2xl border border-gray-100 p-6 sm:p-8 shadow-sm hover:shadow-md transition-all duration-200 ${
+                      isPreliminary ? 'offer-preliminary-card' : ''
                     }`}
                   >
                   <div className="flex items-start justify-between">
@@ -590,7 +641,9 @@ const ClientPortal = () => {
                         {renderProjectStatusBadge(p)}
                         <span className="hidden sm:inline text-gray-400">•</span>
                         <span className="text-gray-500">
-                          {isPreliminary
+                          {p.status === 'accepted'
+                            ? 'Działamy – jesteśmy po Twojej stronie i prowadzimy projekt do końca'
+                            : isPreliminary
                             ? 'Oferta wstępna – prowadzimy Cię krok po kroku do wersji finalnej'
                             : 'Oferta finalna przygotowana na podstawie wcześniejszych ustaleń i rozmów'}
                         </span>
@@ -603,77 +656,268 @@ const ClientPortal = () => {
                       </div>
                     </div>
                   </div>
-                  {renderOfferProgress(p)}
-                  {Array.isArray(p.tasks) && p.tasks.length > 0 && (
-                    <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-4">
-                      <div className="flex items-center justify-between gap-3 mb-3">
-                        <div>
-                          <h3 className="text-sm font-bold text-gray-900">Zakres prac i status zadań</h3>
-                          <p className="text-xs text-gray-500 mt-1">Prosty widok postępu bez wewnętrznych danych zespołu.</p>
+                  {p.status === 'accepted' ? (
+                    <div className="mt-5 relative overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-blue-50 p-5 sm:p-6">
+                      <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-emerald-200/40 blur-3xl pointer-events-none"></div>
+                      <div className="absolute -bottom-12 -left-12 w-40 h-40 rounded-full bg-blue-200/40 blur-3xl pointer-events-none"></div>
+                      <div className="relative flex items-start gap-4">
+                        <div className="shrink-0 w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/30">
+                          <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
                         </div>
-                        <div className="text-xs font-semibold text-gray-500">
-                          {p.tasks.filter((task) => task.status === 'done').length}/{p.tasks.length} zrobione
+                        <div className="min-w-0 flex-1">
+                          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500 text-white text-[11px] font-bold uppercase tracking-wider mb-2 shadow-sm">
+                            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+                            Działamy
+                          </div>
+                          <h3 className="text-lg sm:text-xl font-bold text-gray-900 leading-tight">
+                            Jesteśmy po tej samej stronie stołu
+                          </h3>
+                          <p className="text-sm text-gray-600 mt-1.5 leading-relaxed">
+                            Projekt rusza pełną parą — zespół Soft Synergy pracuje nad realizacją. Poniżej widzisz dokładnie nad czym aktualnie pracujemy i co już mamy za sobą.
+                          </p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/80 border border-emerald-100 text-xs font-semibold text-emerald-700">
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
+                              Umowa zaakceptowana
+                            </span>
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/80 border border-blue-100 text-xs font-semibold text-blue-700">
+                              <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>
+                              Realizacja w toku
+                            </span>
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/80 border border-purple-100 text-xs font-semibold text-purple-700">
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-5a4 4 0 11-8 0 4 4 0 018 0zm6 0a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                              Twój zespół po naszej stronie
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                      <div className="space-y-3">
-                        {p.tasks.map((task) => {
-                          const done = task.status === 'done';
-                          const noteDraft = taskNoteDrafts[task._id] || '';
-                          return (
-                            <div key={task._id} className="rounded-lg border border-gray-200 bg-white p-4">
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <div className="font-semibold text-gray-900">{task.title}</div>
-                                  {task.description && (
-                                    <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{task.description}</p>
-                                  )}
-                                  {task.dueDate && (
-                                    <div className="text-xs text-gray-400 mt-2">
-                                      Planowany termin: {new Date(task.dueDate).toLocaleDateString('pl-PL')}
-                                    </div>
-                                  )}
-                                </div>
-                                <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${
-                                  done ? 'bg-green-100 text-green-700' : task.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
-                                }`}>
-                                  {getTaskStatusLabel(task.status)}
-                                </span>
-                              </div>
-                              {Array.isArray(task.clientNotes) && task.clientNotes.length > 0 && (
-                                <div className="mt-3 space-y-2">
-                                  {task.clientNotes.slice(-2).map((note) => (
-                                    <div key={note._id || note.createdAt} className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2 text-sm text-blue-900">
-                                      <div className="text-[11px] font-semibold text-blue-500 mb-1">
-                                        Twoja notatka · {note.createdAt ? new Date(note.createdAt).toLocaleDateString('pl-PL') : ''}
-                                      </div>
-                                      {note.text}
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                              <div className="mt-3 flex gap-2">
-                                <input
-                                  type="text"
-                                  value={noteDraft}
-                                  onChange={(e) => setTaskNoteDrafts((prev) => ({ ...prev, [task._id]: e.target.value }))}
-                                  placeholder="Dodaj krótką notatkę lub pytanie do tego zadania"
-                                  className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => handleAddTaskNote(task._id)}
-                                  disabled={!noteDraft.trim() || savingTaskNote === task._id}
-                                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                  {savingTaskNote === task._id ? 'Dodaję...' : 'Dodaj'}
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
                       </div>
                     </div>
+                  ) : (
+                    renderOfferProgress(p)
                   )}
+                  {(() => {
+                    const visibleTasks = Array.isArray(p.tasks)
+                      ? p.tasks.filter((task) => !/^\s*follow[-\s]?up/i.test(task.title || ''))
+                      : [];
+                    if (visibleTasks.length === 0) return null;
+                    const doneCount = visibleTasks.filter((t) => t.status === 'done').length;
+                    const progressPct = Math.round((doneCount / visibleTasks.length) * 100);
+                    return (
+                      <div className="mt-8 rounded-2xl border border-gray-200 bg-gradient-to-br from-gray-50 via-white to-blue-50/30 p-6 sm:p-8 shadow-inner">
+                        <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
+                          <div>
+                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-[11px] font-bold uppercase tracking-wider mb-2">
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+                              Postęp realizacji
+                            </div>
+                            <h3 className="text-xl sm:text-2xl font-bold text-gray-900">Zakres prac i status zadań</h3>
+                            <p className="text-sm text-gray-500 mt-1">Śledź na bieżąco co już zrobiliśmy i co jest w trakcie.</p>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-3xl sm:text-4xl font-black bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent leading-none">
+                              {doneCount}<span className="text-gray-300 font-bold">/{visibleTasks.length}</span>
+                            </div>
+                            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mt-1">
+                              {progressPct}% ukończone
+                            </div>
+                          </div>
+                        </div>
+                        <div className="h-2 w-full rounded-full bg-gray-200 overflow-hidden mb-6">
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-blue-500 to-purple-500 transition-all duration-700 ease-out"
+                            style={{ width: `${progressPct}%` }}
+                          ></div>
+                        </div>
+                        <div className="space-y-3">
+                          {visibleTasks.map((task, idx) => {
+                            const done = task.status === 'done';
+                            const inProgress = task.status === 'in_progress';
+                            const noteDraft = taskNoteDrafts[task._id] || '';
+                            const accent = done
+                              ? 'border-emerald-200 bg-gradient-to-br from-white to-emerald-50/40'
+                              : inProgress
+                              ? 'border-blue-200 bg-gradient-to-br from-white to-blue-50/40'
+                              : 'border-gray-200 bg-white';
+                            const iconBg = done
+                              ? 'bg-gradient-to-br from-emerald-400 to-emerald-600 text-white shadow-emerald-200'
+                              : inProgress
+                              ? 'bg-gradient-to-br from-blue-400 to-blue-600 text-white shadow-blue-200'
+                              : 'bg-gray-100 text-gray-400 shadow-gray-100';
+                            const badgeStyle = done
+                              ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200'
+                              : inProgress
+                              ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-200'
+                              : 'bg-gray-100 text-gray-600 ring-1 ring-gray-200';
+                            return (
+                              <div
+                                key={task._id}
+                                className={`group relative rounded-xl border ${accent} p-5 shadow-sm hover:shadow-md transition-all duration-200`}
+                              >
+                                <div className="flex items-start gap-4">
+                                  <div className={`shrink-0 w-11 h-11 rounded-xl ${iconBg} flex items-center justify-center font-bold shadow-md`}>
+                                    {done ? (
+                                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                      </svg>
+                                    ) : inProgress ? (
+                                      <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                                      </svg>
+                                    ) : (
+                                      <span className="text-sm">{String(idx + 1).padStart(2, '0')}</span>
+                                    )}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                                      <h4 className="text-base sm:text-lg font-bold text-gray-900 leading-snug">
+                                        {task.title}
+                                      </h4>
+                                      <span className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${badgeStyle}`}>
+                                        <span className={`w-1.5 h-1.5 rounded-full ${done ? 'bg-emerald-500' : inProgress ? 'bg-blue-500 animate-pulse' : 'bg-gray-400'}`}></span>
+                                        {getTaskStatusLabel(task.status)}
+                                      </span>
+                                    </div>
+                                    {task.description && (
+                                      <p className="text-sm text-gray-600 mt-2 leading-relaxed whitespace-pre-wrap">
+                                        {task.description}
+                                      </p>
+                                    )}
+                                    {task.dueDate && (
+                                      <div className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 mt-3 px-2.5 py-1 rounded-md bg-gray-50 border border-gray-100">
+                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                        </svg>
+                                        Planowany termin: {new Date(task.dueDate).toLocaleDateString('pl-PL', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                      </div>
+                                    )}
+                                    {Array.isArray(task.clientNotes) && task.clientNotes.length > 0 && (
+                                      <div className="mt-4 space-y-2">
+                                        {task.clientNotes.map((note) => (
+                                          <div
+                                            key={note._id || note.createdAt}
+                                            className="group/note relative rounded-lg bg-blue-50/70 border border-blue-100 px-4 py-3 text-sm text-blue-900"
+                                          >
+                                            <div className="flex items-start justify-between gap-2 mb-1">
+                                              <div className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">
+                                                Twoja notatka · {note.createdAt ? new Date(note.createdAt).toLocaleDateString('pl-PL') : ''}
+                                              </div>
+                                              <button
+                                                type="button"
+                                                onClick={() => handleDeleteTaskNote(task._id, note._id)}
+                                                disabled={deletingNote === note._id}
+                                                title="Usuń notatkę"
+                                                className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-md text-blue-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                                              >
+                                                {deletingNote === note._id ? (
+                                                  <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                                                  </svg>
+                                                ) : (
+                                                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2" />
+                                                  </svg>
+                                                )}
+                                              </button>
+                                            </div>
+                                            {note.text && <div className="leading-relaxed whitespace-pre-wrap">{note.text}</div>}
+                                            {Array.isArray(note.attachments) && note.attachments.length > 0 && (
+                                              <div className="mt-2 flex flex-wrap gap-2">
+                                                {note.attachments.map((att) => (
+                                                  <a
+                                                    key={att._id}
+                                                    href={toBackendUrl(att.url)}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="inline-flex items-center gap-2 max-w-full rounded-md bg-white border border-blue-200 px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 hover:border-blue-300 transition-colors"
+                                                  >
+                                                    <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                                                    </svg>
+                                                    <span className="truncate max-w-[180px]">{att.originalName}</span>
+                                                    {att.size != null && (
+                                                      <span className="text-blue-400 text-[10px] shrink-0">{formatFileSize(att.size)}</span>
+                                                    )}
+                                                  </a>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {(taskNoteFiles[task._id] || []).length > 0 && (
+                                      <div className="mt-3 flex flex-wrap gap-2">
+                                        {(taskNoteFiles[task._id] || []).map((file, fIdx) => (
+                                          <span
+                                            key={`${file.name}-${fIdx}`}
+                                            className="inline-flex items-center gap-1.5 max-w-full rounded-md bg-blue-50 border border-blue-200 pl-2.5 pr-1 py-1 text-xs font-medium text-blue-700"
+                                          >
+                                            <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                                            </svg>
+                                            <span className="truncate max-w-[160px]">{file.name}</span>
+                                            <span className="text-blue-400 text-[10px]">{formatFileSize(file.size)}</span>
+                                            <button
+                                              type="button"
+                                              onClick={() => removeSelectedFile(task._id, fIdx)}
+                                              className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-blue-500 hover:text-red-600 hover:bg-white"
+                                              title="Usuń plik"
+                                            >
+                                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                              </svg>
+                                            </button>
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                    <div className="mt-4 flex gap-2 items-stretch">
+                                      <input
+                                        type="text"
+                                        value={noteDraft}
+                                        onChange={(e) => setTaskNoteDrafts((prev) => ({ ...prev, [task._id]: e.target.value }))}
+                                        placeholder="Dodaj notatkę lub pytanie do tego zadania…"
+                                        className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 transition-colors"
+                                      />
+                                      <label
+                                        className="shrink-0 inline-flex items-center justify-center w-11 h-11 rounded-lg border border-gray-200 bg-white text-gray-500 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 cursor-pointer transition-colors"
+                                        title="Dodaj załącznik"
+                                      >
+                                        <input
+                                          type="file"
+                                          multiple
+                                          onChange={(e) => {
+                                            handleSelectFiles(task._id, e.target.files);
+                                            e.target.value = '';
+                                          }}
+                                          className="hidden"
+                                        />
+                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                                        </svg>
+                                      </label>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleAddTaskNote(task._id)}
+                                        disabled={(!noteDraft.trim() && (taskNoteFiles[task._id] || []).length === 0) || savingTaskNote === task._id}
+                                        className="shrink-0 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 px-5 py-2.5 text-sm font-bold text-white hover:from-blue-700 hover:to-blue-800 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                      >
+                                        {savingTaskNote === task._id ? 'Dodaję…' : 'Dodaj'}
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   <div className="mt-4 flex flex-wrap gap-3">
                     {p.generatedOfferUrl && (
                       <a href={toBackendUrl(p.generatedOfferUrl)} target="_blank" rel="noreferrer" className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm">Podgląd oferty</a>

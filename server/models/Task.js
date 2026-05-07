@@ -133,8 +133,15 @@ const taskSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
   }],
   clientNotes: [{
-    text: { type: String, required: true, trim: true },
+    text: { type: String, default: '', trim: true },
     client: { type: mongoose.Schema.Types.ObjectId, ref: 'Client', default: null },
+    attachments: [{
+      filename: { type: String, required: true },
+      originalName: { type: String },
+      mimetype: { type: String },
+      size: { type: Number },
+      uploadedAt: { type: Date, default: Date.now }
+    }],
     createdAt: { type: Date, default: Date.now }
   }]
 }, {

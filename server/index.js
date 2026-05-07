@@ -715,11 +715,12 @@ mongoose.connect(process.env.MONGODB_URI, {
   } catch (e) {
     console.error('Nie udało się uruchomić monitoringu certyfikatów SSL:', e);
   }
-  // Zlecenia publiczne – synchronizacja 5× dziennie, od razu AI tylko dla nowo dodanych (bez re-walidacji)
+  // Zlecenia publiczne – synchronizacja w nieregularnych odstępach (~5× dziennie, z jitterem)
   const setupBiznesPolskaScheduler = () => {
     const { runSync } = require('./services/biznesPolskaScraper');
     const { runAiAnalysis } = require('./services/aiOrderAnalyzer');
-    const intervalMs = Math.floor((24 * 60 * 60 * 1000) / 5); // 5× daily
+    const { jitteredInterval, jitteredStartDelay } = require('./services/stealth');
+    const baseIntervalMs = Math.floor((24 * 60 * 60 * 1000) / 5);
     const run = () => {
       runSync(undefined, { maxListPages: 50 })
         .then((r) => {
@@ -731,13 +732,16 @@ mongoose.connect(process.env.MONGODB_URI, {
           }
         })
         .catch((e) => console.error('[Biznes Polska] Błąd sync:', e.message));
+      const nextJittered = jitteredInterval(baseIntervalMs, 0.18);
+      console.log(`[Biznes Polska] Następna synchronizacja za ${Math.round(nextJittered / 60000)} min`);
+      setTimeout(run, nextJittered);
     };
-    setTimeout(run, 2 * 60 * 1000);
-    setInterval(run, intervalMs);
+    const initialDelay = jitteredStartDelay(0, 180000, 600000);
+    setTimeout(run, initialDelay);
   };
   try {
     setupBiznesPolskaScheduler();
-    console.log('📋 Zlecenia publiczne (Biznes Polska) – synchronizacja 5× dziennie');
+    console.log('📋 Zlecenia publiczne (Biznes Polska) – synchronizacja w nieregularnych odstępach (~5× dziennie)');
   } catch (e) {
     console.error('Nie udało się uruchomić schedulera zleceń publicznych:', e);
   }

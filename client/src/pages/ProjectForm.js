@@ -12,7 +12,7 @@ import {
   ExternalLink,
   Sparkles
 } from 'lucide-react';
-import { projectsAPI, offersAPI, authAPI } from '../services/api';
+import { projectsAPI, offersAPI, authAPI, clientsAPI } from '../services/api';
 import toast from 'react-hot-toast';
 
 const DEFAULT_PROJECT_MANAGER = {
@@ -34,6 +34,7 @@ const ProjectForm = () => {
 
   const [formData, setFormData] = useState({
     name: '',
+    client: '',
     clientName: '',
     clientContact: '',
     clientEmail: '',
@@ -85,6 +86,11 @@ const ProjectForm = () => {
   const { data: users } = useQuery(
     ['users'],
     authAPI.listUsers
+  );
+
+  const { data: clients = [] } = useQuery(
+    ['clientsForProjectForm'],
+    () => clientsAPI.getAll({})
   );
 
   const createMutation = useMutation(projectsAPI.create, {
@@ -210,6 +216,7 @@ const ProjectForm = () => {
     if (project) {
       setFormData({
         ...project,
+        client: project.client?._id || project.client || '',
         technologies: project.technologies || {
           stack: [],
           methodologies: []
@@ -224,6 +231,18 @@ const ProjectForm = () => {
     setFormData(prev => ({
       ...prev,
       [name]: value
+    }));
+  };
+
+  const handleClientSelect = (clientId) => {
+    const selectedClient = clients.find((client) => client._id === clientId);
+    setFormData(prev => ({
+      ...prev,
+      client: clientId,
+      clientName: selectedClient ? (selectedClient.company || selectedClient.name || prev.clientName) : prev.clientName,
+      clientContact: selectedClient ? (selectedClient.name || prev.clientContact) : prev.clientContact,
+      clientEmail: selectedClient ? (selectedClient.email || prev.clientEmail) : prev.clientEmail,
+      clientPhone: selectedClient ? (selectedClient.phone || prev.clientPhone) : prev.clientPhone
     }));
   };
 
@@ -375,6 +394,7 @@ const ProjectForm = () => {
       // Dla ofert wstępnych wysyłamy tylko podstawowe dane
       submitData = {
         name: formData.name,
+        client: formData.client || null,
         clientName: formData.clientName,
         clientContact: formData.clientContact,
         clientEmail: formData.clientEmail,
@@ -409,17 +429,39 @@ const ProjectForm = () => {
       // Dla ofert finalnych wysyłamy wszystkie dane
       const totalPrice = formData.pricing.phase1 + formData.pricing.phase2 + formData.pricing.phase3 + formData.pricing.phase4;
       const validModules = formData.modules.filter(module => module.name && module.description);
-      
+
       submitData = {
-        ...formData,
+        name: formData.name,
+        client: formData.client || null,
+        clientName: formData.clientName,
+        clientContact: formData.clientContact,
+        clientEmail: formData.clientEmail,
+        clientPhone: formData.clientPhone,
+        offerType: formData.offerType,
+        status: formData.status,
+        priority: formData.priority,
+        language: formData.language,
+        description: formData.description,
+        mainBenefit: formData.mainBenefit,
+        consultationNotes: formData.consultationNotes,
+        technologyExplanation: formData.technologyExplanation,
+        customPaymentTerms: formData.customPaymentTerms,
+        customReservations: formData.customReservations,
+        projectManager: formData.projectManager,
+        technologies: formData.technologies,
+        timeline: formData.timeline,
+        followUpsEnabled: formData.followUpsEnabled,
+        followUpScheduleDays: formData.followUpScheduleDays,
+        followUpManualDueAt: formData.followUpManualDueAt,
+        calBookingUrl: formData.calBookingUrl,
         modules: validModules.length > 0 ? validModules : [{ name: 'Moduł przykładowy', description: 'Opis przykładowego modułu', color: 'blue' }],
         pricing: {
           ...formData.pricing,
           total: totalPrice
         },
         priceRange: {
-          min: formData.priceRange.min || null,
-          max: formData.priceRange.max || null
+          min: formData.priceRange?.min || null,
+          max: formData.priceRange?.max || null
         }
       };
     }
@@ -739,6 +781,26 @@ const ProjectForm = () => {
         <div className="card">
           <h2 className="text-lg font-medium text-gray-900 mb-4">Informacje o kliencie</h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label className="form-label">Klient w systemie</label>
+              <select
+                name="client"
+                value={formData.client || ''}
+                onChange={(e) => handleClientSelect(e.target.value)}
+                className="input-field"
+              >
+                <option value="">Brak przypisanego klienta</option>
+                {clients.map((client) => (
+                  <option key={client._id} value={client._id}>
+                    {(client.company || client.name)}{client.email ? ` · ${client.email}` : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Wybór klienta przypina projekt do jego portalu i automatycznie uzupełnia dane poniżej.
+              </p>
+            </div>
+
             <div>
               <label className="form-label">Nazwa firmy klienta *</label>
               <input

@@ -2,6 +2,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { OpenRouter } = require('@openrouter/sdk');
 const { fetchOfferDetail, BIZNES_POLSKA_COOKIES } = require('./biznesPolskaScraper');
 const { getCompanyProfile, COMPANY_PROFILE } = require('../config/companyProfile');
+const { delayBetweenDetails, sleep } = require('./stealth');
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
@@ -546,7 +547,10 @@ async function runAiAnalysis(options = {}) {
   const cookies = process.env.BIZNES_POLSKA_COOKIES || BIZNES_POLSKA_COOKIES;
 
   const useHtmlForScoring = process.env.USE_HTML_FOR_SCORING === 'true';
+  let candIdx = 0;
   for (const order of candidates) {
+    if (candIdx > 0) await delayBetweenDetails(candIdx);
+    candIdx++;
     try {
       let fullPageHtmlForAi = '';
       let fullTextForAi = order.detailFullText || '';

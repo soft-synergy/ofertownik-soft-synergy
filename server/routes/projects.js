@@ -63,6 +63,7 @@ router.get('/', auth, requireScope('projects:read'), async (req, res) => {
 
     const projects = await Project.find(query)
       .populate('createdBy', 'firstName lastName email')
+      .populate('client', 'name company email phone')
       .populate('owner', 'firstName lastName email')
       .populate('teamMembers.user', 'firstName lastName email role avatar')
       .sort({ createdAt: -1 })
@@ -558,6 +559,7 @@ router.post('/', [
   auth,
   requireScope('projects:write'),
   body('name').trim().isLength({ min: 3 }),
+  body('client').optional({ checkFalsy: true }).isMongoId(),
   body('clientName').trim().isLength({ min: 2 }),
   body('clientContact').trim().isLength({ min: 2 }),
   body('clientEmail').optional({ checkFalsy: true }).isEmail(),
@@ -580,9 +582,17 @@ router.post('/', [
       owner: req.user._id
     };
 
-    // Auto-utworzenie / przypięcie klienta po emailu
+    if (projectData.client) {
+      const selectedClient = await Client.findById(projectData.client);
+      if (!selectedClient) {
+        return res.status(404).json({ message: 'Wybrany klient nie istnieje' });
+      }
+      projectData.client = selectedClient._id;
+    }
+
+    // Auto-utworzenie / przypięcie klienta po emailu, jeśli nie wybrano klienta z systemu
     const email = (projectData.clientEmail || '').trim().toLowerCase();
-    if (email) {
+    if (!projectData.client && email) {
       let client = await Client.findOne({ email });
       if (!client) {
         const token = Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -649,6 +659,7 @@ router.put('/:id', [
   auth,
   requireScope('projects:write'),
   body('name').trim().isLength({ min: 3 }),
+  body('client').optional({ checkFalsy: true }).isMongoId(),
   body('clientName').trim().isLength({ min: 2 }),
   body('clientContact').trim().isLength({ min: 2 }),
   body('clientEmail').optional({ checkFalsy: true }).isEmail(),
@@ -679,6 +690,18 @@ router.put('/:id', [
     // Prevent manual change to accepted status; must go via contract generation
     if (req.body.status === 'accepted') {
       delete req.body.status;
+    }
+
+    if (req.body.client !== undefined) {
+      if (req.body.client) {
+        const selectedClient = await Client.findById(req.body.client);
+        if (!selectedClient) {
+          return res.status(404).json({ message: 'Wybrany klient nie istnieje' });
+        }
+        req.body.client = selectedClient._id;
+      } else {
+        req.body.client = null;
+      }
     }
 
     // Opiekun projektu zawsze Rizka Amelia – nie z formularza

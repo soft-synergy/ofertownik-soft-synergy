@@ -1,4 +1,7 @@
 const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const Client = require('../models/Client');
 const Project = require('../models/Project');
 const Hosting = require('../models/Hosting');
@@ -9,6 +12,26 @@ const Task = require('../models/Task');
 const sslMonitor = require('../services/sslMonitor');
 
 const router = express.Router();
+
+const clientNoteUploadsDir = path.join(__dirname, '../../uploads/tasks');
+if (!fs.existsSync(clientNoteUploadsDir)) {
+  fs.mkdirSync(clientNoteUploadsDir, { recursive: true });
+}
+
+const clientNoteStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, clientNoteUploadsDir),
+  filename: (_req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    cb(null, `client-note-${uniqueSuffix}${ext}`);
+  }
+});
+
+const clientNoteUpload = multer({
+  storage: clientNoteStorage,
+  limits: { fileSize: 25 * 1024 * 1024 },
+  fileFilter: (_req, _file, cb) => cb(null, true)
+});
 
 // Public client portal by token
 router.get('/:token', async (req, res) => {
@@ -44,7 +67,14 @@ router.get('/:token', async (req, res) => {
         clientNotes: (task.clientNotes || []).map((note) => ({
           _id: note._id,
           text: note.text,
-          createdAt: note.createdAt
+          createdAt: note.createdAt,
+          attachments: (note.attachments || []).map((att) => ({
+            _id: att._id,
+            originalName: att.originalName || att.filename,
+            mimetype: att.mimetype,
+            size: att.size,
+            url: `/uploads/tasks/${att.filename}`
+          }))
         }))
       });
       return acc;
@@ -132,14 +162,71 @@ router.get('/:token', async (req, res) => {
   }
 });
 
-router.post('/:token/tasks/:taskId/client-note', async (req, res) => {
+router.post('/:token/tasks/:taskId/client-note', clientNoteUpload.array('files', 10), async (req, res) => {
+  const cleanupUploads = () => {
+    if (Array.isArray(req.files)) {
+      for (const f of req.files) {
+        try { fs.unlinkSync(path.join(clientNoteUploadsDir, f.filename)); } catch (e) { /* ignore */ }
+      }
+    }
+  };
+  try {
+    const client = await Client.findOne({ portalToken: req.params.token, portalEnabled: true });
+    if (!client) {
+      cleanupUploads();
+      return res.status(404).json({ message: 'Nie znaleziono klienta' });
+    }
+
+    const text = (req.body.text || '').trim();
+    const files = Array.isArray(req.files) ? req.files : [];
+    if (!text && files.length === 0) {
+      cleanupUploads();
+      return res.status(400).json({ message: 'Dodaj treść notatki lub załącz plik' });
+    }
+    if (text.length > 1200) {
+      cleanupUploads();
+      return res.status(400).json({ message: 'Notatka jest za długa' });
+    }
+
+    const task = await Task.findById(req.params.taskId).populate('project', 'client name');
+    if (!task || !task.project) {
+      cleanupUploads();
+      return res.status(404).json({ message: 'Zadanie nie znalezione' });
+    }
+    if (task.project.client?.toString() !== client._id.toString()) {
+      cleanupUploads();
+      return res.status(403).json({ message: 'Zadanie nie należy do projektu tego klienta' });
+    }
+
+    const attachments = files.map((f) => ({
+      filename: f.filename,
+      originalName: f.originalname,
+      mimetype: f.mimetype,
+      size: f.size,
+      uploadedAt: new Date()
+    }));
+
+    task.clientNotes = task.clientNotes || [];
+    task.clientNotes.push({
+      text,
+      client: client._id,
+      attachments,
+      createdAt: new Date()
+    });
+    await task.save();
+
+    res.status(201).json({ message: 'Notatka została dodana' });
+  } catch (e) {
+    cleanupUploads();
+    console.error('Client task note error:', e);
+    res.status(500).json({ message: 'Błąd dodawania notatki' });
+  }
+});
+
+router.delete('/:token/tasks/:taskId/client-note/:noteId', async (req, res) => {
   try {
     const client = await Client.findOne({ portalToken: req.params.token, portalEnabled: true });
     if (!client) return res.status(404).json({ message: 'Nie znaleziono klienta' });
-
-    const text = (req.body.text || '').trim();
-    if (!text) return res.status(400).json({ message: 'Treść notatki jest wymagana' });
-    if (text.length > 1200) return res.status(400).json({ message: 'Notatka jest za długa' });
 
     const task = await Task.findById(req.params.taskId).populate('project', 'client name');
     if (!task || !task.project) return res.status(404).json({ message: 'Zadanie nie znalezione' });
@@ -147,14 +234,25 @@ router.post('/:token/tasks/:taskId/client-note', async (req, res) => {
       return res.status(403).json({ message: 'Zadanie nie należy do projektu tego klienta' });
     }
 
-    task.clientNotes = task.clientNotes || [];
-    task.clientNotes.push({ text, client: client._id, createdAt: new Date() });
+    const note = (task.clientNotes || []).find((n) => n._id.toString() === req.params.noteId);
+    if (!note) return res.status(404).json({ message: 'Notatka nie została znaleziona' });
+    if (!note.client || note.client.toString() !== client._id.toString()) {
+      return res.status(403).json({ message: 'Możesz usuwać tylko swoje notatki' });
+    }
+
+    for (const att of note.attachments || []) {
+      const fpath = path.join(clientNoteUploadsDir, att.filename);
+      if (fs.existsSync(fpath)) {
+        try { fs.unlinkSync(fpath); } catch (e) { /* ignore */ }
+      }
+    }
+    task.clientNotes.pull(req.params.noteId);
     await task.save();
 
-    res.status(201).json({ message: 'Notatka została dodana' });
+    res.json({ message: 'Notatka została usunięta' });
   } catch (e) {
-    console.error('Client task note error:', e);
-    res.status(500).json({ message: 'Błąd dodawania notatki' });
+    console.error('Client task note delete error:', e);
+    res.status(500).json({ message: 'Błąd usuwania notatki' });
   }
 });
 

@@ -919,6 +919,51 @@ const Projects = () => {
         )}
       </div>
 
+      {/* Pagination */}
+      {data?.totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          {(() => {
+            const currentPage = Number(data.currentPage || 1);
+            const total = Number(data.total || 0);
+            const start = ((currentPage - 1) * 10) + 1;
+            const end = Math.min(currentPage * 10, total);
+            return (
+              <div className="text-sm text-gray-700">
+                {t('projects.shownCount')
+                  .replace('{{start}}', start)
+                  .replace('{{end}}', end)
+                  .replace('{{total}}', total)}
+              </div>
+            );
+          })()}
+          <div className="flex space-x-2">
+            {(() => {
+              const currentPage = Number(data.currentPage || 1);
+              const totalPages = Number(data.totalPages || 1);
+              return (
+                <>
+                  <button
+                    onClick={() => setFilters({ ...filters, page: Math.max(1, currentPage - 1) })}
+                    disabled={currentPage <= 1}
+                    className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {t('projects.prev')}
+                  </button>
+                  <button
+                    onClick={() => setFilters({ ...filters, page: Math.min(totalPages, currentPage + 1) })}
+                    disabled={currentPage >= totalPages}
+                    className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {t('projects.next')}
+                  </button>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+    </div>
+
       {/* Modal Odpowiedz – pełne info projektu + rozwidlenie na Finalna wycena / Doprecyzowanie */}
       {showRespondModal && selectedProject && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
@@ -1237,51 +1282,6 @@ const Projects = () => {
           </div>
         </div>
       )}
-
-      {/* Pagination */}
-      {data?.totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          {(() => {
-            const currentPage = Number(data.currentPage || 1);
-            const total = Number(data.total || 0);
-            const start = ((currentPage - 1) * 10) + 1;
-            const end = Math.min(currentPage * 10, total);
-            return (
-              <div className="text-sm text-gray-700">
-                {t('projects.shownCount')
-                  .replace('{{start}}', start)
-                  .replace('{{end}}', end)
-                  .replace('{{total}}', total)}
-              </div>
-            );
-          })()}
-          <div className="flex space-x-2">
-            {(() => {
-              const currentPage = Number(data.currentPage || 1);
-              const totalPages = Number(data.totalPages || 1);
-              return (
-                <>
-                  <button
-                    onClick={() => setFilters({ ...filters, page: Math.max(1, currentPage - 1) })}
-                    disabled={currentPage <= 1}
-                    className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {t('projects.prev')}
-                  </button>
-                  <button
-                    onClick={() => setFilters({ ...filters, page: Math.min(totalPages, currentPage + 1) })}
-                    disabled={currentPage >= totalPages}
-                    className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {t('projects.next')}
-                  </button>
-                </>
-              );
-            })()}
-          </div>
-        </div>
-      )}
-    </div>
     </>
   );
 };

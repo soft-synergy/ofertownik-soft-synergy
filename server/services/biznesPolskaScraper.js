@@ -1,5 +1,13 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
+const {
+  getRandomUserAgent,
+  getRandomAcceptLanguage,
+  getRandomReferer,
+  delayBetweenPages,
+  delayBetweenDetails,
+  withRetry
+} = require('./stealth');
 
 const BASE_URL = 'https://www.biznes-polska.pl';
 /** Główny URL wyszukiwarki – lista ogłoszeń (strona 1 bez ?s=, dalsze jako ?s=2, ?s=3...) */
@@ -17,10 +25,10 @@ function getCookieHeader(cookies) {
 function buildRequestOptions(cookies) {
   const headers = {
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-    'Accept-Language': 'pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Accept-Language': getRandomAcceptLanguage(),
     'Cache-Control': 'max-age=0',
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
-    'Referer': BASE_URL + '/'
+    'User-Agent': getRandomUserAgent(),
+    'Referer': getRandomReferer()
   };
   const cookieHeader = getCookieHeader(cookies);
   if (cookieHeader) headers['Cookie'] = cookieHeader;
@@ -41,7 +49,10 @@ function buildRequestOptions(cookies) {
 async function fetchSearchPage(cookies, page = 1) {
   const pathWithPage = page <= 1 ? SEARCH_PATH : SEARCH_PATH + '?s=' + page;
   const url = BASE_URL + pathWithPage;
-  const res = await axios.get(url, buildRequestOptions(cookies));
+  const res = await withRetry(
+    () => axios.get(url, buildRequestOptions(cookies)),
+    { maxRetries: 3, baseDelayMs: 12000, label: `search page ${page}` }
+  );
   const $ = cheerio.load(res.data);
   const rows = [];
 
@@ -101,6 +112,7 @@ async function fetchAllSearchPages(cookies, maxPages = 50) {
   const seenIds = new Set();
 
   for (let page = 1; page <= maxPages; page++) {
+    if (page > 1) await delayBetweenPages(page);
     const rows = await fetchSearchPage(cookies, page);
     if (!rows.length) break;
     for (const r of rows) {
@@ -121,7 +133,10 @@ async function fetchAllSearchPages(cookies, maxPages = 50) {
  * @param {string} [cookies]
  */
 async function fetchOfferDetail(detailUrl, cookies) {
-  const res = await axios.get(detailUrl, buildRequestOptions(cookies));
+  const res = await withRetry(
+    () => axios.get(detailUrl, buildRequestOptions(cookies)),
+    { maxRetries: 3, baseDelayMs: 12000, label: `detail ${detailUrl.slice(-20)}` }
+  );
   const $ = cheerio.load(res.data);
 
   const normalizeLabel = (t) => String(t).trim().replace(/\s*:\s*$/, '');
@@ -289,6 +304,7 @@ async function runSync(cookies, options = {}) {
     (await PublicOrder.find({}).select('biznesPolskaId').lean()).map((d) => d.biznesPolskaId)
   );
 
+  let detailIdx = 0;
   for (const row of list) {
     if (existingIds.has(row.id)) continue;
 
@@ -313,6 +329,7 @@ async function runSync(cookies, options = {}) {
       continue;
     }
 
+    if (detailIdx > 0) await delayBetweenDetails(detailIdx);
     let detail;
     try {
       detail = await fetchOfferDetail(row.detailUrl, cookies);
@@ -354,6 +371,7 @@ async function runSync(cookies, options = {}) {
       result.added++;
       result.addedIds.push(doc._id);
       existingIds.add(row.id);
+      detailIdx++;
     } catch (e) {
       if (e.code === 11000) existingIds.add(row.id);
       else result.errors.push(`Zapis ${row.id}: ${e.message}`);
