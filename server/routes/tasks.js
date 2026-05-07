@@ -40,29 +40,25 @@ const STATUS_LABELS = {
   cancelled: 'Anulowane'
 };
 
-function privateTaskAccessQuery(userId) {
-  return [
-    {
-      isPrivate: { $ne: true }
-    },
-    {
-      createdBy: userId
-    },
-    {
-      assignee: userId
-    },
-    {
-      assignees: userId
-    },
-    {
-      watchers: userId
-    }
-  ];
-}
-
 function addAccessCondition(query, condition) {
   query.$and = query.$and || [];
   query.$and.push(condition);
+}
+
+function relationAccessQuery(userId) {
+  return {
+    $or: [
+      { createdBy: userId },
+      { assignee: userId },
+      { assignees: userId },
+      { watchers: userId }
+    ]
+  };
+}
+
+function applyTaskAccessQuery(query, user) {
+  if (user?.role === 'admin') return;
+  addAccessCondition(query, relationAccessQuery(user._id));
 }
 
 function assigneeQuery(userId) {
@@ -74,9 +70,9 @@ function assigneeQuery(userId) {
   };
 }
 
-function canAccessTask(task, userId) {
-  if (!task?.isPrivate) return true;
-  const id = userId?.toString?.() || String(userId);
+function canAccessTask(task, user) {
+  if (user?.role === 'admin') return true;
+  const id = user?._id?.toString?.() || String(user?._id);
   const matches = (value) => value && (value.toString?.() || String(value)) === id;
 
   return (
@@ -92,7 +88,7 @@ router.get('/', auth, requireScope('tasks:read'), async (req, res) => {
   try {
     const { assignee, project, publicOrder, status, priority, dateFrom, dateTo, limit = 200, includeTemplates } = req.query;
     const query = {};
-    addAccessCondition(query, { $or: privateTaskAccessQuery(req.user._id) });
+    applyTaskAccessQuery(query, req.user);
 
     // Hide recurring templates by default (they are "meta" tasks)
     if (includeTemplates !== 'true') {
@@ -164,7 +160,7 @@ router.get('/:id', auth, requireScope('tasks:read'), async (req, res) => {
     if (!task) {
       return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
     }
-    if (!canAccessTask(task, req.user._id)) {
+    if (!canAccessTask(task, req.user)) {
       return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
     }
     res.json(task);
@@ -179,7 +175,7 @@ router.post('/:id/updates', auth, requireScope('tasks:write'), upload.array('fil
   try {
     const task = await Task.findById(req.params.id);
     if (!task) return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
-    if (!canAccessTask(task, req.user._id)) return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
+    if (!canAccessTask(task, req.user)) return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
     const text = (req.body.text || '').trim();
     const files = req.files || [];
     if (!text && files.length === 0) {
@@ -208,7 +204,7 @@ router.delete('/:id/updates/:updateId', auth, requireScope('tasks:write'), async
   try {
     const task = await Task.findById(req.params.id);
     if (!task) return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
-    if (!canAccessTask(task, req.user._id)) return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
+    if (!canAccessTask(task, req.user)) return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
     const update = task.updates.id(req.params.updateId);
     if (!update) return res.status(404).json({ message: 'Update nie istnieje' });
     // Delete associated files from disk
@@ -231,7 +227,7 @@ router.delete('/:id/updates/:updateId', auth, requireScope('tasks:write'), async
 // Create task
 router.post('/', auth, requireScope('tasks:write'), async (req, res) => {
   try {
-    const { title, description, status, priority, assignee, assignees, project, publicOrder, dueDate, dueTimeMinutes, durationMinutes, recurrence, watchers, isPrivate } = req.body;
+    const { title, description, status, priority, assignee, assignees, project, publicOrder, dueDate, dueTimeMinutes, durationMinutes, recurrence, watchers } = req.body;
     if (!title || !dueDate) {
       return res.status(400).json({ message: 'Tytuł i termin są wymagane' });
     }
@@ -248,7 +244,6 @@ router.post('/', auth, requireScope('tasks:write'), async (req, res) => {
       assignee: assignee || null, // Keep for backward compatibility
       assignees: assigneesArray, // New array field
       watchers: watchersArray, // Watchers array
-      isPrivate: !!isPrivate,
       project: project || null,
       publicOrder: publicOrder || null,
       dueDate: new Date(dueDate),
@@ -337,12 +332,12 @@ router.put('/:id', auth, requireScope('tasks:write'), async (req, res) => {
     if (!task) {
       return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
     }
-    if (!canAccessTask(task, req.user._id)) {
+    if (!canAccessTask(task, req.user)) {
       return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
     }
     const prevStatus = task.status;
     const prevDueDate = task.dueDate ? new Date(task.dueDate) : null;
-    const { title, description, status, priority, assignee, assignees, project, dueDate, dueTimeMinutes, durationMinutes, watchers, isPrivate } = req.body;
+    const { title, description, status, priority, assignee, assignees, project, dueDate, dueTimeMinutes, durationMinutes, watchers } = req.body;
     if (title != null) task.title = title;
     if (description != null) task.description = description;
     if (status != null) task.status = status;
@@ -354,7 +349,6 @@ router.put('/:id', auth, requireScope('tasks:write'), async (req, res) => {
     if (watchers !== undefined) {
       task.watchers = Array.isArray(watchers) ? watchers.filter(Boolean) : [];
     }
-    if (isPrivate !== undefined) task.isPrivate = !!isPrivate;
     if (project !== undefined) task.project = project || null;
     if (req.body.publicOrder !== undefined) task.publicOrder = req.body.publicOrder || null;
     const dueDateChanged = dueDate != null && prevDueDate && new Date(dueDate).getTime() !== prevDueDate.getTime();
@@ -433,7 +427,7 @@ router.delete('/:id', auth, requireScope('tasks:write'), async (req, res) => {
     if (!task) {
       return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
     }
-    if (!canAccessTask(task, req.user._id)) {
+    if (!canAccessTask(task, req.user)) {
       return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
     }
     if (task.attachments && task.attachments.length > 0) {
@@ -459,7 +453,7 @@ router.post('/:id/attachments', auth, requireScope('tasks:write'), upload.array(
     if (!task) {
       return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
     }
-    if (!canAccessTask(task, req.user._id)) {
+    if (!canAccessTask(task, req.user)) {
       return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
     }
     if (!req.files || req.files.length === 0) {
@@ -493,7 +487,7 @@ router.delete('/:id/attachments/:attachmentId', auth, requireScope('tasks:write'
     if (!task) {
       return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
     }
-    if (!canAccessTask(task, req.user._id)) {
+    if (!canAccessTask(task, req.user)) {
       return res.status(404).json({ message: 'Zadanie nie zostało znalezione' });
     }
     const attachment = (task.attachments || []).find(
@@ -526,7 +520,7 @@ router.post('/batch-delete', auth, requireScope('tasks:write'), async (req, res)
     for (const id of ids) {
       const task = await Task.findById(id);
       if (!task) continue;
-      if (!canAccessTask(task, req.user._id)) continue;
+      if (!canAccessTask(task, req.user)) continue;
       if (task.attachments && task.attachments.length > 0) {
         task.attachments.forEach((att) => {
           const fpath = path.join(uploadsDir, att.filename);
@@ -559,7 +553,7 @@ router.post('/batch-update', auth, requireScope('tasks:write'), async (req, res)
     for (const id of ids) {
       const task = await Task.findById(id);
       if (!task) continue;
-      if (!canAccessTask(task, req.user._id)) continue;
+      if (!canAccessTask(task, req.user)) continue;
       if (updates.status != null) {
         if (updates.status === 'done' && task.status !== 'done') {
           task.completedAt = new Date();

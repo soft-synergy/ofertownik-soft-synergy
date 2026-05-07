@@ -5,6 +5,7 @@ const Hosting = require('../models/Hosting');
 const HostingMonitor = require('../models/HostingMonitor');
 const HostingCheck = require('../models/HostingCheck');
 const SSLCert = require('../models/SSLCert');
+const Task = require('../models/Task');
 const sslMonitor = require('../services/sslMonitor');
 
 const router = express.Router();
@@ -18,6 +19,40 @@ router.get('/:token', async (req, res) => {
       Project.find({ client: client._id }).select('name status offerType generatedOfferUrl workSummaryUrl workSummaryPdfUrl documents createdAt _id'),
       Hosting.find({ client: client._id }).select('domain status monthlyPrice nextPaymentDate lastPaymentDate')
     ]);
+    const projectIds = projects.map((project) => project._id);
+    const tasks = projectIds.length
+      ? await Task.find({
+          project: { $in: projectIds },
+          isRecurrenceTemplate: { $ne: true },
+          status: { $ne: 'cancelled' }
+        })
+          .select('title description status dueDate completedAt project clientNotes createdAt')
+          .sort({ status: 1, dueDate: 1, createdAt: 1 })
+          .lean()
+      : [];
+    const publicTasksByProject = tasks.reduce((acc, task) => {
+      const projectId = task.project?.toString();
+      if (!projectId) return acc;
+      if (!acc[projectId]) acc[projectId] = [];
+      acc[projectId].push({
+        _id: task._id,
+        title: task.title,
+        description: task.description,
+        status: task.status,
+        dueDate: task.dueDate,
+        completedAt: task.completedAt,
+        clientNotes: (task.clientNotes || []).map((note) => ({
+          _id: note._id,
+          text: note.text,
+          createdAt: note.createdAt
+        }))
+      });
+      return acc;
+    }, {});
+    const projectsWithTasks = projects.map((project) => ({
+      ...project.toObject(),
+      tasks: publicTasksByProject[project._id.toString()] || []
+    }));
     
     // Get SSL status for each hosting domain
     const hostingsWithSSL = await Promise.all(hostings.map(async (h) => {
@@ -91,9 +126,35 @@ router.get('/:token', async (req, res) => {
       };
     }));
     
-    res.json({ client: { name: client.name, email: client.email, phone: client.phone, company: client.company }, projects, hostings: hostingsWithSSL });
+    res.json({ client: { name: client.name, email: client.email, phone: client.phone, company: client.company }, projects: projectsWithTasks, hostings: hostingsWithSSL });
   } catch (e) {
     res.status(500).json({ message: 'Błąd pobierania danych klienta' });
+  }
+});
+
+router.post('/:token/tasks/:taskId/client-note', async (req, res) => {
+  try {
+    const client = await Client.findOne({ portalToken: req.params.token, portalEnabled: true });
+    if (!client) return res.status(404).json({ message: 'Nie znaleziono klienta' });
+
+    const text = (req.body.text || '').trim();
+    if (!text) return res.status(400).json({ message: 'Treść notatki jest wymagana' });
+    if (text.length > 1200) return res.status(400).json({ message: 'Notatka jest za długa' });
+
+    const task = await Task.findById(req.params.taskId).populate('project', 'client name');
+    if (!task || !task.project) return res.status(404).json({ message: 'Zadanie nie znalezione' });
+    if (task.project.client?.toString() !== client._id.toString()) {
+      return res.status(403).json({ message: 'Zadanie nie należy do projektu tego klienta' });
+    }
+
+    task.clientNotes = task.clientNotes || [];
+    task.clientNotes.push({ text, client: client._id, createdAt: new Date() });
+    await task.save();
+
+    res.status(201).json({ message: 'Notatka została dodana' });
+  } catch (e) {
+    console.error('Client task note error:', e);
+    res.status(500).json({ message: 'Błąd dodawania notatki' });
   }
 });
 
@@ -214,5 +275,4 @@ router.get('/:token/hosting/:hostingId/monitor', async (req, res) => {
 });
 
 module.exports = router;
-
 

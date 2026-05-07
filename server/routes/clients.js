@@ -1,5 +1,5 @@
 const express = require('express');
-const { body, validationResult } = require('express-validator');
+const { body, param, query, validationResult } = require('express-validator');
 const { auth, requireRole } = require('../middleware/auth');
 const Client = require('../models/Client');
 const Project = require('../models/Project');
@@ -56,7 +56,7 @@ router.get('/:id', async (req, res) => {
     const client = await Client.findById(req.params.id);
     if (!client) return res.status(404).json({ message: 'Klient nie znaleziony' });
     const [projects, hostings] = await Promise.all([
-      Project.find({ client: client._id }).select('name status offerType owner createdAt'),
+      Project.find({ client: client._id }).select('name status offerType owner createdAt documents generatedOfferUrl workSummaryUrl workSummaryPdfUrl'),
       Hosting.find({ client: client._id }).select('domain status monthlyPrice nextPaymentDate')
     ]);
     res.json({ client, projects, hostings });
@@ -91,6 +91,53 @@ router.post('/:id/portal/regenerate', async (req, res) => {
   }
 });
 
+// Projects that can be managed from client details
+router.get('/:id/assignable-projects', [
+  param('id').isMongoId(),
+  query('search').optional({ checkFalsy: true }).isString().trim(),
+  query('limit').optional({ checkFalsy: true }).isInt({ min: 1, max: 500 })
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ message: 'Nieprawidłowe parametry', errors: errors.array() });
+    }
+
+    const client = await Client.findById(req.params.id).select('name company email phone');
+    if (!client) return res.status(404).json({ message: 'Klient nie znaleziony' });
+
+    const limit = Number.parseInt(req.query.limit, 10) || 200;
+    const queryFilter = {};
+    const search = (req.query.search || '').trim();
+    if (search) {
+      queryFilter.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { clientName: { $regex: search, $options: 'i' } },
+        { clientEmail: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const projects = await Project.find(queryFilter)
+      .select('name status offerType client clientName clientEmail clientContact createdAt')
+      .populate('client', 'name company email')
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    res.json({
+      client,
+      projects: projects.map((project) => ({
+        ...project,
+        assignedToCurrentClient: project.client?._id?.toString() === client._id.toString(),
+        assignable: !project.client || project.client?._id?.toString() === client._id.toString()
+      }))
+    });
+  } catch (e) {
+    console.error('Assignable projects error:', e);
+    res.status(500).json({ message: 'Błąd pobierania projektów do przypisania' });
+  }
+});
+
 // Delete client
 router.delete('/:id', async (req, res) => {
   try {
@@ -104,17 +151,52 @@ router.delete('/:id', async (req, res) => {
 });
 
 // Assign project to client
-router.post('/:id/assign-project', [ body('projectId').isString() ], async (req, res) => {
+router.post('/:id/assign-project', [
+  param('id').isMongoId(),
+  body('projectId').isMongoId()
+], async (req, res) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ message: 'Nieprawidłowy projekt', errors: errors.array() });
+    }
     const client = await Client.findById(req.params.id);
     if (!client) return res.status(404).json({ message: 'Klient nie znaleziony' });
-    const project = await Project.findById(req.body.projectId);
+    const project = await Project.findById(req.body.projectId).populate('client', 'name company email');
     if (!project) return res.status(404).json({ message: 'Projekt nie znaleziony' });
+    const previousClient = project.client || null;
     project.client = client._id;
     await project.save();
-    res.json({ message: 'Projekt przypisany', project });
+    const updated = await Project.findById(project._id).populate('client', 'name company email');
+    res.json({ message: 'Projekt przypisany', project: updated, previousClient });
   } catch (e) {
+    console.error('Assign project error:', e);
     res.status(500).json({ message: 'Błąd przypisywania projektu' });
+  }
+});
+
+// Remove project from client
+router.delete('/:id/projects/:projectId', [
+  param('id').isMongoId(),
+  param('projectId').isMongoId()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ message: 'Nieprawidłowy projekt', errors: errors.array() });
+    }
+
+    const client = await Client.findById(req.params.id);
+    if (!client) return res.status(404).json({ message: 'Klient nie znaleziony' });
+    const project = await Project.findOne({ _id: req.params.projectId, client: client._id });
+    if (!project) return res.status(404).json({ message: 'Projekt nie jest przypisany do tego klienta' });
+
+    project.client = null;
+    await project.save();
+    res.json({ message: 'Projekt odpięty od klienta', project });
+  } catch (e) {
+    console.error('Unassign project error:', e);
+    res.status(500).json({ message: 'Błąd odpinania projektu' });
   }
 });
 
@@ -134,4 +216,3 @@ router.post('/:id/assign-hosting', [ body('hostingId').isString() ], async (req,
 });
 
 module.exports = router;
-

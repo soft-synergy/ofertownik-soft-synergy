@@ -11,9 +11,9 @@ import { CSS } from '@dnd-kit/utilities';
 import {
   Plus, Calendar as CalendarIcon, List, Filter, ChevronLeft, ChevronRight,
   Edit2, Trash2, Trash, X, MessageSquarePlus, FolderOpen,
-  Lock, Users, AlertCircle, CheckCircle2, Circle, ArrowUpCircle,
+  Users, AlertCircle, CheckCircle2, Circle, ArrowUpCircle,
   Paperclip, Download, RotateCcw, UploadCloud, File, Eye,
-  Send, Flag, Zap, Sparkles, Bell, ChevronDown, Link2, ExternalLink,
+  Send, Flag, Zap, Sparkles, Bell, ChevronDown, Link2, ExternalLink, Clock, Target, Gauge, Sun, Sunrise, Moon,
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { tasksAPI, authAPI, projectsAPI } from '../services/api';
@@ -322,7 +322,7 @@ function TaskDetailModal({ task, users = [], projects = [], onClose, onSaved, me
     title: t?.title ?? '', description: t?.description ?? '',
     status: t?.status ?? 'todo', priority: t?.priority ?? 'normal',
     assignees: initialAssignees, watchers: initialWatchers,
-    isPrivate: !!t?.isPrivate, project: t?.project?._id ?? t?.project ?? '',
+    project: t?.project?._id ?? t?.project ?? '',
     dueDate: t?.dueDate ? format(parseISO(t.dueDate), 'yyyy-MM-dd') : (task?.dueDate ? format(parseISO(task.dueDate), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd')),
     dueTimeMinutes: t?.dueTimeMinutes ?? '',
     durationMinutes: t?.durationMinutes ?? 60,
@@ -407,7 +407,7 @@ function TaskDetailModal({ task, users = [], projects = [], onClose, onSaved, me
       title: form.title.trim(), description: (form.description || '').trim(),
       status: form.status, priority: form.priority,
       assignees: form.assignees.filter(Boolean), watchers: form.watchers.filter(Boolean),
-      isPrivate: !!form.isPrivate, project: form.project || null,
+      project: form.project || null,
       dueDate: form.dueDate, dueTimeMinutes: form.dueTimeMinutes === '' ? null : Number(form.dueTimeMinutes),
       durationMinutes: Number(form.durationMinutes) || 60
     };
@@ -434,7 +434,7 @@ function TaskDetailModal({ task, users = [], projects = [], onClose, onSaved, me
           title: form.title.trim(), description: (form.description || '').trim(),
           status: form.status, priority: form.priority,
           assignees: form.assignees.filter(Boolean), watchers: form.watchers.filter(Boolean),
-          isPrivate: !!form.isPrivate, project: form.project || null,
+          project: form.project || null,
           dueDate: form.dueDate, dueTimeMinutes: form.dueTimeMinutes === '' ? null : Number(form.dueTimeMinutes),
           durationMinutes: Number(form.durationMinutes) || 60
         };
@@ -443,12 +443,12 @@ function TaskDetailModal({ task, users = [], projects = [], onClose, onSaved, me
       }, 1200);
       return;
     }
-    if (['status', 'priority', 'isPrivate', 'project', 'dueDate', 'dueTimeMinutes', 'assignees', 'watchers'].includes(key)) {
+    if (['status', 'priority', 'project', 'dueDate', 'dueTimeMinutes', 'assignees', 'watchers'].includes(key)) {
       const payload = {
         title: form.title.trim(), description: (form.description || '').trim(),
         status: form.status, priority: form.priority,
         assignees: form.assignees.filter(Boolean), watchers: form.watchers.filter(Boolean),
-        isPrivate: !!form.isPrivate, project: form.project || null,
+        project: form.project || null,
         dueDate: form.dueDate, dueTimeMinutes: form.dueTimeMinutes === '' ? null : Number(form.dueTimeMinutes),
         durationMinutes: Number(form.durationMinutes) || 60
       };
@@ -631,21 +631,6 @@ function TaskDetailModal({ task, users = [], projects = [], onClose, onSaved, me
 
               {/* Right column - meta */}
               <div className="space-y-5">
-                {/* Private toggle */}
-                <label className={`flex items-center gap-3 rounded-xl border-2 p-4 cursor-pointer transition-all
-                  ${form.isPrivate ? 'border-amber-300 bg-amber-50/50' : 'border-gray-100 hover:border-gray-200 bg-white'}`}>
-                  <div className={`w-11 h-6 rounded-full transition-colors relative ${form.isPrivate ? 'bg-amber-500' : 'bg-gray-300'}`}>
-                    <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-all shadow ${form.isPrivate ? 'left-[calc(100%-22px)]' : 'left-0.5'}`} />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-1.5 text-sm font-semibold">
-                      <Lock className="h-4 w-4 text-amber-600" /> Zadanie prywatne
-                    </div>
-                    <div className="text-xs text-gray-500 mt-0.5">Widoczne tylko dla przypisanych i obserwujących</div>
-                  </div>
-                  <input type="checkbox" checked={form.isPrivate} onChange={() => handleChange('isPrivate', !form.isPrivate)} className="sr-only" />
-                </label>
-
                 {/* Due date */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -945,7 +930,7 @@ function NewTaskModal({ initialDueDate, users = [], projects = [], onClose, onSa
   useEscClose(onClose);
   const [form, setForm] = useState({
     title: '', description: '', status: 'todo', priority: 'normal',
-    assignees: [], watchers: [], isPrivate: false, project: '',
+    assignees: [], watchers: [], project: '',
     dueDate: initialDueDate ? format(initialDueDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
     dueTimeMinutes: '', durationMinutes: 60,
     recurrenceEnabled: false, recurrenceFrequency: 'weekly', recurrenceInterval: 1,
@@ -970,7 +955,7 @@ function NewTaskModal({ initialDueDate, users = [], projects = [], onClose, onSa
       title: form.title.trim(), description: (form.description || '').trim(),
       status: form.status, priority: form.priority,
       assignees: form.assignees.filter(Boolean), watchers: form.watchers.filter(Boolean),
-      isPrivate: !!form.isPrivate, project: form.project || null,
+      project: form.project || null,
       dueDate: form.dueDate, dueTimeMinutes: form.dueTimeMinutes === '' ? null : Number(form.dueTimeMinutes),
       durationMinutes: Number(form.durationMinutes) || 60,
       ...(form.recurrenceEnabled ? {
@@ -1084,17 +1069,6 @@ function NewTaskModal({ initialDueDate, users = [], projects = [], onClose, onSa
                 </div>
               </div>
             </div>
-
-            <label className={`flex items-center gap-3 rounded-xl border-2 p-4 cursor-pointer transition-all ${form.isPrivate ? 'border-amber-300 bg-amber-50/50' : 'border-gray-100 hover:border-gray-200'}`}>
-              <div className={`w-11 h-6 rounded-full transition-colors relative ${form.isPrivate ? 'bg-amber-500' : 'bg-gray-300'}`}>
-                <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-all shadow ${form.isPrivate ? 'left-[calc(100%-22px)]' : 'left-0.5'}`} />
-              </div>
-              <div>
-                <div className="flex items-center gap-1.5 text-sm font-semibold"><Lock className="h-4 w-4 text-amber-600" /> Zadanie prywatne</div>
-                <div className="text-xs text-gray-500 mt-0.5">Widoczne tylko dla przypisanych i obserwujących</div>
-              </div>
-              <input type="checkbox" checked={form.isPrivate} onChange={() => handleChange('isPrivate', !form.isPrivate)} className="sr-only" />
-            </label>
 
             <details className="rounded-xl border border-gray-200 overflow-hidden">
               <summary className="flex items-center gap-2 px-4 py-3 cursor-pointer hover:bg-gray-50 text-sm font-semibold text-gray-700">
@@ -1224,6 +1198,191 @@ function MobileTaskCard({ t, onOpen, onToggleDone }) {
   );
 }
 
+// ── Desktop today card ──
+function DesktopTodayCard({ t, onOpen, onToggleDone, isOverdue, done }) {
+  const assigneesList = t.assignees?.length > 0 ? t.assignees : (t.assignee ? [t.assignee] : []);
+  const daysOverdue = t.dueDate ? Math.ceil((new Date() - new Date(t.dueDate)) / (1000 * 60 * 60 * 24)) : 0;
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(t)}
+      className={`w-full text-left bg-white rounded-xl border shadow-sm overflow-hidden transition-all hover:shadow-md active:scale-[0.99] ${
+        done ? 'border-l-4 border-l-emerald-400 opacity-75' : isOverdue ? 'border-l-4 border-l-red-400' : `${PRIORITY_COLORS[t.priority] ? 'border-l-4 ' + PRIORITY_COLORS[t.priority].split(' ').filter(c => c.includes('border') || c.includes('red') || c.includes('orange') || c.includes('blue') || c.includes('gray')).join(' ') : 'border-l-4 border-l-gray-200'}`
+      }`}
+      style={{ borderLeftColor: done ? '#34d399' : isOverdue ? '#f87171' : t.priority === 'urgent' ? '#f87171' : t.priority === 'high' ? '#fb923c' : t.priority === 'normal' ? '#60a5fa' : '#d1d5db' }}
+    >
+      <div className="p-3.5">
+        <div className="flex items-start gap-3">
+          <div
+            role="checkbox"
+            aria-checked={t.status === 'done'}
+            onClick={(e) => { e.stopPropagation(); onToggleDone(t); }}
+            className="shrink-0 pt-0.5 cursor-pointer"
+          >
+            <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-colors ${
+              t.status === 'done' ? 'bg-emerald-500 border-emerald-500' : 'border-gray-300 hover:border-emerald-400'
+            }`}>
+              {t.status === 'done' && <CheckCircle2 className="h-3.5 w-3.5 text-white" />}
+            </div>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className={`font-semibold text-sm leading-snug ${done ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+              {t.title}
+            </p>
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1.5">
+              {t.project?.name && (
+                <span className="inline-flex items-center gap-1 text-[11px] text-gray-400 max-w-[140px] truncate bg-gray-50 px-1.5 py-0.5 rounded">
+                  <FolderOpen className="h-3 w-3" /> {t.project.name}
+                </span>
+              )}
+              {t.dueTimeMinutes != null && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded">
+                  <Clock className="h-3 w-3" />
+                  {String(Math.floor(t.dueTimeMinutes / 60)).padStart(2, '0')}:{String(t.dueTimeMinutes % 60).padStart(2, '0')}
+                </span>
+              )}
+              {isOverdue && daysOverdue > 0 && (
+                <span className="text-[11px] font-semibold text-red-500">
+                  {daysOverdue} {daysOverdue === 1 ? 'dzień' : daysOverdue < 5 ? 'dni' : 'dni'} temu
+                </span>
+              )}
+              {assigneesList[0] && (
+                <span className="text-[11px] text-gray-400">{assigneesList[0].firstName} {assigneesList[0].lastName}</span>
+              )}
+            </div>
+          </div>
+          <div className="shrink-0 flex flex-col items-end gap-1">
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${PRIORITY_COLORS[t.priority] ?? 'bg-gray-100 text-gray-600'}`}>
+              {PRIORITY_LABELS[t.priority] ?? ''}
+            </span>
+          </div>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+// ── Quick add inline for desktop today view ──
+function QuickAddToday({ users, projects, me, onSaved }) {
+  const queryClient = useQueryClient();
+  const [title, setTitle] = useState('');
+  const [showMore, setShowMore] = useState(false);
+  const [priority, setPriority] = useState('normal');
+  const [assigneeId, setAssigneeId] = useState('');
+  const [projectId, setProjectId] = useState('');
+  const [dueTimeMinutes, setDueTimeMinutes] = useState('');
+  const inputRef = useRef(null);
+  const myId = me?._id;
+
+  const createMutation = useMutation(
+    (data) => tasksAPI.create(data),
+    {
+      onSuccess: () => {
+        toast.success('Zadanie dodane!');
+        setTitle('');
+        setShowMore(false);
+        setPriority('normal');
+        setAssigneeId('');
+        setProjectId('');
+        setDueTimeMinutes('');
+        queryClient.invalidateQueries(['tasks-today']);
+        queryClient.invalidateQueries(['tasks-overdue']);
+        queryClient.invalidateQueries(['tasks']);
+        queryClient.invalidateQueries(['tasks-mobile-week']);
+        if (onSaved) onSaved();
+      },
+      onError: (e) => toast.error(e.response?.data?.message || 'Błąd tworzenia zadania')
+    }
+  );
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!title.trim()) return;
+    const body = {
+      title: title.trim(),
+      status: 'todo',
+      priority,
+      dueDate: format(new Date(), "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"),
+      ...(myId ? { assignees: [myId] } : {}),
+      ...(assigneeId ? { assignees: [assigneeId] } : {}),
+      ...(projectId ? { project: projectId } : {}),
+      ...(dueTimeMinutes !== '' ? { dueTimeMinutes: parseInt(dueTimeMinutes, 10) } : {}),
+    };
+    createMutation.mutate(body);
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-3 sm:p-4">
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <input
+            ref={inputRef}
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Dodaj szybkie zadanie na dziś..."
+            className="w-full text-sm px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-300 placeholder-gray-400"
+            onFocus={() => setShowMore(true)}
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowMore(v => !v)}
+          className={`shrink-0 p-2.5 rounded-xl border transition-colors ${showMore ? 'bg-primary-50 border-primary-200 text-primary-600' : 'bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100'}`}
+        >
+          <Plus className="h-4 w-4" />
+        </button>
+        <button
+          type="submit"
+          disabled={!title.trim() || createMutation.isLoading}
+          className="shrink-0 px-4 py-2.5 bg-primary-600 text-white rounded-xl text-sm font-semibold hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {createMutation.isLoading ? (
+            <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/80 border-t-transparent" />
+          ) : 'Dodaj'}
+        </button>
+      </div>
+      {showMore && (
+        <div className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div>
+            <label className="block text-[10px] font-medium text-gray-400 mb-0.5">Priorytet</label>
+            <select value={priority} onChange={e => setPriority(e.target.value)}
+              className="input-field w-full text-xs py-1.5">
+              {Object.entries(PRIORITY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] font-medium text-gray-400 mb-0.5">Osoba</label>
+            <select value={assigneeId} onChange={e => setAssigneeId(e.target.value)}
+              className="input-field w-full text-xs py-1.5">
+              <option value="">Ja</option>
+              {users.map(u => u._id !== myId && <option key={u._id} value={u._id}>{u.firstName} {u.lastName}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] font-medium text-gray-400 mb-0.5">Projekt</label>
+            <select value={projectId} onChange={e => setProjectId(e.target.value)}
+              className="input-field w-full text-xs py-1.5">
+              <option value="">Brak</option>
+              {projects.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] font-medium text-gray-400 mb-0.5">Godzina</label>
+            <input type="time" value={dueTimeMinutes !== '' ? `${String(Math.floor((parseInt(dueTimeMinutes) || 0) / 60)).padStart(2, '0')}:${String((parseInt(dueTimeMinutes) || 0) % 60).padStart(2, '0')}` : ''}
+              onChange={e => {
+                if (!e.target.value) { setDueTimeMinutes(''); return; }
+                const [h, m] = e.target.value.split(':').map(Number);
+                setDueTimeMinutes(String(h * 60 + m));
+              }}
+              className="input-field w-full text-xs py-1.5" />
+          </div>
+        </div>
+      )}
+    </form>
+  );
+}
+
 export default function Tasks() {
   const queryClient = useQueryClient();
   const location = useLocation();
@@ -1246,6 +1405,8 @@ export default function Tasks() {
   const [contextMenu, setContextMenu] = useState(null);
   const [dayContextMenu, setDayContextMenu] = useState(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [desktopTodayMyOnly, setDesktopTodayMyOnly] = useState(false);
+  const [todayDoneOpen, setTodayDoneOpen] = useState(false);
   const filtersInitializedRef = useRef(false);
 
   const { data: meData } = useQuery('me', authAPI.me, { staleTime: 60 * 1000 });
@@ -1276,8 +1437,9 @@ export default function Tasks() {
         dateFrom: saved.dateFrom ?? '',
         dateTo: saved.dateTo ?? ''
       });
-      if (saved.view === 'list' || saved.view === 'calendar') setView(saved.view);
+      if (saved.view === 'list' || saved.view === 'calendar' || saved.view === 'today') setView(saved.view);
       if (saved.calendarMode === 'month' || saved.calendarMode === 'week') setCalendarMode(saved.calendarMode);
+      if (typeof saved.desktopTodayMyOnly === 'boolean') setDesktopTodayMyOnly(saved.desktopTodayMyOnly);
     }
   }, [meData]);
 
@@ -1289,7 +1451,8 @@ export default function Tasks() {
           tasksFilters: {
             ...filters,
             view,
-            calendarMode
+            calendarMode,
+            desktopTodayMyOnly
           }
         })
         .then(() => {
@@ -1298,7 +1461,7 @@ export default function Tasks() {
         .catch(() => {});
     }, 800);
     return () => clearTimeout(t);
-  }, [filters, view, calendarMode, queryClient]);
+  }, [filters, view, calendarMode, desktopTodayMyOnly, queryClient]);
 
   const calendarRange = useMemo(() => {
     if (calendarMode === 'week') {
@@ -1343,7 +1506,6 @@ export default function Tasks() {
   );
   const todayPending = todayTasks.filter(t => t.status !== 'done');
   const overdueFiltered = overdueTasks.filter(t => t.status !== 'done');
-  const [todayDoneOpen, setTodayDoneOpen] = useState(false);
 
   const deleteMutation = useMutation((id) => tasksAPI.delete(id), {
     onMutate: async (id) => {
@@ -1514,7 +1676,13 @@ export default function Tasks() {
     { staleTime: 60 * 1000 }
   );
   const myId = meData?.user?._id;
-  const isMine = (t) => !myId || (t.assignees?.includes(myId) || t.assignee?._id === myId || t.assignee === myId);
+  const isMine = (t) => {
+    if (!myId) return true;
+    const eq = (v) => v === myId || v?.toString?.() === myId;
+    if (t.assignees?.some(a => eq(a._id || a))) return true;
+    if (eq(t.assignee?._id || t.assignee)) return true;
+    return false;
+  };
 
   const mobileCalendarTasks = useMemo(() => {
     const key = format(mobileSelectedDay, 'yyyy-MM-dd');
@@ -1535,7 +1703,7 @@ export default function Tasks() {
       if (b.status === 'done' && a.status !== 'done') return -1;
       return new Date(a.dueDate || 0) - new Date(b.dueDate || 0);
     });
-  }, [tasks, mobileStatusFilter, mobilePriorityFilter]);
+  }, [tasks, mobileStatusFilter, mobilePriorityFilter, mobileMyOnly, myId]);
 
   return (
     <>
@@ -1847,12 +2015,16 @@ export default function Tasks() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-gray-900">Zadania</h1>
         <div className="flex items-center gap-2">
+          <button type="button" onClick={() => setView('today')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${view === 'today' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+            <Sun className="h-4 w-4" /> Dziś
+          </button>
           <button type="button" onClick={() => setView('list')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${view === 'list' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${view === 'list' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
             <List className="h-4 w-4" /> Lista
           </button>
           <button type="button" onClick={() => setView('calendar')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${view === 'calendar' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${view === 'calendar' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
             <CalendarIcon className="h-4 w-4" /> Kalendarz
           </button>
           {view === 'calendar' && (
@@ -1873,39 +2045,253 @@ export default function Tasks() {
         </div>
       </div>
 
-      {/* Zadania na dziś */}
-      {todayPending.length > 0 && (
-        <div className="bg-primary-50 border border-primary-200 rounded-2xl p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-bold text-primary-800 flex items-center gap-2">
-              <CalendarIcon className="h-4 w-4" />
-              Na dziś — {todayPending.length} {todayPending.length === 1 ? 'zadanie' : 'zadań'}
-            </h2>
+      {/* ═══════════════════ ADVANCED "DZIŚ" DESKTOP VIEW ═══════════════════ */}
+      {view === 'today' && (() => {
+        const dtToday = desktopTodayMyOnly ? todayTasks.filter(t => isMine(t)) : todayTasks;
+        const dtPending = dtToday.filter(t => t.status !== 'done');
+        const dtOverdue = desktopTodayMyOnly ? overdueFiltered.filter(t => isMine(t)) : overdueFiltered;
+        return (
+        <div className="space-y-6 animate-in fade-in duration-300">
+          {/* ── Hero greeting + stats banner ── */}
+          <div className="relative overflow-hidden bg-gradient-to-br from-primary-600 via-primary-700 to-indigo-800 rounded-3xl p-6 sm:p-8 text-white shadow-xl">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-bl-full" />
+            <div className="absolute bottom-0 left-1/2 w-48 h-48 bg-white/5 rounded-tr-full" />
+            <div className="relative flex flex-col lg:flex-row lg:items-center gap-6">
+              <div className="flex-1">
+                <p className="text-primary-200 text-sm font-medium mb-1">
+                  {(() => {
+                    const h = new Date().getHours();
+                    const icon = h < 12 ? Sunrise : h < 17 ? Sun : Moon;
+                    const greeting = h < 12 ? 'Dzień dobry' : h < 17 ? 'Miłego popołudnia' : 'Dobry wieczór';
+                    return React.createElement(React.Fragment, null,
+                      React.createElement(icon, { className: 'h-4 w-4 inline mr-1.5 -mt-0.5' }),
+                      greeting
+                    );
+                  })()}
+                </p>
+                <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">
+                  {format(new Date(), 'EEEE, d MMMM', { locale: pl })}
+                </h2>
+                <p className="mt-2 text-primary-200 text-sm max-w-md">
+                  {dtToday.length === 0
+                    ? 'Brak zadań na dziś — czas na planowanie!'
+                    : dtPending.length === 0
+                      ? 'Wszystkie zadania na dziś zrobione — gratulacje!'
+                      : dtOverdue.length > 0
+                        ? `${dtOverdue.length} przeterminowanych wymaga uwagi`
+                        : `${dtPending.length} ${dtPending.length === 1 ? 'zadanie czeka' : 'zadań czeka'} na realizację`}
+                </p>
+                <div className="flex flex-wrap items-center gap-2 mt-4">
+                  <button onClick={() => openCreate(new Date())}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-white text-primary-700 rounded-xl text-sm font-semibold hover:bg-primary-50 transition-colors shadow-sm">
+                    <Plus className="h-4 w-4" /> Dodaj zadanie na dziś
+                  </button>
+                  <button onClick={() => setDesktopTodayMyOnly(v => !v)}
+                    className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-colors border ${
+                      desktopTodayMyOnly ? 'bg-white/20 text-white border-white/40' : 'bg-white/10 text-primary-100 border-white/20 hover:bg-white/20'
+                    }`}>
+                    <Users className="h-4 w-4" />
+                    {desktopTodayMyOnly ? 'Moje ✓' : 'Moje'}
+                  </button>
+                  {dtOverdue.length > 0 && (
+                    <button onClick={() => document.getElementById('dt-overdue')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-red-500/20 text-red-100 rounded-xl text-sm font-semibold hover:bg-red-500/30 transition-colors border border-red-400/30">
+                      <AlertCircle className="h-4 w-4" /> {dtOverdue.length} przeterminowanych
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="shrink-0 flex items-center gap-6 lg:gap-8">
+                {/* Big progress ring */}
+                {dtToday.length > 0 && (
+                  <div className="relative h-28 w-28 sm:h-32 sm:w-32">
+                    <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90 drop-shadow-lg">
+                      <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="7"/>
+                      <circle cx="50" cy="50" r="42" fill="none"
+                        stroke={dtOverdue.length > 0 ? '#fca5a5' : dtPending.length === 0 ? '#86efac' : '#fbbf24'}
+                        strokeWidth="7" strokeLinecap="round"
+                        strokeDasharray={`${((dtToday.length - dtPending.length) / dtToday.length) * 264} 264`}
+                        className="transition-all duration-1000 ease-out"
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-2xl sm:text-3xl font-black tabular-nums">
+                        {Math.round(((dtToday.length - dtPending.length) / dtToday.length) * 100)}%
+                      </span>
+                      <span className="text-[10px] text-primary-200 font-medium">
+                        {dtToday.length - dtPending.length}/{dtToday.length}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                {/* Mini stat cards */}
+                <div className="grid grid-cols-1 gap-2">
+                  {[
+                    { label: 'Przeterminowane', count: dtOverdue.length, color: 'bg-red-500/20 text-red-100 border-red-400/30', icon: AlertCircle },
+                    { label: 'W toku', count: dtToday.filter(t => t.status === 'in_progress').length, color: 'bg-blue-500/20 text-blue-100 border-blue-400/30', icon: Zap },
+                    { label: 'Do zrobienia', count: dtToday.filter(t => t.status === 'todo').length, color: 'bg-amber-500/20 text-amber-100 border-amber-400/30', icon: Circle },
+                    { label: 'Zrobione', count: dtToday.filter(t => t.status === 'done').length, color: 'bg-emerald-500/20 text-emerald-100 border-emerald-400/30', icon: CheckCircle2 },
+                  ].map(s => (
+                    <div key={s.label} className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border ${s.color} text-xs font-semibold`}>
+                      <s.icon className="h-3.5 w-3.5 shrink-0" />
+                      <span className="opacity-80">{s.label}</span>
+                      <span className="ml-auto tabular-nums">{s.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="space-y-1.5">
-            {todayPending.slice(0, 5).map((t) => (
-              <button
-                key={t._id}
-                type="button"
-                onClick={() => openEdit(t)}
-                className="w-full text-left flex items-center gap-2.5 px-3 py-2 bg-white rounded-xl hover:bg-primary-50 border border-primary-100 transition-colors"
-              >
-                <div onClick={(e) => { e.stopPropagation(); handleToggleDone(t); }}
-                  className="shrink-0 h-5 w-5 rounded-full border-2 border-primary-300 flex items-center justify-center hover:border-primary-500 transition-colors" />
-                <span className="flex-1 text-sm text-gray-800 truncate">{t.title}</span>
-                <span className={`shrink-0 text-xs px-1.5 py-0.5 rounded font-medium ${PRIORITY_COLORS[t.priority] ?? 'bg-gray-100'}`}>
-                  {PRIORITY_LABELS[t.priority]?.[0] ?? ''}
-                </span>
-              </button>
-            ))}
-            {todayPending.length > 5 && (
-              <p className="text-xs text-primary-600 text-center pt-1">+{todayPending.length - 5} więcej</p>
-            )}
+
+          {/* ── Quick inline add ── */}
+          <QuickAddToday users={users} projects={projects} me={meData?.user} onSaved={() => { queryClient.invalidateQueries(['tasks-today']); queryClient.invalidateQueries(['tasks-overdue']); queryClient.invalidateQueries(['tasks-mobile-week']); }} />
+
+          {/* ── 3-column main grid ── */}
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            {/* Column 1: Overdue + Empty state */}
+            <div className="xl:col-span-1 space-y-4">
+              {(() => {
+                const visible = dtOverdue.sort((a, b) => (PRIORITY_ORDER[b.priority] ?? 0) - (PRIORITY_ORDER[a.priority] ?? 0));
+                if (visible.length === 0) return null;
+                return (
+                  <div id="dt-overdue">
+                    <div className="flex items-center gap-2 mb-3">
+                      <AlertCircle className="h-5 w-5 text-red-500" />
+                      <h3 className="text-base font-bold text-gray-900">Przeterminowane</h3>
+                      <span className="ml-auto text-xs font-semibold text-red-600 bg-red-100 px-2 py-0.5 rounded-full">{visible.length}</span>
+                    </div>
+                    <div className="space-y-2">
+                      {visible.map(t => (
+                        <DesktopTodayCard key={t._id} t={t} onOpen={openEdit} onToggleDone={handleToggleDone} isOverdue />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+              {dtToday.length === 0 && dtOverdue.length === 0 && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-8 text-center">
+                  <CheckCircle2 className="h-12 w-12 text-emerald-400 mx-auto mb-3" />
+                  <h3 className="text-lg font-bold text-emerald-800">Wolny dzień!</h3>
+                  <p className="text-sm text-emerald-600 mt-1">Brak zaplanowanych zadań na dziś</p>
+                  <button onClick={() => openCreate(new Date())}
+                    className="mt-4 px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-colors">
+                    <Plus className="h-4 w-4 inline mr-1.5 -mt-0.5" /> Dodaj zadanie
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Column 2: In Progress + Todo */}
+            <div className="space-y-4">
+              {(() => {
+                const inProgress = dtToday.filter(t => t.status === 'in_progress');
+                if (inProgress.length === 0) return null;
+                return (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Zap className="h-5 w-5 text-blue-500" />
+                      <h3 className="text-base font-bold text-gray-900">W toku</h3>
+                      <span className="ml-auto text-xs font-semibold text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">{inProgress.length}</span>
+                    </div>
+                    <div className="space-y-2">
+                      {inProgress.map(t => <DesktopTodayCard key={t._id} t={t} onOpen={openEdit} onToggleDone={handleToggleDone} />)}
+                    </div>
+                  </div>
+                );
+              })()}
+              {(() => {
+                const todos = dtToday.filter(t => t.status === 'todo')
+                  .sort((a, b) => (PRIORITY_ORDER[b.priority] ?? 0) - (PRIORITY_ORDER[a.priority] ?? 0));
+                if (todos.length === 0) return null;
+                return (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Circle className="h-5 w-5 text-gray-400" />
+                      <h3 className="text-base font-bold text-gray-900">Do zrobienia</h3>
+                      <span className="ml-auto text-xs font-semibold text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full">{todos.length}</span>
+                    </div>
+                    <div className="space-y-2">
+                      {todos.map(t => <DesktopTodayCard key={t._id} t={t} onOpen={openEdit} onToggleDone={handleToggleDone} />)}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Column 3: Done + Stats */}
+            <div className="space-y-4">
+              {(() => {
+                const done = dtToday.filter(t => t.status === 'done');
+                if (done.length === 0 && dtToday.length > 0) {
+                  return (
+                    <div className="bg-gray-50 border border-dashed border-gray-200 rounded-2xl p-6 text-center">
+                      <Target className="h-10 w-10 text-gray-300 mx-auto mb-2" />
+                      <p className="text-sm font-medium text-gray-500">Jeszcze nic nie zrobione</p>
+                      <p className="text-xs text-gray-400 mt-1">Zaznacz zadanie jako wykonane</p>
+                    </div>
+                  );
+                }
+                if (done.length === 0) return null;
+                return (
+                  <div>
+                    <button type="button" onClick={() => setTodayDoneOpen(v => !v)}
+                      className="w-full flex items-center gap-2 mb-3 group">
+                      <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                      <h3 className="text-base font-bold text-gray-900">Zrobione</h3>
+                      <span className="text-xs font-semibold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">{done.length}</span>
+                      <ChevronDown className={`ml-auto h-4 w-4 text-gray-400 transition-transform ${todayDoneOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {todayDoneOpen && (
+                      <div className="space-y-2">
+                        {done.map(t => <DesktopTodayCard key={t._id} t={t} onOpen={openEdit} onToggleDone={handleToggleDone} done />)}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+              {/* Mini progress stats */}
+              {dtToday.length > 0 && (
+                <div className="bg-white rounded-2xl border border-gray-100 p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Gauge className="h-4 w-4 text-primary-500" />
+                    <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Wydajność dnia</span>
+                  </div>
+                  <div className="space-y-2">
+                    <div>
+                      <div className="flex justify-between text-xs text-gray-500 mb-1">
+                        <span>Postęp</span>
+                        <span className="font-semibold text-gray-700">{Math.round(((dtToday.length - dtPending.length) / dtToday.length) * 100)}%</span>
+                      </div>
+                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full transition-all duration-700 ${
+                          dtPending.length === 0 ? 'bg-emerald-500' : dtOverdue.length > 0 ? 'bg-red-500' : 'bg-primary-500'
+                        }`} style={{ width: `${((dtToday.length - dtPending.length) / dtToday.length) * 100}%` }} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { label: 'Priorytet', value: dtToday.filter(t => t.priority === 'urgent' || t.priority === 'high').length, total: dtToday.length, color: 'text-orange-600' },
+                        { label: 'Z czasem', value: dtToday.filter(t => t.dueTimeMinutes).length, total: dtToday.length, color: 'text-blue-600' },
+                      ].map(s => (
+                        <div key={s.label} className="bg-gray-50 rounded-xl p-2.5">
+                          <p className="text-[10px] text-gray-400 uppercase font-medium">{s.label}</p>
+                          <p className={`text-lg font-bold ${s.color}`}>
+                            {s.value}<span className="text-xs text-gray-400 font-normal">/{s.total}</span>
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      )}
+      );})()}
 
-      {/* Filtry */}
+      {/* ═══════════ STANDARD VIEWS ═══════════ */}
+      {view !== 'today' && (
+        <>
       <div className="card">
         <button
           type="button"
@@ -2290,6 +2676,8 @@ export default function Tasks() {
             )}
           </DndContext>
         </div>
+      )}
+        </>
       )}
 
     </div>

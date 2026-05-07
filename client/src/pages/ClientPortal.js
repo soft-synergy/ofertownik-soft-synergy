@@ -10,6 +10,8 @@ const ClientPortal = () => {
   const [accepting, setAccepting] = useState(null);
   const [success, setSuccess] = useState('');
   const [actionError, setActionError] = useState('');
+  const [taskNoteDrafts, setTaskNoteDrafts] = useState({});
+  const [savingTaskNote, setSavingTaskNote] = useState(null);
   const [month, setMonth] = useState(() => {
     const d = new Date();
     const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -79,6 +81,31 @@ const ClientPortal = () => {
     } finally {
       setAccepting(null);
     }
+  };
+
+  const handleAddTaskNote = async (taskId) => {
+    const text = (taskNoteDrafts[taskId] || '').trim();
+    if (!text) return;
+    setSavingTaskNote(taskId);
+    setActionError('');
+    try {
+      await api.post(`/api/client-portal/${token}/tasks/${taskId}/client-note`, { text });
+      setTaskNoteDrafts((prev) => ({ ...prev, [taskId]: '' }));
+      setSuccess('Notatka została dodana do zadania.');
+      await fetchData();
+      setTimeout(() => setSuccess(''), 5000);
+    } catch (e) {
+      setActionError(e?.response?.data?.message || 'Nie udało się dodać notatki do zadania');
+      setTimeout(() => setActionError(''), 5000);
+    } finally {
+      setSavingTaskNote(null);
+    }
+  };
+
+  const getTaskStatusLabel = (status) => {
+    if (status === 'done') return 'Zrobione';
+    if (status === 'in_progress') return 'W trakcie';
+    return 'Do wykonania';
   };
 
   const downloadHostingCsv = async (hostingId) => {
@@ -577,6 +604,76 @@ const ClientPortal = () => {
                     </div>
                   </div>
                   {renderOfferProgress(p)}
+                  {Array.isArray(p.tasks) && p.tasks.length > 0 && (
+                    <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                      <div className="flex items-center justify-between gap-3 mb-3">
+                        <div>
+                          <h3 className="text-sm font-bold text-gray-900">Zakres prac i status zadań</h3>
+                          <p className="text-xs text-gray-500 mt-1">Prosty widok postępu bez wewnętrznych danych zespołu.</p>
+                        </div>
+                        <div className="text-xs font-semibold text-gray-500">
+                          {p.tasks.filter((task) => task.status === 'done').length}/{p.tasks.length} zrobione
+                        </div>
+                      </div>
+                      <div className="space-y-3">
+                        {p.tasks.map((task) => {
+                          const done = task.status === 'done';
+                          const noteDraft = taskNoteDrafts[task._id] || '';
+                          return (
+                            <div key={task._id} className="rounded-lg border border-gray-200 bg-white p-4">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <div className="font-semibold text-gray-900">{task.title}</div>
+                                  {task.description && (
+                                    <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{task.description}</p>
+                                  )}
+                                  {task.dueDate && (
+                                    <div className="text-xs text-gray-400 mt-2">
+                                      Planowany termin: {new Date(task.dueDate).toLocaleDateString('pl-PL')}
+                                    </div>
+                                  )}
+                                </div>
+                                <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${
+                                  done ? 'bg-green-100 text-green-700' : task.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
+                                }`}>
+                                  {getTaskStatusLabel(task.status)}
+                                </span>
+                              </div>
+                              {Array.isArray(task.clientNotes) && task.clientNotes.length > 0 && (
+                                <div className="mt-3 space-y-2">
+                                  {task.clientNotes.slice(-2).map((note) => (
+                                    <div key={note._id || note.createdAt} className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2 text-sm text-blue-900">
+                                      <div className="text-[11px] font-semibold text-blue-500 mb-1">
+                                        Twoja notatka · {note.createdAt ? new Date(note.createdAt).toLocaleDateString('pl-PL') : ''}
+                                      </div>
+                                      {note.text}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="mt-3 flex gap-2">
+                                <input
+                                  type="text"
+                                  value={noteDraft}
+                                  onChange={(e) => setTaskNoteDrafts((prev) => ({ ...prev, [task._id]: e.target.value }))}
+                                  placeholder="Dodaj krótką notatkę lub pytanie do tego zadania"
+                                  className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleAddTaskNote(task._id)}
+                                  disabled={!noteDraft.trim() || savingTaskNote === task._id}
+                                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {savingTaskNote === task._id ? 'Dodaję...' : 'Dodaj'}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                   <div className="mt-4 flex flex-wrap gap-3">
                     {p.generatedOfferUrl && (
                       <a href={toBackendUrl(p.generatedOfferUrl)} target="_blank" rel="noreferrer" className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm">Podgląd oferty</a>
@@ -910,5 +1007,3 @@ const ClientPortal = () => {
 };
 
 export default ClientPortal;
-
-

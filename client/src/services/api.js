@@ -253,7 +253,9 @@ export const clientsAPI = {
   create: (data) => api.post('/api/clients', data).then(res => res.data),
   update: (id, data) => api.put(`/api/clients/${id}`, data).then(res => res.data),
   delete: (id) => api.delete(`/api/clients/${id}`).then(res => res.data),
+  getAssignableProjects: (id, params) => api.get(`/api/clients/${id}/assignable-projects`, { params }).then(res => res.data),
   assignProject: (id, projectId) => api.post(`/api/clients/${id}/assign-project`, { projectId }).then(res => res.data),
+  unassignProject: (id, projectId) => api.delete(`/api/clients/${id}/projects/${projectId}`).then(res => res.data),
   assignHosting: (id, hostingId) => api.post(`/api/clients/${id}/assign-hosting`, { hostingId }).then(res => res.data),
   regeneratePortal: (id) => api.post(`/api/clients/${id}/portal/regenerate`).then(res => res.data),
 };

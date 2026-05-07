@@ -1,7 +1,8 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { clientsAPI, projectsAPI, hostingAPI } from '../services/api';
+import { clientsAPI, hostingAPI } from '../services/api';
+import toast from 'react-hot-toast';
 
 const Clients = () => {
   const queryClient = useQueryClient();
@@ -112,16 +113,41 @@ const Clients = () => {
 const ClientDetails = ({ client, onClose }) => {
   const { data, isLoading } = useQuery(['clientDetails', client._id], () => clientsAPI.getById(client._id));
   const [projectId, setProjectId] = useState('');
+  const [projectSearch, setProjectSearch] = useState('');
   const [hostingId, setHostingId] = useState('');
   const queryClient = useQueryClient();
   const assignProject = useMutation(({ id, projectId }) => clientsAPI.assignProject(id, projectId), {
-    onSuccess: () => { queryClient.invalidateQueries(['clientDetails', client._id]); setProjectId(''); }
+    onSuccess: () => {
+      queryClient.invalidateQueries(['clientDetails', client._id]);
+      queryClient.invalidateQueries(['clients']);
+      queryClient.invalidateQueries(['assignableProjects', client._id]);
+      setProjectId('');
+      toast.success('Projekt przypisany do klienta');
+    },
+    onError: (e) => toast.error(e?.response?.data?.message || 'Nie udało się przypisać projektu')
+  });
+  const unassignProject = useMutation(({ id, projectId }) => clientsAPI.unassignProject(id, projectId), {
+    onSuccess: () => {
+      queryClient.invalidateQueries(['clientDetails', client._id]);
+      queryClient.invalidateQueries(['clients']);
+      queryClient.invalidateQueries(['assignableProjects', client._id]);
+      toast.success('Projekt odpięty od klienta');
+    },
+    onError: (e) => toast.error(e?.response?.data?.message || 'Nie udało się odpiąć projektu')
   });
   const assignHosting = useMutation(({ id, hostingId }) => clientsAPI.assignHosting(id, hostingId), {
     onSuccess: () => { queryClient.invalidateQueries(['clientDetails', client._id]); setHostingId(''); }
   });
-  const { data: projectsResp = [] } = useQuery(['projectsListForAssign'], () => projectsAPI.getAll({ limit: 100 }));
-  const projectsList = useMemo(() => (Array.isArray(projectsResp) ? projectsResp : (projectsResp.projects || projectsResp.items || projectsResp.data || [])), [projectsResp]);
+  const { data: assignableResp, isLoading: isLoadingAssignableProjects } = useQuery(
+    ['assignableProjects', client._id, projectSearch],
+    () => clientsAPI.getAssignableProjects(client._id, { search: projectSearch || undefined, limit: 300 }),
+    { keepPreviousData: true }
+  );
+  const projectsList = useMemo(() => assignableResp?.projects || [], [assignableResp]);
+  const assignableProjects = useMemo(
+    () => projectsList.filter((p) => p.assignable && !p.assignedToCurrentClient),
+    [projectsList]
+  );
   const { data: hostingList = [] } = useQuery(['hostingListForAssign'], () => hostingAPI.getAll({}));
 
   const regeneratePortal = useMutation(() => clientsAPI.regeneratePortal(client._id), {
@@ -198,12 +224,22 @@ const ClientDetails = ({ client, onClose }) => {
               {activeTab === 'projects' && (
                 <div className="space-y-2">
                   {data.projects.map(p => (
-                    <div key={p._id} className="p-3 border rounded text-sm flex justify-between">
+                    <div key={p._id} className="p-3 border rounded text-sm flex items-center justify-between gap-3">
                       <div>
                         <div className="font-medium">{p.name}</div>
                         <div className="text-gray-500 text-xs">Status: {p.status}</div>
                       </div>
-                      <div className="text-xs text-gray-500">{p.offerType ? `Typ: ${p.offerType}` : ''}</div>
+                      <div className="flex items-center gap-2">
+                        <div className="text-xs text-gray-500">{p.offerType ? `Typ: ${p.offerType}` : ''}</div>
+                        <button
+                          type="button"
+                          onClick={() => unassignProject.mutate({ id: client._id, projectId: p._id })}
+                          disabled={unassignProject.isLoading}
+                          className="px-3 py-1 text-xs rounded border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-50"
+                        >
+                          Odepnij
+                        </button>
+                      </div>
                     </div>
                   ))}
                   {data.projects.length === 0 && <div className="text-sm text-gray-500">Brak projektów</div>}
@@ -258,13 +294,83 @@ const ClientDetails = ({ client, onClose }) => {
               {activeTab === 'assign' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="card">
-                    <h3 className="font-semibold mb-2">Przypisz projekt</h3>
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div>
+                        <h3 className="font-semibold">Przypisz projekt</h3>
+                        <p className="text-xs text-gray-500 mt-1">Wyszukaj projekt po nazwie, kliencie lub emailu. Projekt bez klienta przypiszesz od razu, a przypisany do innego klienta możesz świadomie przenieść.</p>
+                      </div>
+                      <span className="text-xs text-gray-500 shrink-0">{data.projects.length} przypisane</span>
+                    </div>
+                    <input
+                      className="input-field mb-3"
+                      value={projectSearch}
+                      onChange={(e) => setProjectSearch(e.target.value)}
+                      placeholder="Szukaj projektu"
+                    />
                     <div className="flex gap-2">
                       <select className="input-field" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-                        <option value="">Wybierz projekt</option>
-                        {projectsList.map(p => (<option key={p._id} value={p._id}>{p.name}</option>))}
+                        <option value="">Wybierz projekt do przypisania</option>
+                        {assignableProjects.map(p => (
+                          <option key={p._id} value={p._id}>
+                            {p.name}{p.clientName ? ` · ${p.clientName}` : ''}
+                          </option>
+                        ))}
                       </select>
-                      <button onClick={() => projectId && assignProject.mutate({ id: client._id, projectId })} className="btn-primary">Przypisz</button>
+                      <button
+                        type="button"
+                        onClick={() => projectId && assignProject.mutate({ id: client._id, projectId })}
+                        disabled={!projectId || assignProject.isLoading}
+                        className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {assignProject.isLoading ? 'Przypisuję...' : 'Przypisz'}
+                      </button>
+                    </div>
+                    <div className="mt-4 space-y-2 max-h-64 overflow-y-auto pr-1">
+                      {isLoadingAssignableProjects && <div className="text-sm text-gray-500">Ładowanie projektów...</div>}
+                      {!isLoadingAssignableProjects && projectsList.length === 0 && (
+                        <div className="text-sm text-gray-500">Brak projektów dla tego wyszukiwania</div>
+                      )}
+                      {projectsList.slice(0, 20).map((project) => {
+                        const assignedElsewhere = project.client && !project.assignedToCurrentClient;
+                        return (
+                          <div key={project._id} className="rounded-lg border border-gray-200 p-3 text-sm">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="font-medium text-gray-900">{project.name}</div>
+                                <div className="text-xs text-gray-500 mt-1">
+                                  {project.clientName || 'Bez nazwy klienta w projekcie'}{project.offerType ? ` · ${project.offerType}` : ''}
+                                </div>
+                              </div>
+                              {project.assignedToCurrentClient ? (
+                                <span className="text-xs font-semibold text-green-700 bg-green-50 px-2 py-1 rounded-full">już przypisany</span>
+                              ) : assignedElsewhere ? (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-semibold text-amber-700 bg-amber-50 px-2 py-1 rounded-full">
+                                    {project.client?.name || project.client?.company || 'inny klient'}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => assignProject.mutate({ id: client._id, projectId: project._id })}
+                                    disabled={assignProject.isLoading}
+                                    className="px-3 py-1 text-xs rounded border border-amber-200 text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+                                  >
+                                    Przenieś
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => assignProject.mutate({ id: client._id, projectId: project._id })}
+                                  disabled={assignProject.isLoading}
+                                  className="px-3 py-1 text-xs rounded bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50"
+                                >
+                                  Przypisz
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                   <div className="card">
@@ -288,5 +394,3 @@ const ClientDetails = ({ client, onClose }) => {
 };
 
 export default Clients;
-
-
