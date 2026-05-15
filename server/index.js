@@ -23,6 +23,7 @@ const publicOrdersRoutes = require('./routes/publicOrders');
 const leadsRoutes = require('./routes/leads');
 const documentsRoutes = require('./routes/documents');
 const reviewsRoutes = require('./routes/reviews');
+const mailRoutes = require('./routes/mail');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -126,6 +127,7 @@ app.use('/api/public-orders', publicOrdersRoutes);
 app.use('/api/leads', leadsRoutes);
 app.use('/api/documents', documentsRoutes);
 app.use('/api/reviews', reviewsRoutes);
+app.use('/api/mail', mailRoutes);
 app.use('/cal', calWebhookRoutes);
 
 // Publiczny podgląd dokumentu/playbooka po slug – zwraca HTML (bez auth)
