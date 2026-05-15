@@ -1,386 +1,202 @@
-# Deployment Guide - Ofertownik Soft Synergy
+# Deployment — Ofertownik Soft Synergy (produkcja)
 
-## Przegląd
-
-Ten przewodnik opisuje jak wdrożyć aplikację Ofertownik Soft Synergy na serwerze produkcyjnym Linux.
-
-## Wymagania systemowe
-
-- Ubuntu 20.04 LTS lub nowszy
-- Minimum 2GB RAM
-- Minimum 10GB wolnego miejsca na dysku
-- Dostęp do internetu
-- Uprawnienia sudo
+Aktualny stan produkcji: VPS `admin@193.180.211.30` (Ubuntu 24.04), domeny `oferty.soft-synergy.com` (backend) + `ofertownik.soft-synergy.com` (frontend).
 
 ## Architektura
 
-Aplikacja składa się z:
-- **Backend**: Node.js + Express + MongoDB
-- **Frontend**: React (zbudowany do plików statycznych)
-- **Reverse Proxy**: nginx (opcjonalnie)
-- **Process Manager**: PM2
-
-## Szybki start
-
-### 1. Przygotowanie serwera
-
-```bash
-# Zaktualizuj system
-sudo apt update && sudo apt upgrade -y
-
-# Skopiuj projekt na serwer
-git clone <your-repo-url>
-cd ofertownik-soft-synergy
-
-# Nadaj uprawnienia do wykonywania skryptów
-chmod +x deploy.sh manage.sh setup-mongodb.sh
+```
+                      ┌───────────────────────────────────────┐
+                      │  ofertownik.soft-synergy.com (HTTPS)  │
+                      │  nginx → static /client/build/        │  ← React SPA (build)
+                      └───────────────────────────────────────┘
+                                       │
+                                       │ fetch
+                                       ▼
+                      ┌───────────────────────────────────────┐
+                      │  oferty.soft-synergy.com (HTTPS)      │
+                      │  nginx → 127.0.0.1:5001               │  ← Express + Mongo
+                      │  PM2: ofertownik-server (cluster)     │
+                      └───────────────────────────────────────┘
+                                       │
+                                       ▼
+                              MongoDB (zewnętrzne, MONGODB_URI z .env)
+                              Brevo SMTP (development@soft-synergy.com)
 ```
 
-### 2. Konfiguracja zewnętrznej bazy MongoDB
+- **Backend**: Node 20, Express, MongoDB (zewnętrzne), Brevo SMTP. Trzymany przez PM2 (cluster, 1 instancja). Plik PM2: `ecosystem.config.js`.
+- **Frontend**: React (CRA / react-scripts). Buduje się do `client/build/`. Serwowany statycznie przez nginx — żadnych dev serverów na produkcji.
+- **Reverse proxy**: nginx 1.29, dwa osobne vhosty (referencyjne kopie w `nginx/*.conf` w repo). Certyfikaty Let's Encrypt (managed by certbot).
+- **Persystencja procesów**: `pm2 startup systemd` + `pm2 save` — przeżywa reboot serwera.
+
+## Lokalizacje na serwerze
+
+| Co | Gdzie |
+|---|---|
+| Kod | `/var/www/html/oferty/ofertownik-soft-synergy/` |
+| Frontend build | `/var/www/html/oferty/ofertownik-soft-synergy/client/build/` |
+| .env | `/var/www/html/oferty/ofertownik-soft-synergy/.env` |
+| Logi PM2 | `/var/www/html/oferty/ofertownik-soft-synergy/logs/{out,err,combined}-2.log` |
+| Nginx vhost | `/etc/nginx/sites-enabled/11` (jeden plik z wieloma server blokami) |
+| SSL | `/etc/letsencrypt/live/{oferty,ofertownik}.soft-synergy.com/` |
+| Uploady | `/var/www/html/oferty/ofertownik-soft-synergy/uploads/*` |
+
+## Pierwsze uruchomienie produkcyjne (bootstrap)
+
+Jednorazowe — w nowym środowisku. W typowym deploy wystarcza sekcja "Codzienny deploy".
+
+1. **System packages**
+
+   ```bash
+   sudo apt-get update
+   sudo apt-get install -y nginx git curl
+   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+   sudo apt-get install -y nodejs
+   sudo npm install -g pm2
+   ```
+
+2. **Klon repo**
+
+   ```bash
+   sudo mkdir -p /var/www/html/oferty
+   sudo chown $USER:$USER /var/www/html/oferty
+   cd /var/www/html/oferty
+   git clone https://github.com/soft-synergy/ofertownik-soft-synergy.git
+   cd ofertownik-soft-synergy
+   ```
+
+3. **Konfiguracja `.env`** — skopiuj `env.example` do `.env` i wypełnij:
+
+   ```bash
+   cp env.example .env
+   # Wymagane:
+   #   MONGODB_URI=mongodb+srv://...
+   #   JWT_SECRET=...               # openssl rand -base64 32
+   #   SMTP_HOST=smtp-relay.brevo.com
+   #   SMTP_PORT=587
+   #   SMTP_USER=...
+   #   SMTP_PASS=...
+   #   CLAUDE_API_KEY=...
+   #   CLAUDE_API_SCOPES=tasks:read,tasks:write,projects:read,users:read,documents:read,documents:write,portfolio:read,mail:send
+   #   CLAUDE_MAIL_ALLOWED_RECIPIENTS=info@soft-synergy.com
+   ```
+
+4. **Instalacja zależności**
+
+   ```bash
+   npm ci
+   (cd client && npm ci)
+   ```
+
+5. **Build frontu**
+
+   ```bash
+   (cd client && NODE_OPTIONS=--max-old-space-size=2048 GENERATE_SOURCEMAP=false CI=false npm run build)
+   ```
+
+6. **Backend pod PM2**
+
+   ```bash
+   pm2 start ecosystem.config.js --env production
+   pm2 save
+   sudo env PATH=$PATH:/usr/bin $(which pm2) startup systemd -u $USER --hp $HOME
+   ```
+
+7. **Nginx + SSL**
+
+   - Skopiuj zawartość `nginx/ofertownik.soft-synergy.com.conf` i `nginx/oferty.soft-synergy.com.conf` do `/etc/nginx/sites-available/ofertownik` i utwórz symlink w `sites-enabled`. (Na obecnym VPS są one wpięte w zbiorczy plik `/etc/nginx/sites-enabled/11` — edytuj w miejscu, nie dubluj server bloków.)
+   - SSL: `sudo certbot --nginx -d ofertownik.soft-synergy.com -d oferty.soft-synergy.com`
+   - Test + reload: `sudo nginx -t && sudo systemctl reload nginx`
+
+8. **Konto admina** — jeśli baza pusta:
+
+   ```bash
+   node server/scripts/create-admin.js
+   ```
+
+## Codzienny deploy (po zmianach w repo)
+
+Najprostsza ścieżka — odpal skrypt z repo:
 
 ```bash
-# Uruchom skrypt konfiguracji MongoDB
-./setup-mongodb.sh
+ssh admin@193.180.211.30
+cd /var/www/html/oferty/ofertownik-soft-synergy
+bash scripts/deploy.sh
 ```
 
-Wybierz odpowiednią opcję:
-- **MongoDB Atlas** - dla chmurowej bazy danych
-- **Zewnętrzny serwer MongoDB** - dla własnego serwera MongoDB
-- **Lokalna baza MongoDB** - dla lokalnej instalacji
+Skrypt robi:
+1. `git pull --ff-only`
+2. `npm ci` w roocie i w `client/` — tylko jeśli `package-lock.json` się zmienił
+3. `npm run build` w `client/` (z limitem RAM dla małych VPSów)
+4. `pm2 reload ofertownik-server --update-env` (zero-downtime cluster reload)
 
-### 3. Uruchom deployment
+Jeśli zmieniony był nginx vhost — trzeba ręcznie zsynchronizować z `/etc/nginx/sites-enabled/` i wywołać `sudo nginx -t && sudo systemctl reload nginx`.
+
+## Operacje codzienne
 
 ```bash
-# Uruchom główny skrypt deploymentu
-./deploy.sh
-```
-
-Skrypt automatycznie:
-- Zainstaluje Node.js, PM2, nginx
-- Zainstaluje wszystkie zależności
-- Skonfiguruje środowisko
-- Zbuduje aplikację klienta
-- Uruchomi serwer przez PM2
-- Skonfiguruje nginx (opcjonalnie)
-
-### 4. Utwórz administratora
-
-```bash
-# Uruchom skrypt zarządzania
-./manage.sh
-
-# Wybierz opcję 4 - "Utwórz użytkownika administratora"
-```
-
-Domyślne dane logowania:
-- Email: `admin@softsynergy.pl`
-- Hasło: `admin123`
-
-## Szczegółowa konfiguracja
-
-### Konfiguracja środowiska
-
-Plik `.env` zostanie utworzony automatycznie. Sprawdź i dostosuj:
-
-```bash
-# Edytuj plik .env
-nano .env
-```
-
-Kluczowe zmienne:
-```env
-NODE_ENV=production
-PORT=5001
-# Zewnętrzna baza MongoDB - skonfiguruj przez setup-mongodb.sh
-MONGODB_URI=mongodb://username:password@your-server.com:27017/ofertownik
-JWT_SECRET=your-generated-secret
-```
-
-**Ważne**: Użyj skryptu `setup-mongodb.sh` do konfiguracji połączenia z zewnętrzną bazą MongoDB.
-
-### Konfiguracja nginx
-
-Jeśli nginx został zainstalowany, konfiguracja zostanie utworzona automatycznie w:
-`/etc/nginx/sites-available/ofertownik`
-
-Możesz dostosować konfigurację:
-```bash
-sudo nano /etc/nginx/sites-available/ofertownik
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-### Konfiguracja firewall
-
-```bash
-# Otwórz porty
-sudo ufw allow 22    # SSH
-sudo ufw allow 80     # HTTP
-sudo ufw allow 443    # HTTPS (jeśli używasz SSL)
-sudo ufw allow 5001   # API (opcjonalnie)
-
-# Włącz firewall
-sudo ufw enable
-```
-
-## Zarządzanie aplikacją
-
-### Skrypt zarządzania
-
-Użyj skryptu `manage.sh` do zarządzania aplikacją:
-
-```bash
-./manage.sh
-```
-
-Dostępne opcje:
-1. Sprawdź status usług
-2. Uruchom ponownie serwer
-3. Sprawdź logi serwera
-4. Utwórz użytkownika administratora
-5. Zbuduj ponownie aplikację klienta
-6. Sprawdź zużycie zasobów
-7. Zatrzymaj wszystkie usługi
-8. Uruchom wszystkie usługi
-9. Sprawdź połączenie z bazą danych
-10. Wyświetl konfigurację środowiska
-
-### Ręczne zarządzanie PM2
-
-```bash
-# Sprawdź status
+# Status
 pm2 list
+pm2 logs ofertownik-server --lines 100
 
-# Sprawdź logi
-pm2 logs ofertownik-server
+# Restart po zmianie .env
+pm2 restart ofertownik-server --update-env
 
-# Uruchom ponownie
-pm2 restart ofertownik-server
+# Hot reload kodu bez przerwy (cluster mode)
+pm2 reload ofertownik-server
 
-# Zatrzymaj
-pm2 stop ofertownik-server
+# Smoke testy
+curl -I https://ofertownik.soft-synergy.com                # 200 + index.html
+curl -s https://oferty.soft-synergy.com/api/mail/config \
+  -H "X-API-Key: $CLAUDE_API_KEY"                          # 200 + JSON
 
-# Uruchom
-pm2 start ofertownik-server
-
-# Monitoruj
-pm2 monit
+# Nginx logi
+sudo tail -f /var/log/nginx/ofertownik.soft-synergy.com.access.log
+sudo tail -f /var/log/nginx/oferty.soft-synergy.com.error.log
 ```
 
-### Zarządzanie zewnętrzną bazą MongoDB
+## Endpointy publiczne i private
 
-```bash
-# Sprawdź połączenie z bazą
-./setup-mongodb.sh
-# Wybierz opcję 4 - "Sprawdź połączenie"
+- `https://ofertownik.soft-synergy.com/*` — SPA (logowanie wymagane do większości widoków).
+- `https://oferty.soft-synergy.com/api/*` — REST API, autoryzacja JWT (logowanie) lub `X-API-Key` (klucz Claude).
+- `https://oferty.soft-synergy.com/dokumenty/<slug>` — publiczne dokumenty/playbooki.
+- `https://oferty.soft-synergy.com/generated-offers/<id>` — wygenerowane oferty PDF/HTML.
 
-# Testuj połączenie
-./setup-mongodb.sh
-# Wybierz opcję 5 - "Testuj połączenie"
+## Co Claude może robić przez API key
 
-# Sprawdź konfigurację
-cat .env | grep MONGODB_URI
-```
+Scope domyślny (`CLAUDE_API_SCOPES` w `.env`):
+- `tasks:read`, `tasks:write` — pełne CRUD tasków + komentarze.
+- `projects:read` — tylko odczyt projektów.
+- `users:read` — lista pracowników.
+- `documents:read`, `documents:write` — pełne CRUD dokumentów i playbooków.
+- `portfolio:read` — portfolio.
+- `mail:send` — wysyłka maila przez `POST /api/mail/send` (whitelista w `CLAUDE_MAIL_ALLOWED_RECIPIENTS`, default `info@soft-synergy.com`).
 
-## Monitoring i logi
-
-### Logi aplikacji
-
-```bash
-# Logi PM2
-pm2 logs ofertownik-server
-
-# Logi nginx
-sudo tail -f /var/log/nginx/access.log
-sudo tail -f /var/log/nginx/error.log
-
-# Logi MongoDB
-sudo tail -f /var/log/mongodb/mongod.log
-```
-
-### Monitoring zasobów
-
-```bash
-# Sprawdź zużycie CPU i pamięci
-htop
-
-# Sprawdź miejsce na dysku
-df -h
-
-# Sprawdź procesy Node.js
-ps aux | grep node
-```
-
-## Backup i restore
-
-### Backup zewnętrznej bazy danych
-
-```bash
-# Backup przez MongoDB Atlas (jeśli używasz)
-# Użyj narzędzi MongoDB Atlas do backupu
-
-# Backup zewnętrznego serwera MongoDB
-mongodump --uri="mongodb://username:password@your-server.com:27017/ofertownik" --out /backup/$(date +%Y%m%d)
-
-# Przywróć backup
-mongorestore --uri="mongodb://username:password@your-server.com:27017/ofertownik" /backup/20231201/ofertownik/
-```
-
-### Backup aplikacji
-
-```bash
-# Backup plików aplikacji
-tar -czf backup-$(date +%Y%m%d).tar.gz \
-    --exclude=node_modules \
-    --exclude=client/node_modules \
-    --exclude=client/build \
-    .
-```
+Pełna ściąga z endpointów jest w skillu `ofertownik` w Claude Code.
 
 ## Troubleshooting
 
-### Serwer nie uruchamia się
+**`pm2 list` nie pokazuje `ofertownik-server`** — `pm2 start ecosystem.config.js --env production && pm2 save`.
 
+**Port 5001 zajęty po deploy** — szukaj osieroconych procesów (stary screen / nodemon):
 ```bash
-# Sprawdź logi
-pm2 logs ofertownik-server
-
-# Sprawdź połączenie z bazą
-./manage.sh
-# Wybierz opcję 9
+screen -ls
+ps -ef | grep server/index | grep -v grep
+ss -tlnp | grep :5001
 ```
+Jeśli jest stary screen — `screen -S <name> -X quit`, potem `pm2 start ecosystem.config.js --env production`.
 
-### Zewnętrzna baza MongoDB nie łączy się
+**Frontend 404 na każdej podstronie po refresh** — brakuje SPA fallbacku w nginx. Sprawdź `try_files $uri /index.html;` w `location /` w sekcji `ofertownik.soft-synergy.com`.
 
-```bash
-# Sprawdź połączenie z bazą
-./setup-mongodb.sh
-# Wybierz opcję 4 - "Sprawdź połączenie"
+**`mail:send` zwraca 403** — `.env` → `CLAUDE_API_SCOPES` musi zawierać `mail:send`. Po edycie `pm2 restart ofertownik-server --update-env`.
 
-# Sprawdź konfigurację MONGODB_URI
-cat .env | grep MONGODB_URI
+**Build CRA OOM na VPS** — buduj z `NODE_OPTIONS=--max-old-space-size=2048 GENERATE_SOURCEMAP=false CI=false`. Skrypt `scripts/deploy.sh` już to robi. W ostateczności zbuduj lokalnie i `rsync client/build/` na serwer.
 
-# Testuj połączenie
-./setup-mongodb.sh
-# Wybierz opcję 5 - "Testuj połączenie"
-```
+**SSL wygasa** — `sudo certbot renew --dry-run`. Certbot ma automatyczny timer (`systemctl status certbot.timer`).
 
-### nginx nie działa
+## Plik referencyjny — nginx
 
-```bash
-# Sprawdź konfigurację
-sudo nginx -t
+Aktualne vhosty są w repo jako kopie do podglądu:
+- `nginx/ofertownik.soft-synergy.com.conf` — frontend SPA (statyk + SPA fallback).
+- `nginx/oferty.soft-synergy.com.conf` — backend proxy do `127.0.0.1:5001`.
 
-# Sprawdź status
-sudo systemctl status nginx
-
-# Sprawdź logi
-sudo tail -f /var/log/nginx/error.log
-```
-
-### Aplikacja nie odpowiada
-
-```bash
-# Sprawdź porty
-netstat -tlnp | grep :5001
-
-# Sprawdź firewall
-sudo ufw status
-
-# Sprawdź logi aplikacji
-pm2 logs ofertownik-server
-```
-
-## Aktualizacje
-
-### Aktualizacja aplikacji
-
-```bash
-# Pobierz najnowsze zmiany
-git pull origin main
-
-# Zainstaluj nowe zależności
-npm install
-cd client && npm install && cd ..
-
-# Zbuduj ponownie klienta
-cd client && npm run build && cd ..
-
-# Uruchom ponownie serwer
-pm2 restart ofertownik-server
-```
-
-### Aktualizacja systemu
-
-```bash
-# Aktualizuj system
-sudo apt update && sudo apt upgrade -y
-
-# Uruchom ponownie usługi
-sudo systemctl restart mongod
-pm2 restart all
-```
-
-## Bezpieczeństwo
-
-### Zmiana hasła administratora
-
-```bash
-# Połącz się z bazą danych
-mongosh ofertownik
-
-# Zmień hasło
-db.users.updateOne(
-  { email: "admin@softsynergy.pl" },
-  { $set: { password: "nowe-hashowane-haslo" } }
-)
-```
-
-### Konfiguracja SSL (opcjonalnie)
-
-```bash
-# Zainstaluj Certbot
-sudo apt install certbot python3-certbot-nginx
-
-# Uzyskaj certyfikat SSL
-sudo certbot --nginx -d yourdomain.com
-
-# Automatyczne odnawianie
-sudo crontab -e
-# Dodaj: 0 12 * * * /usr/bin/certbot renew --quiet
-```
-
-## Wsparcie
-
-W przypadku problemów:
-1. Sprawdź logi aplikacji
-2. Sprawdź status usług
-3. Sprawdź konfigurację środowiska
-4. Skontaktuj się z zespołem deweloperskim
-
-## Przydatne komendy
-
-```bash
-# Sprawdź wszystkie usługi
-./manage.sh
-
-# Sprawdź logi w czasie rzeczywistym
-pm2 logs ofertownik-server --lines 100 -f
-
-# Monitoruj zasoby
-pm2 monit
-
-# Sprawdź wersje
-node --version
-npm --version
-pm2 --version
-
-# Konfiguracja MongoDB
-./setup-mongodb.sh
-```
-
-## Skrypty deploymentu
-
-- **`deploy.sh`** - Główny skrypt deploymentu
-- **`manage.sh`** - Zarządzanie aplikacją po deployment
-- **`setup-mongodb.sh`** - Konfiguracja zewnętrznej bazy MongoDB 
+Na serwerze są one obecnie wpięte w zbiorczy plik `/etc/nginx/sites-enabled/11`. Jeśli planujesz refaktor — rozdziel je do osobnych plików w `sites-available` i podlinkuj.
