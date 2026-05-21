@@ -117,11 +117,14 @@ router.get('/', auth, requireScope('tasks:read'), async (req, res) => {
       query.priority = priority;
     }
 
-    if (dateFrom || dateTo) {
+    const resolvedDateFrom = dateFrom || (req.query.date ? req.query.date : null);
+    const resolvedDateTo = dateTo || (req.query.date ? req.query.date : null);
+
+    if (resolvedDateFrom || resolvedDateTo) {
       query.dueDate = {};
-      if (dateFrom) query.dueDate.$gte = new Date(dateFrom);
-      if (dateTo) {
-        const end = new Date(dateTo);
+      if (resolvedDateFrom) query.dueDate.$gte = new Date(resolvedDateFrom);
+      if (resolvedDateTo) {
+        const end = new Date(resolvedDateTo);
         end.setHours(23, 59, 59, 999);
         query.dueDate.$lte = end;
       }
